@@ -1,0 +1,30 @@
+{
+  "name": "web-service",
+  "version": "1.0.0",
+  "description": "A RESTful web service connecting to a telemetry database and processing db scripts and generating data.",
+  "author": "dodson labs",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm tsc",
+    "dev": "npx nodemon",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ip": "^1.1.8",
+    "mariadb": "^3.2.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ip": "^1.1.0",
+    "@types/node": "^20.14.9",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
+    "nodemon": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  }
+}
