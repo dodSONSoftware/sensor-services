@@ -1,3 +1,6 @@
+default:
+    image: node:trixie
+
 stages:
     - build
     - test
@@ -18,7 +21,6 @@ build_job:
 
 test_job:
     stage: test
-    image: node:lts-slim
     script:
         - echo "Running tests..."
         - sleep 10
@@ -27,6 +29,7 @@ test_job:
 
 deploy_prod_job:
     stage: deploy_prod
+    image: node:lts-slim
     script:
         - echo "Deploying MAIN Branch to $DEPLOY_ENV..."
         - sleep 10
@@ -35,6 +38,7 @@ deploy_prod_job:
 
 deploy_dev_job:
     stage: deploy_dev
+    image: node:lts-slim
     script:
         - echo "Deploying DEV Branch to $DEPLOY_ENV..."
         - sleep 10
