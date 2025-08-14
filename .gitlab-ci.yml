@@ -1,0 +1,42 @@
+stages:
+    - build
+    - test
+    - deploy_dev
+    - deploy_prod
+
+variables:
+    PROJECT_NAME: 'web-service-v2'
+
+build_job:
+    stage: build
+    script:
+        - echo "Building the project..."
+        - sleep 10
+    # artifacts:
+    #     paths:
+    #         - build/
+
+test_job:
+    stage: test
+    image: node:lts-slim
+    script:
+        - echo "Running tests..."
+        - sleep 10
+    dependencies:
+        - build_job
+
+deploy_prod_job:
+    stage: deploy_prod
+    script:
+        - echo "Deploying MAIN Branch to $DEPLOY_ENV..."
+        - sleep 10
+    only:
+        - main
+
+deploy_dev_job:
+    stage: deploy_dev
+    script:
+        - echo "Deploying DEV Branch to $DEPLOY_ENV..."
+        - sleep 10
+    only:
+        - dev
