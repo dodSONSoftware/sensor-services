@@ -3,6 +3,7 @@
 
 export interface About {
     name: string;
-    author: string;
     version: string;
+    author: string;
+    description: string;
 }

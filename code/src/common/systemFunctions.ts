@@ -13,8 +13,9 @@ let logIt: boolean | undefined = undefined;
 
 export const aboutInformation: About = {
     name: 'Web Service Information',
-    version: '1.1.0',
-    author: 'dodson labs'
+    version: '2.0.0',
+    author: 'dodson labs',
+    description: 'Provides sensor-related web services.'
 };
 
 

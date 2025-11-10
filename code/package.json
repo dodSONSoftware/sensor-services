@@ -6,14 +6,13 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "build": "npm tsc",
-    "dev": "npx nodemon",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon"
   },
   "dependencies": {
     "express": "^4.19.2",
     "ip": "^1.1.8",
-    "mariadb": "^3.2.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },

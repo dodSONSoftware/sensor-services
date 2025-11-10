@@ -1,18 +1,19 @@
 import swaggerJsDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
+import { aboutInformation } from './common/systemFunctions';
 
 const swaggerOptions = {
     swaggerDefinition: {
         openapi: '3.0.0',
         info: {
-            title: 'dodson labs Web Services v2.0',
-            version: '2.0.0',
-            description: 'Provides basic web services...',
+            title: aboutInformation.name,
+            version: aboutInformation.version,
+            description: aboutInformation.description
         },
         servers: [
             {
-                url: 'http://192.168.7.108:32000/', // Change this to your server URL
+                url: 'http://192.168.7.131:32000/', // Change this to your server URL
             },
         ],
     },
