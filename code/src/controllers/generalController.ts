@@ -1,14 +1,18 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import * as express from "express";
-import { OK } from "../models/errorCodes";
-import { Json, Text } from "../models/contentTypes";
-import { aboutInformation, log } from "../common/systemFunctions";
+import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
+import { aboutInformation, logger } from "../common/global";
 
 
 // **** public functions
 
 export function getAbout(req: express.Request, res: express.Response) {
     // log it
-    log(JSON.stringify(aboutInformation), 0);
+    logger.write_info("generalController.ts/getAbout", JSON.stringify(aboutInformation));
 
     // publish it
     res.status(OK);
@@ -26,7 +30,7 @@ export function getDateCurrent(req: express.Request, res: express.Response) {
     const final = `${y}-${m}-${d}T${t}`;
 
     // log it
-    log(final);
+    logger.write_info("generalController.ts/getDateCurrent", `(${final})`);
 
     // publish it
     res.status(OK);
@@ -39,7 +43,7 @@ export function getDateUTC(req: express.Request, res: express.Response) {
     const dt = (new Date()).toISOString().split('.')[0];
 
     // log it
-    log(dt);
+    logger.write_info("generalController.ts/getDateUTC", `(${dt})`);
 
     // publish it
     res.status(OK);

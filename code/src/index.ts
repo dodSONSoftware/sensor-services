@@ -1,20 +1,38 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import express from "express";
-import { log } from "console";
 import { setupSwagger } from './swagger';
 import * as ipAddress from "ip";
 import * as middleware from "./middleware/middleware";
 import * as generalRoutes from "./routes/generalRoutes";
-import { aboutInformation } from "./common/systemFunctions";
+import { aboutInformation, createLogger, logger } from "./common/global";
+import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
 
-
-
-// **** known environment variables
-
-//      TELEMETRY_SERVICE_LOG : boolean     ( determines whether to produce logs )
-//      EXPRESS_PORT : number               ( the Web Service's port number )
 
 
 // **** start up code
+
+// read the configuration file
+let config_source = 'file';
+let config = read_file_json("./config.json");
+if (config === null) {
+    // could not find the configuration file
+    config_source = 'code';
+    config = {
+        "log-level": "debug"
+    };
+}
+// display configuration
+console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(config, null, 2)}\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
+
+// create logger
+createLogger(config);
+
+// log it
+logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} starting...`);
 
 // create express application
 const app = express();
@@ -23,16 +41,20 @@ const app = express();
 setupSwagger(app);
 
 try {
-    // populate middleware
+    // create middleware
     new middleware.CreateMiddleware(app);
 
-    // populate routes
+    // create routes
     new generalRoutes.CreateRoutes(app);
+
     // TODO: add more routes and functionality
 
-} catch {
-    // TODO: add an error log here
-    // TODO: terminate application
+} catch (err: any) {
+    // log error
+    logger.write_error("index.ts", ensureError(err).message);
+
+    // terminate application
+    process.exit(1);
 }
 
 // get express port
@@ -40,5 +62,6 @@ const port = Number(process.env.EXPRESS_PORT) || 32000;
 
 // start express
 app.listen(port, () => {
-    log(`\n******** ${aboutInformation.name} v${aboutInformation.version} listening on ${ipAddress.address()}:${port} ********\n`);
+    logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} started.`);
+    logger.write_info("index.ts", `******** ${aboutInformation.name} v${aboutInformation.version} listening on ${ipAddress.address()}:${port} ********`);
 });

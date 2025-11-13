@@ -1,6 +1,12 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import express from 'express';
-import { CreatorsBase } from '../common/creatorBase';
+import { CreatorsBase } from '../dodsonlabs/CreatorBase';
 import * as general_controller from "../controllers/generalController";
+import { logger } from '../common/global';
 
 
 
@@ -10,6 +16,7 @@ export class CreateRoutes extends CreatorsBase {
 
     constructor(protected app: express.Application) {
         super(app);
+        this.routeNotFound();
     }
 
     // **** protected functions
@@ -81,5 +88,15 @@ export class CreateRoutes extends CreatorsBase {
             .get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
 
         // TODO: add more routes and functionality
+    }
+
+    protected routeNotFound() {
+        this.app.use((req: express.Request, res: express.Response) => {
+            res.status(404).json({
+                message: "The requested resource was not found."
+            });
+
+            logger.write_error("CreateRoutes.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+        });
     }
 }

@@ -1,6 +1,11 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import * as express from "express";
-import { CreatorsBase } from "../common/creatorBase";
-import { canLog } from "../common/systemFunctions";
+import { CreatorsBase } from "../dodsonlabs/CreatorBase";
+import { logger } from "../common/global";
 
 
 // **** public classes
@@ -25,14 +30,10 @@ export class CreateMiddleware extends CreatorsBase {
     // **** private functions
 
     private loggerMiddleware(request: express.Request, response: express.Response, next: any) {
-        // check if logging is enabled
-        if (canLog()) {
-            // log the datetime, html verb and the requested path
-            const dt = new Date();
-            console.log(`[${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}]\t${request.method}\t${request.path}`);
-        }
+        // log it
+        logger.write_debug("middleware.ts/loggerMiddleware", `${request.method} "${request.path}"`);
 
-        // continue 
+        // continue
         next();
     }
 }

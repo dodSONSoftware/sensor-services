@@ -1,7 +1,12 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import swaggerJsDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
-import { aboutInformation } from './common/systemFunctions';
+import { aboutInformation } from './common/global';
 
 const swaggerOptions = {
     swaggerDefinition: {
@@ -17,11 +22,11 @@ const swaggerOptions = {
             },
         ],
     },
-    apis: ['./src/routes/*.ts'], // Path to the API docs
+    apis: ['./src/routes/**/*.ts'], // Recursively include all .ts files in all subdirectories
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
 export const setupSwagger = (app: Express) => {
-    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+    app.use('/swagger', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 };
