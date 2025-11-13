@@ -1,3 +1,8 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import * as express from "express";
 import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
 import { aboutInformation, logger } from "../common/global";

@@ -1,3 +1,8 @@
+/*
+ * Author: Randy Dodson ( dodson labs )
+ * License: 2025, MIT License (see LICENSE file for details)
+ */
+
 import { IAbout, LogLevel } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
 
