@@ -103,17 +103,21 @@ export async function getIdentifyBySource(
         }
     }
 
+    // fix-it
+    let dude = {};
+    if (network.command_response_identify_response.length > 0) {
+        dude = network.command_response_identify_response[0];
+    }
+
     // log-it
     console.log(
         `\n\n<<<<<<<< [ export function getIdentify/source ] >>>>>>>> \n`
     );
-    network.command_response_identify_response.forEach((element) => {
-        console.log(`\t${JSON.stringify(element, null, 4)}`);
-    });
+    console.log(`\t${JSON.stringify(dude, null, 4)}`);
     console.log(`\n\n`);
 
     // send response
     res.status(OK);
     res.contentType(Json);
-    res.send(network.command_response_identify_response);
+    res.send(dude);
 }
