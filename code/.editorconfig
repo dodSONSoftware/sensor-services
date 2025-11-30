@@ -1,18 +1,27 @@
 # EditorConfig is awesome: https://EditorConfig.org
 
-# Root file
+# Top-most EditorConfig file
 root = true
 
-# Default settings
+# Default settings applied to all file types
 [*]
-charset = utf-8
 indent_style = space
 indent_size = 4
 end_of_line = lf
+charset = utf-8
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-# TypeScript files
-[*.{ts,tsx}]
-indent_size = 4
-max_line_length = 120
+# TypeScript-specific settings
+[*.ts]
+quote_type = double
+semi = true
+
+# JSON-specific settings
+[*.json]
+indent_size = 2
+quote_type = double
+
+# YAML-specific settings
+[*.yaml, *.yml]
+indent_size = 2

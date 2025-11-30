@@ -3,25 +3,20 @@
  * License: 2025, MIT License (see LICENSE file for details)
  */
 
-import express from 'express';
-import { CreatorsBase } from '../dodsonlabs/CreatorBase';
+import express from "express";
+import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as general_controller from "../controllers/generalController";
-import { logger } from '../common/global';
 
-
-
-export class CreateRoutes extends CreatorsBase {
-
+export class CreateGeneralRoutes extends RoutesCreatorBase {
     // **** ctor
 
     constructor(protected app: express.Application) {
         super(app);
-        this.routeNotFound();
     }
 
     // **** protected functions
 
-    protected create() {
+    protected createRoutes() {
         // ABOUT
         /**
          * @swagger
@@ -40,7 +35,8 @@ export class CreateRoutes extends CreatorsBase {
          *                 about:
          *                   type: string
          */
-        this.app.route('/about')
+        this.app
+            .route("/about")
             .get((req: express.Request, res: express.Response) => general_controller.getAbout(req, res));
 
         // CURRENT DATETIME
@@ -62,7 +58,8 @@ export class CreateRoutes extends CreatorsBase {
          *                   type: string
          *                   format: date-time
          */
-        this.app.route('/date_local')
+        this.app
+            .route("/date_local")
             .get((req: express.Request, res: express.Response) => general_controller.getDateCurrent(req, res));
 
         // UTC DATETIME
@@ -84,19 +81,8 @@ export class CreateRoutes extends CreatorsBase {
          *                   type: string
          *                   format: date-time
          */
-        this.app.route('/date_utc')
+        this.app
+            .route("/date_utc")
             .get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
-
-        // TODO: add more routes and functionality
-    }
-
-    protected routeNotFound() {
-        this.app.use((req: express.Request, res: express.Response) => {
-            res.status(404).json({
-                message: "The requested resource was not found."
-            });
-
-            logger.write_error("CreateRoutes.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
-        });
     }
 }
