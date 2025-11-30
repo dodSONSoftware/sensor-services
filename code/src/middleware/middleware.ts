@@ -4,13 +4,13 @@
  */
 
 import * as express from "express";
-import { CreatorsBase } from "../dodsonlabs/CreatorBase";
+import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import { logger } from "../common/global";
 
 
 // **** public classes
 
-export class CreateMiddleware extends CreatorsBase {
+export class CreateMiddleware extends RoutesCreatorBase {
 
     // **** ctor
 
@@ -20,7 +20,7 @@ export class CreateMiddleware extends CreatorsBase {
 
     // **** protected functions
 
-    protected create() {
+    protected createRoutes() {
         // add middleware components
         this.app.use(this.loggerMiddleware);
 

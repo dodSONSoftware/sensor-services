@@ -4,38 +4,61 @@
  */
 
 import express from "express";
-import { setupSwagger } from './swagger';
+import { setupSwagger } from "./swagger";
 import * as ipAddress from "ip";
 import * as middleware from "./middleware/middleware";
 import * as generalRoutes from "./routes/generalRoutes";
+import * as sensorRoutes from "./routes/sensorRoutes";
 import { aboutInformation, createLogger, logger } from "./common/global";
 import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
-
-
+import { Networking } from "./dodsonlabs/Networking";
 
 // **** start up code
 
 // read the configuration file
-let config_source = 'file';
+let config_source = "file";
 let config = read_file_json("./config.json");
 if (config === null) {
+    // TODO: ****************************************************************
+    // TODO: **** This should generate an error
+    // TODO: ****************************************************************
+
     // could not find the configuration file
-    config_source = 'code';
+    config_source = "code";
     config = {
-        "log-level": "debug"
+        "log-level": "debug",
+        "prometheus-port": 3400,
+        "mqtt-broker-ip-address": "192.168.7.102",
+        "mqtt-topic-telemetry": "iot/telemetry",
+        "mqtt-topic-command": "iot/v2/command",
+        "mqtt-topic-command-response": "iot/v2/command-response",
     };
 }
+
 // display configuration
-console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(config, null, 2)}\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
+console.log(
+    `>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(
+        config,
+        null,
+        2
+    )}\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`
+);
 
 // create logger
 createLogger(config);
 
 // log it
-logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} starting...`);
+logger.write_debug(
+    "index.ts",
+    `${aboutInformation.name} v${aboutInformation.version} starting...`
+);
 
 // create express application
 const app = express();
+
+// create networking
+const networking = new Networking(config, logger);
+networking.start_networking();
 
 // setup swagger
 setupSwagger(app);
@@ -45,10 +68,8 @@ try {
     new middleware.CreateMiddleware(app);
 
     // create routes
-    new generalRoutes.CreateRoutes(app);
-
-    // TODO: add more routes and functionality
-
+    new generalRoutes.CreateGeneralRoutes(app);
+    new sensorRoutes.CreateSensorRoutes(app, networking);
 } catch (err: any) {
     // log error
     logger.write_error("index.ts", ensureError(err).message);
@@ -62,6 +83,14 @@ const port = Number(process.env.EXPRESS_PORT) || 32000;
 
 // start express
 app.listen(port, () => {
-    logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} started.`);
-    logger.write_info("index.ts", `******** ${aboutInformation.name} v${aboutInformation.version} listening on ${ipAddress.address()}:${port} ********`);
+    logger.write_debug(
+        "index.ts",
+        `${aboutInformation.name} v${aboutInformation.version} started.`
+    );
+    logger.write_info(
+        "index.ts",
+        `******** ${aboutInformation.name} v${
+            aboutInformation.version
+        } listening on ${ipAddress.address()}:${port} ********`
+    );
 });

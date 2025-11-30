@@ -1,3 +1,8 @@
 {
-  "log-level": "debug"
+  "log-level": "debug",
+  "prometheus-port": 3400,
+  "mqtt-broker-ip-address": "192.168.7.102",
+  "mqtt-topic-telemetry": "iot/telemetry",
+  "mqtt-topic-command": "iot/v2/command",
+  "mqtt-topic-command-response": "iot/v2/command-response"
 }
