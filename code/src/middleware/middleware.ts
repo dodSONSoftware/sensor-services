@@ -7,14 +7,16 @@ import * as express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import { logger } from "../common/global";
 
-
 // **** public classes
 
 export class CreateMiddleware extends RoutesCreatorBase {
-
     // **** ctor
 
     constructor(protected app: express.Application) {
+        // add CORS
+        const cors = require("cors");
+        app.use(cors());
+
         super(app);
     }
 
