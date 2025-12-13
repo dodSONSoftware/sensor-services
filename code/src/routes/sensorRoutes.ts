@@ -1,6 +1,8 @@
 /*
- * Author: Randy Dodson ( dodson labs )
- * License: 2025, MIT License (see LICENSE file for details)
+ * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Author: Randy Dodson <dodsonsoftware@gmail.com>
+ * Licensed under the MIT License with Patent Grant and NOTICE preservation.
+ * See the LICENSE file for the full terms.
  */
 
 import express from "express";
@@ -11,10 +13,7 @@ import { Networking } from "../dodsonlabs/Networking";
 export class CreateSensorRoutes extends RoutesCreatorBase {
     // **** ctor
 
-    constructor(
-        protected app: express.Application,
-        protected network: Networking
-    ) {
+    constructor(protected app: express.Application, protected network: Networking) {
         super(app);
         this.network = network;
     }
@@ -40,11 +39,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app
-            .route("/identify")
-            .get((req: express.Request, res: express.Response) =>
-                sensor_controller.getIdentify(req, res, this.network)
-            );
+        this.app.route("/identify").get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
         // IDENTIFY
         /**
          * @swagger
@@ -69,15 +64,6 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               properties:
          *                 about:
          *                   type: string
-         */ this.app
-            .route("/identify/:source")
-            .get((req: express.Request, res: express.Response) =>
-                sensor_controller.getIdentifyBySource(
-                    req,
-                    res,
-                    this.network,
-                    req.params.source
-                )
-            );
+         */ this.app.route("/identify/:source").get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
     }
 }

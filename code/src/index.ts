@@ -1,6 +1,8 @@
 /*
- * Author: Randy Dodson ( dodson labs )
- * License: 2025, MIT License (see LICENSE file for details)
+ * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Author: Randy Dodson <dodsonsoftware@gmail.com>
+ * Licensed under the MIT License with Patent Grant and NOTICE preservation.
+ * See the LICENSE file for the full terms.
  */
 
 import express from "express";
@@ -36,22 +38,13 @@ if (config === null) {
 }
 
 // display configuration
-console.log(
-    `>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(
-        config,
-        null,
-        2
-    )}\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`
-);
+console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(config, null, 2)}\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
 
 // create logger
 createLogger(config);
 
 // log it
-logger.write_debug(
-    "index.ts",
-    `${aboutInformation.name} v${aboutInformation.version} starting...`
-);
+logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} starting...`);
 
 // create express application
 const app = express();
@@ -83,14 +76,6 @@ const port = Number(process.env.EXPRESS_PORT) || 32000;
 
 // start express
 app.listen(port, () => {
-    logger.write_debug(
-        "index.ts",
-        `${aboutInformation.name} v${aboutInformation.version} started.`
-    );
-    logger.write_info(
-        "index.ts",
-        `******** ${aboutInformation.name} v${
-            aboutInformation.version
-        } listening on ${ipAddress.address()}:${port} ********`
-    );
+    logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} started.`);
+    logger.write_info("index.ts", `******** ${aboutInformation.name} v${aboutInformation.version} listening on ${ipAddress.address()}:${port} ********`);
 });
