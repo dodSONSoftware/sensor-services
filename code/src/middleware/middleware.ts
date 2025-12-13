@@ -1,6 +1,8 @@
 /*
- * Author: Randy Dodson ( dodson labs )
- * License: 2025, MIT License (see LICENSE file for details)
+ * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Author: Randy Dodson <dodsonsoftware@gmail.com>
+ * Licensed under the MIT License with Patent Grant and NOTICE preservation.
+ * See the LICENSE file for the full terms.
  */
 
 import * as express from "express";

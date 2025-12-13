@@ -1,6 +1,8 @@
 /*
- * Author: Randy Dodson ( dodson labs )
- * License: 2025, MIT License (see LICENSE file for details)
+ * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Author: Randy Dodson <dodsonsoftware@gmail.com>
+ * Licensed under the MIT License with Patent Grant and NOTICE preservation.
+ * See the LICENSE file for the full terms.
  */
 
 import * as express from "express";
@@ -11,11 +13,7 @@ import { sleep } from "../dodsonlabs/SystemFunctions";
 
 // **** public functions
 
-export async function getIdentify(
-    req: express.Request,
-    res: express.Response,
-    network: Networking
-) {
+export async function getIdentify(req: express.Request, res: express.Response, network: Networking) {
     // log it
     logger.write_info("sensorController.ts/getIdentify", "Get Identity");
 
@@ -31,10 +29,7 @@ export async function getIdentify(
     };
 
     // publish mqtt request
-    network.publish_mqtt_message(
-        network.mqtt_command_topic,
-        JSON.stringify(mqtt_request)
-    );
+    network.publish_mqtt_message(network.mqtt_command_topic, JSON.stringify(mqtt_request));
 
     // wait-for-it
     while (true) {
@@ -57,21 +52,13 @@ export async function getIdentify(
     res.send(network.command_response_identify_response);
 }
 
-export async function getIdentifyBySource(
-    req: express.Request,
-    res: express.Response,
-    network: Networking,
-    source: string
-) {
+export async function getIdentifyBySource(req: express.Request, res: express.Response, network: Networking, source: string) {
     // TODO: ****************************************************************
     // TODO: ****************************************************************
     // TODO: error check the source
 
     // log it
-    logger.write_info(
-        "sensorController.ts/getIdentify",
-        `Get Identity for ${source}`
-    );
+    logger.write_info("sensorController.ts/getIdentify", `Get Identity for ${source}`);
 
     // intialize
     network.initialize_mqtt_command_response_identify();
@@ -90,10 +77,7 @@ export async function getIdentifyBySource(
     };
 
     // publish mqtt request
-    network.publish_mqtt_message(
-        network.mqtt_command_topic,
-        JSON.stringify(mqtt_request)
-    );
+    network.publish_mqtt_message(network.mqtt_command_topic, JSON.stringify(mqtt_request));
 
     // wait-for-it
     while (true) {
@@ -110,9 +94,7 @@ export async function getIdentifyBySource(
     }
 
     // log-it
-    console.log(
-        `\n\n<<<<<<<< [ export function getIdentify/source ] >>>>>>>> \n`
-    );
+    console.log(`\n\n<<<<<<<< [ export function getIdentify/source ] >>>>>>>> \n`);
     console.log(`\t${JSON.stringify(dude, null, 4)}`);
     console.log(`\n\n`);
 

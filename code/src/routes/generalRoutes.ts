@@ -1,6 +1,8 @@
 /*
- * Author: Randy Dodson ( dodson labs )
- * License: 2025, MIT License (see LICENSE file for details)
+ * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Author: Randy Dodson <dodsonsoftware@gmail.com>
+ * Licensed under the MIT License with Patent Grant and NOTICE preservation.
+ * See the LICENSE file for the full terms.
  */
 
 import express from "express";
@@ -35,9 +37,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app
-            .route("/about")
-            .get((req: express.Request, res: express.Response) => general_controller.getAbout(req, res));
+        this.app.route("/about").get((req: express.Request, res: express.Response) => general_controller.getAbout(req, res));
 
         // CURRENT DATETIME
         /**
@@ -58,9 +58,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                   type: string
          *                   format: date-time
          */
-        this.app
-            .route("/date_local")
-            .get((req: express.Request, res: express.Response) => general_controller.getDateCurrent(req, res));
+        this.app.route("/date_local").get((req: express.Request, res: express.Response) => general_controller.getDateCurrent(req, res));
 
         // UTC DATETIME
         /**
@@ -81,8 +79,6 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                   type: string
          *                   format: date-time
          */
-        this.app
-            .route("/date_utc")
-            .get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
+        this.app.route("/date_utc").get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
     }
 }
