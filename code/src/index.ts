@@ -19,7 +19,7 @@ import { Networking } from "./dodsonlabs/Networking";
 
 // read the configuration file
 let config_source = "file";
-let config = read_file_json("./config.json");
+let config = read_file_json("app/dist/config.json");
 if (config === null) {
     // TODO: ****************************************************************
     // TODO: **** This should generate an error
