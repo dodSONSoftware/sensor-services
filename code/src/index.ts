@@ -26,11 +26,17 @@ if (config === null) {
     // TODO: ****************************************************************
 
     // could not find the configuration file
+    console.log("================================================================");
+    console.log(">>>>>>>> WARNING");
+    console.log(`>>>>>>>> WARNING: Could not read the configuration file, using coded configuration...`);
+    console.log(">>>>>>>> WARNING");
+    console.log(">>>>>>>>");
+
     config_source = "code";
     config = {
         "log-level": "debug",
-        "prometheus-port": 3400,
-        "mqtt-broker-ip-address": "192.168.7.102",
+        "prometheus-port": 3300,
+        "mqtt-broker-ip-address": "192.168.1.4",
         "mqtt-topic-telemetry": "iot/telemetry",
         "mqtt-topic-command": "iot/v2/command",
         "mqtt-topic-command-response": "iot/v2/command-response",
@@ -38,7 +44,7 @@ if (config === null) {
 }
 
 // display configuration
-console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(config, null, 2)}\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
+console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
 
 // create logger
 createLogger(config);

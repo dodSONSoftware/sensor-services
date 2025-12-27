@@ -19,6 +19,8 @@ export const createLogger = (config: any) => {
 export const aboutInformation: IAbout = {
     name: "Sensor Web Services",
     version: "2.0.0",
-    author: "dodson labs",
+    author: "Randy Dodson (dodsonsoftware@gmail.com)",
     description: "Provides sensor-related web services.",
+    copyright: "Copyright (c) 2025 dodson Software ( dodson labs )",
+    license: "Licensed under the MIT License with Patent Grant and NOTICE preservation."
 };
