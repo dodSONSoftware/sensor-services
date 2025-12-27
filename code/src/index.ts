@@ -35,7 +35,7 @@ if (config === null) {
     config_source = "code";
     config = {
         "log-level": "debug",
-        "prometheus-port": 3300,
+        "prometheus-port": 3301,
         "mqtt-broker-ip-address": "192.168.1.4",
         "mqtt-topic-telemetry": "iot/telemetry",
         "mqtt-topic-command": "iot/v2/command",

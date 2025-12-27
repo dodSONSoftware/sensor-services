@@ -10,7 +10,7 @@ echo "Docker running docker container: sensor-web-services"
 docker run -d \
            --privileged \
            --name sensor-web-services \
-           -p 3301:3300 \
+           -p 3301:3301 \
            -v /var/run/docker.sock:/var/run/docker.sock \
            -v /mnt/sensor-web-services/config.json:/app/dist/config.json \
            sensor-web-services:1.0
