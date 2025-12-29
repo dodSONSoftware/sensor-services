@@ -13,20 +13,16 @@ import * as generalRoutes from "./routes/generalRoutes";
 import * as sensorRoutes from "./routes/sensorRoutes";
 import { aboutInformation, createLogger, logger } from "./common/global";
 import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
-import { Networking } from "./dodsonlabs/Networking";
+import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 
 // **** start up code
 
 // read the configuration file
 let config_source = "file";
-let config = read_file_json("app/dist/config.json");
+let config = read_file_json("/app/dist/config.json");
 if (config === null) {
-    // TODO: ****************************************************************
-    // TODO: **** This should generate an error
-    // TODO: ****************************************************************
-
     // could not find the configuration file
-    console.log("================================================================");
+    console.log("\n================================================================");
     console.log(">>>>>>>> WARNING");
     console.log(`>>>>>>>> WARNING: Could not read the configuration file, using coded configuration...`);
     console.log(">>>>>>>> WARNING");
@@ -37,7 +33,7 @@ if (config === null) {
         "log-level": "debug",
         "prometheus-port": 3301,
         "mqtt-broker-ip-address": "192.168.1.4",
-        "mqtt-topic-telemetry": "iot/telemetry",
+        "mqtt-topic-telemetry": "iot/v2/telemetry",
         "mqtt-topic-command": "iot/v2/command",
         "mqtt-topic-command-response": "iot/v2/command-response",
     };
@@ -56,7 +52,7 @@ logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.ver
 const app = express();
 
 // create networking
-const networking = new Networking(config, logger);
+const networking = new MqttNetworking(config, logger);
 networking.start_networking();
 
 // setup swagger
