@@ -13,7 +13,7 @@ import { aboutInformation, logger } from "../common/global";
 
 export function getAbout(req: express.Request, res: express.Response) {
     // log it
-    logger.write_info("generalController.ts/getAbout", JSON.stringify(aboutInformation));
+    logger.write_debug("generalController.ts/getAbout", JSON.stringify(aboutInformation));
 
     // publish it
     res.status(OK);
@@ -31,7 +31,7 @@ export function getDateCurrent(req: express.Request, res: express.Response) {
     const final = `${y}-${m}-${d}T${t}`;
 
     // log it
-    logger.write_info("generalController.ts/getDateCurrent", `(${final})`);
+    logger.write_debug("generalController.ts/getDateCurrent", `(${final})`);
 
     // publish it
     res.status(OK);
@@ -44,7 +44,7 @@ export function getDateUTC(req: express.Request, res: express.Response) {
     const dt = new Date().toISOString().split(".")[0];
 
     // log it
-    logger.write_info("generalController.ts/getDateUTC", `(${dt})`);
+    logger.write_debug("generalController.ts/getDateUTC", `(${dt})`);
 
     // publish it
     res.status(OK);

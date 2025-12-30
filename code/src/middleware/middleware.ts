@@ -19,6 +19,10 @@ export class CreateMiddleware extends RoutesCreatorBase {
         const cors = require("cors");
         app.use(cors());
 
+        // add JSON
+        app.use(express.json());
+
+        // ----
         super(app);
     }
 

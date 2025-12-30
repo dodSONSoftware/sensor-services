@@ -6,7 +6,7 @@
  */
 
 import * as express from "express";
-import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
+import { Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { sleep } from "../dodsonlabs/SystemFunctions";
@@ -105,7 +105,6 @@ async function get_it(req: express.Request, res: express.Response, network: Mqtt
     // log-it
     logger.write_debug("sensorController.ts/get_it", `${command}...Completed`);
 }
-
 
 
 

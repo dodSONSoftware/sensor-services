@@ -11,6 +11,7 @@ import * as sensor_controller from "../controllers/sensorController";
 import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
 export class CreateSensorRoutes extends RoutesCreatorBase {
+
     // **** ctor
 
     constructor(protected app: express.Application, protected network: MqttNetworking) {
@@ -24,7 +25,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         // IDENTIFY
         /**
          * @swagger
-         * /identify:
+         * /sensors/identify:
          *   get:
          *     summary: Retrieves identification information about all of the sensors
          *     description: Returns identification information for all of the sensors.
@@ -39,11 +40,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route("/identify").get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
+        this.app.route(`/sensors/identify`).get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
+
         // IDENTIFY
         /**
          * @swagger
-         * /identify/{source}:
+         * /sensors/identify/{source}:
          *   get:
          *     summary: Retrieves identification information about the sensors by source
          *     description: Returns identification information for the specified sensor source.
@@ -64,13 +66,14 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               properties:
          *                 about:
          *                   type: string
-         */ this.app.route("/identify/:source").get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
+         */
+        this.app.route(`/sensors/identify/:source`).get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
 
 
         // GET-DETAILS
         /**
          * @swagger
-         * /get-details:
+         * /sensors/get-details:
          *   get:
          *     summary: Retrieves all information about all of the sensors
          *     description: Returns all information for all of the sensors.
@@ -85,11 +88,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route("/get-details").get((req: express.Request, res: express.Response) => sensor_controller.getDetails(req, res, this.network));
+        this.app.route("/sensors/get-details").get((req: express.Request, res: express.Response) => sensor_controller.getDetails(req, res, this.network));
+
         // GET-DETAILS
         /**
          * @swagger
-         * /get-details/{source}:
+         * /sensors/get-details/{source}:
          *   get:
          *     summary: Retrieves all information about the sensors by source
          *     description: Returns all information for the specified sensor source.
@@ -110,13 +114,13 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               properties:
          *                 about:
          *                   type: string
-         */ this.app.route("/get-details/:source").get((req: express.Request, res: express.Response) => sensor_controller.getDetailsBySource(req, res, this.network, req.params.source));
-
+         */
+        this.app.route("/sensors/get-details/:source").get((req: express.Request, res: express.Response) => sensor_controller.getDetailsBySource(req, res, this.network, req.params.source));
 
         // REBOOT
         /**
          * @swagger
-         * /reboot:
+         * /sensors/reboot:
          *   get:
          *     summary: Instructs all sensors to reboot
          *     description: Instructs all sensors to reboot.
@@ -131,11 +135,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route("/reboot").get((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
+        this.app.route("/sensors/reboot").get((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
+
         // REBOOT
         /**
          * @swagger
-         * /reboot/{source}:
+         * /sensors/reboot/{source}:
          *   get:
          *     summary: Instructs the sensors identified by source to reboot
          *     description: Instructs the sensors identified by source to reboot.
@@ -156,13 +161,14 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               properties:
          *                 about:
          *                   type: string
-         */ this.app.route("/reboot/:source").get((req: express.Request, res: express.Response) => sensor_controller.PostRebootBySource(req, res, this.network, req.params.source));
+         */
+        this.app.route("/sensors/reboot/:source").get((req: express.Request, res: express.Response) => sensor_controller.PostRebootBySource(req, res, this.network, req.params.source));
 
 
         // READ-CONFIG
         /**
          * @swagger
-         * /read-config:
+         * /sensors/read-config:
          *   get:
          *     summary: Instructs all sensors to return their configuration
          *     description: Instructs all sensors to return their configuration.
@@ -177,11 +183,13 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route("/read-config").get((req: express.Request, res: express.Response) => sensor_controller.getReadConfig(req, res, this.network));
+        this.app.route("/sensors/read-config").get((req: express.Request, res: express.Response) => sensor_controller.getReadConfig(req, res, this.network));
+
+
         // READ-CONFIG
         /**
          * @swagger
-         * /read-config/{source}:
+         * /sensors/read-config/{source}:
          *   get:
          *     summary: Instructs the sensors identified by source to return their configuration
          *     description: Instructs the sensors identified by source to return their configuration.
@@ -202,60 +210,63 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               properties:
          *                 about:
          *                   type: string
-         */ this.app.route("/read-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.getReadConfigBySource(req, res, this.network, req.params.source));
+         */
+        this.app.route("/sensors/read-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.getReadConfigBySource(req, res, this.network, req.params.source));
 
 
-        // WRITE-CONFIG
-        /**
-         * @swagger
-         * /write-config/{source}:
-         *   get:
-         *     summary: Instructs the sensors identified by source to write thsi given configuration to their configuration file
-         *     description: Instructs the sensors identified by source to write thsi given configuration to their configuration file.
-         *     parameters:
-         *       - name: source
-         *         in: path
-         *         required: true
-         *         description: The name of the sensor.
-         *         schema:
-         *           type: string
-         *     responses:
-         *       200:
-         *         description: 
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
-         */ this.app.route("/write-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.postWriteConfigBySource(req, res, this.network, req.params.source));
+        // // WRITE-CONFIG
+        // /**
+        //  * @swagger
+        //  * /sensors/write-config/{source}:
+        //  *   get:
+        //  *     summary: Instructs the sensors identified by source to write thsi given configuration to their configuration file
+        //  *     description: Instructs the sensors identified by source to write thsi given configuration to their configuration file.
+        //  *     parameters:
+        //  *       - name: source
+        //  *         in: path
+        //  *         required: true
+        //  *         description: The name of the sensor.
+        //  *         schema:
+        //  *           type: string
+        //  *     responses:
+        //  *       200:
+        //  *         description: 
+        //  *         content:
+        //  *           application/json:
+        //  *             schema:
+        //  *               type: object
+        //  *               properties:
+        //  *                 about:
+        //  *                   type: string
+        //  */ 
+        // this.app.route("/sensors/write-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.postWriteConfigBySource(req, res, this.network, req.params.source));
 
 
-        // UPDATE-CONFIG
-        /**
-         * @swagger
-         * /update-config/{source}:
-         *   get:
-         *     summary: Instructs the sensors identified by source to update this given configuration to their configuration file
-         *     description: Instructs the sensors identified by source to update this given configuration to their configuration file.
-         *     parameters:
-         *       - name: source
-         *         in: path
-         *         required: true
-         *         description: The name of the sensor.
-         *         schema:
-         *           type: string
-         *     responses:
-         *       200:
-         *         description: 
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
-         */ this.app.route("/update-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.postUpdateConfigBySource(req, res, this.network, req.params.source));
+        // // UPDATE-CONFIG
+        // /**
+        //  * @swagger
+        //  * /sensors/update-config/{source}:
+        //  *   get:
+        //  *     summary: Instructs the sensors identified by source to update this given configuration to their configuration file
+        //  *     description: Instructs the sensors identified by source to update this given configuration to their configuration file.
+        //  *     parameters:
+        //  *       - name: source
+        //  *         in: path
+        //  *         required: true
+        //  *         description: The name of the sensor.
+        //  *         schema:
+        //  *           type: string
+        //  *     responses:
+        //  *       200:
+        //  *         description: 
+        //  *         content:
+        //  *           application/json:
+        //  *             schema:
+        //  *               type: object
+        //  *               properties:
+        //  *                 about:
+        //  *                   type: string
+        //  */ 
+        // this.app.route("/sensors/update-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.postUpdateConfigBySource(req, res, this.network, req.params.source));
     }
 }

@@ -11,6 +11,7 @@ import * as ipAddress from "ip";
 import * as middleware from "./middleware/middleware";
 import * as generalRoutes from "./routes/generalRoutes";
 import * as sensorRoutes from "./routes/sensorRoutes";
+import * as pingerRoutes from "./routes/pingerRoutes";
 import { aboutInformation, createLogger, logger } from "./common/global";
 import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
@@ -36,6 +37,7 @@ if (config === null) {
         "mqtt-topic-telemetry": "iot/v2/telemetry",
         "mqtt-topic-command": "iot/v2/command",
         "mqtt-topic-command-response": "iot/v2/command-response",
+        "ip-pinger-web-api": "http://localhost:3300"
     };
 }
 
@@ -46,7 +48,7 @@ console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(conf
 createLogger(config);
 
 // log it
-logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} starting...`);
+logger.write_debug("index.ts", `${aboutInformation.about.name} v${aboutInformation.about.version} starting...`);
 
 // create express application
 const app = express();
@@ -65,6 +67,7 @@ try {
     // create routes
     new generalRoutes.CreateGeneralRoutes(app);
     new sensorRoutes.CreateSensorRoutes(app, networking);
+    new pingerRoutes.CreatePingerRoutes(app, String(config["ip-pinger-web-api"]));
 } catch (err: any) {
     // log error
     logger.write_error("index.ts", ensureError(err).message);
@@ -78,6 +81,6 @@ const port = Number(process.env.EXPRESS_PORT) || 32000;
 
 // start express
 app.listen(port, () => {
-    logger.write_debug("index.ts", `${aboutInformation.name} v${aboutInformation.version} started.`);
-    logger.write_info("index.ts", `******** ${aboutInformation.name} v${aboutInformation.version} listening on ${ipAddress.address()}:${port} ********`);
+    logger.write_debug("index.ts", `${aboutInformation.about.name} v${aboutInformation.about.version} started.`);
+    logger.write_info("index.ts", `******** ${aboutInformation.about.name} v${aboutInformation.about.version} listening on ${ipAddress.address()}:${port} ********`);
 });
