@@ -7,18 +7,20 @@
 
 import * as express from "express";
 import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
-import { aboutInformation, logger } from "../common/global";
+import { aboutDude, logger } from "../common/global";
 
 // **** public functions
 
 export function getAbout(req: express.Request, res: express.Response) {
+    const dude = aboutDude();
+
     // log it
-    logger.write_debug("generalController.ts/getAbout", JSON.stringify(aboutInformation));
+    logger.write_debug("generalController.ts/getAbout", JSON.stringify(dude));
 
     // publish it
     res.status(OK);
     res.contentType(Json);
-    res.send(aboutInformation);
+    res.send(dude);
 }
 
 export function getDateCurrent(req: express.Request, res: express.Response) {

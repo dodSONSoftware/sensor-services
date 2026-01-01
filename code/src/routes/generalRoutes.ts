@@ -9,6 +9,26 @@ import express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as general_controller from "../controllers/generalController";
 
+
+
+export const __routesHelp: Record<string, any> = {
+    "description": "Some basic apis.",
+    "commands": [
+        {
+            "route": "/about",
+            "description": "Returns this description."
+        },
+        {
+            "route": "/date_local",
+            "description": "Returns the current local date and time of the server's timezone. Format=[yyyy-mm-ddThh:mm:ss]"
+        },
+        {
+            "route": "/date_utc",
+            "description": "Returns the current date and time in Coordinated Universal Time (UTC). Format=[yyyy-mm-ddThh:mm:ssZ]"
+        }
+    ]
+};
+
 export class CreateGeneralRoutes extends RoutesCreatorBase {
     // **** ctor
 

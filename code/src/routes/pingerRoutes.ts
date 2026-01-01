@@ -12,6 +12,37 @@ import { ParamsDictionary } from "express-serve-static-core";
 import { ParsedQs } from "qs";
 
 
+
+export const __routesHelp: Record<string, any> = {
+    "description": "Apis that allow control over the registered IP Pinger.",
+    "commands": [
+        {
+            "route": "/ippinger/about",
+            "description": "Gets helpful information about the registered IP Pinger."
+        },
+        {
+            "route": "/ippinger/read-config",
+            "description": "Gets the current configuration from the registered IP Pinger."
+        },
+        {
+            "route": "/ippinger/write-config",
+            "description": "Posts the configuration, request.body, to the registered IP Pinger."
+        },
+        {
+            "route": "/ippinger/restart",
+            "description": "Instructs the registered IP Pinger service to restart."
+        },
+        {
+            "route": "/ippinger/ping",
+            "description": "Instructs the registered IP Pinger service to ping all of its devices and return the results."
+        },
+        {
+            "route": "/ippinger/ping/{ip-address}",
+            "description": "Instructs the registered IP Pinger service to ping the given ip-address and return the results."
+        }
+    ]
+};
+
 export class CreatePingerRoutes extends RoutesCreatorBase {
 
     // **** private properties
@@ -110,5 +141,46 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                   type: string
          */
         this.app.route(`/ippinger/restart`).post((req: express.Request, res: express.Response) => pinger_controller.postRestart(req, res, this._ip_pinger_ipaddress));
+
+        // PING
+        /**
+         * @swagger
+         * /ippinger/ping:
+         *   post:
+         *     summary: 
+         *     description: .
+         *     responses:
+         *       200:
+         *         description: 
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 about:
+         *                   type: string
+         */
+        this.app.route(`/ippinger/ping`).get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_ipaddress));
+
+
+        // PING/{TARGET}
+        /**
+         * @swagger
+         * /ippinger/ping/{target}:
+         *   post:
+         *     summary: 
+         *     description: .
+         *     responses:
+         *       200:
+         *         description: 
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 about:
+         *                   type: string
+         */
+        this.app.route(`/ippinger/ping/:target`).get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_ipaddress, req.params.target));
     }
 }

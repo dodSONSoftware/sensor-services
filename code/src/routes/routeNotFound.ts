@@ -9,6 +9,13 @@ import express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import { logger } from "../common/global";
 
+
+
+export const __routesHelp: Record<string, any> = {
+    "description": "When all else fails...",
+    "commands": []
+};
+
 export class CreateRouteNotFound extends RoutesCreatorBase {
     // **** ctor
 
@@ -19,7 +26,7 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
 
     // **** protected functions
 
-    protected createRoutes() {}
+    protected createRoutes() { }
 
     // **** protected functions
 
@@ -29,7 +36,7 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
                 message: "The requested resource was not found.",
             });
 
-            logger.write_error("CreatorsBase.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+            logger.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
         });
     }
 }

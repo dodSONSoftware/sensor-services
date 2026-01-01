@@ -8,15 +8,17 @@
 import swaggerJsDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import { Express } from "express";
-import { aboutInformation } from "./common/global";
+import { aboutDude } from "./common/global";
+
+const adude = aboutDude();
 
 const swaggerOptions = {
     swaggerDefinition: {
         openapi: "3.0.0",
         info: {
-            title: aboutInformation.about.name,
-            version: aboutInformation.about.version,
-            description: aboutInformation.about.description,
+            title: adude.about.name,
+            version: adude.about.version,
+            description: adude.about.description,
         },
         servers: [
             {

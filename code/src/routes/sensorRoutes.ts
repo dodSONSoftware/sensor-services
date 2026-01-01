@@ -10,6 +10,54 @@ import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as sensor_controller from "../controllers/sensorController";
 import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
+
+
+export const __routesHelp: Record<string, any> = {
+    "description": "Apis that allow control over the sensor net.",
+    "commands": [
+        {
+            "route": "/sensors/identify",
+            "description": "Retrieves identification information about all of the sensors."
+        },
+        {
+            "route": "/sensors/identify/{source}",
+            "description": "Retrieves identification information about the named sensor."
+        },
+        {
+            "route": "/sensors/get-details",
+            "description": "Retrieves detailed information about all of the sensors."
+        },
+        {
+            "route": "/sensors/get-details/{source}",
+            "description": "Retrieves detailed information about the named sensor."
+        },
+        {
+            "route": "/sensors/reboot",
+            "description": "Instructs all sensors to reboot."
+        },
+        {
+            "route": "/sensors/reboot/{source}",
+            "description": "Instructs the sensor identified by source to reboot."
+        },
+        {
+            "route": "/sensors/read-config",
+            "description": "Instructs all sensors to return their configurations."
+        },
+        {
+            "route": "/sensors/read-config/{source}",
+            "description": "Instructs the sensor identified by source to return their configuration."
+        },
+        {
+            "route": "/sensors/write-config/{source}",
+            "description": "Instructs the sensor identified by source to write the given configuration to their configuration file."
+        },
+        {
+            "route": "/sensors/update-config/{source}",
+            "description": "Instructs the sensor identified by source to update the given configuration to their configuration file."
+        }
+    ]
+};
+
 export class CreateSensorRoutes extends RoutesCreatorBase {
 
     // **** ctor
@@ -219,8 +267,8 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         //  * @swagger
         //  * /sensors/write-config/{source}:
         //  *   get:
-        //  *     summary: Instructs the sensors identified by source to write thsi given configuration to their configuration file
-        //  *     description: Instructs the sensors identified by source to write thsi given configuration to their configuration file.
+        //  *     summary: Instructs the sensor identified by source to write the given configuration to their configuration file
+        //  *     description: Instructs the sensor identified by source to write the given configuration to their configuration file.
         //  *     parameters:
         //  *       - name: source
         //  *         in: path
@@ -247,8 +295,8 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         //  * @swagger
         //  * /sensors/update-config/{source}:
         //  *   get:
-        //  *     summary: Instructs the sensors identified by source to update this given configuration to their configuration file
-        //  *     description: Instructs the sensors identified by source to update this given configuration to their configuration file.
+        //  *     summary: Instructs the sensor identified by source to update the given configuration to their configuration file
+        //  *     description: Instructs the sensor identified by source to update the given configuration to their configuration file.
         //  *     parameters:
         //  *       - name: source
         //  *         in: path

@@ -14,7 +14,7 @@ import { logger } from "../common/global";
 // **** private functions
 
 function fetchIt(res: express.Response, originator: string, url: string) {
-    const origin = `${originator}/doIt`;
+    const origin = `${originator}/fetchIt`;
 
     const dude = fetch(url)
         .then(response => {
@@ -35,7 +35,7 @@ function fetchIt(res: express.Response, originator: string, url: string) {
         .then(data => {
             // ---- process data as json
             // log it
-            logger.write_debug(origin, `Data=${JSON.stringify(data)}`);
+            logger.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
 
             // publish it
             res.status(OK);
@@ -48,11 +48,6 @@ function fetchIt(res: express.Response, originator: string, url: string) {
 }
 
 function postIt(res: express.Response, originator: string, url: string, data: any) {
-
-    console.log(`\n>>>>>>>>\n${JSON.stringify(data)}\n<<<<<<<<\n`);
-
-
-
     const origin = `${originator}/postIt`;
 
     const dude = fetch(url, {
@@ -119,4 +114,20 @@ export function postRestart(req: express.Request, res: express.Response, ip_ping
     const originator = "pingerController.ts/postRestart";
 
     postIt(res, originator, url, req.body);
+}
+
+export function getPing(req: express.Request, res: express.Response, ip_pinger_web_api: string, ping_ip_address: string): void {
+    // get {ip-pinger} web service api
+    const url = `${ip_pinger_web_api}/ping/${ping_ip_address}`;
+    const originator = "pingerController.ts/getPing";
+
+    fetchIt(res, originator, url);
+}
+
+export function getPings(req: express.Request, res: express.Response, ip_pinger_web_api: string): void {
+    // get {ip-pinger} web service api
+    const url = `${ip_pinger_web_api}/ping`;
+    const originator = "pingerController.ts/getPing";
+
+    fetchIt(res, originator, url);
 }

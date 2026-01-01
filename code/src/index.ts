@@ -12,7 +12,7 @@ import * as middleware from "./middleware/middleware";
 import * as generalRoutes from "./routes/generalRoutes";
 import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
-import { aboutInformation, createLogger, logger } from "./common/global";
+import { aboutDude, createLogger, logger } from "./common/global";
 import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 
@@ -48,7 +48,8 @@ console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(conf
 createLogger(config);
 
 // log it
-logger.write_debug("index.ts", `${aboutInformation.about.name} v${aboutInformation.about.version} starting...`);
+const dude = aboutDude();
+logger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} starting...`);
 
 // create express application
 const app = express();
@@ -81,6 +82,6 @@ const port = Number(process.env.EXPRESS_PORT) || 32000;
 
 // start express
 app.listen(port, () => {
-    logger.write_debug("index.ts", `${aboutInformation.about.name} v${aboutInformation.about.version} started.`);
-    logger.write_info("index.ts", `******** ${aboutInformation.about.name} v${aboutInformation.about.version} listening on ${ipAddress.address()}:${port} ********`);
+    logger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
+    logger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on ${ipAddress.address()}:${port} ********`);
 });
