@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Copyright (c) 2025-2026 dodson Software ( dodson labs )
  * Author: Randy Dodson <dodsonsoftware@gmail.com>
  * Licensed under the MIT License with Patent Grant and NOTICE preservation.
  * See the LICENSE file for the full terms.
@@ -13,7 +13,7 @@ import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
 
 export const __routesHelp: Record<string, any> = {
-    "description": "Apis that allow control over the sensor net.",
+    "description": "Apis that gather information about and control over the sensors in the sensor net.",
     "commands": [
         {
             "route": "/sensors/identify",
@@ -62,9 +62,10 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
 
     // **** ctor
 
-    constructor(protected app: express.Application, protected network: MqttNetworking) {
+    constructor(protected app: express.Application, protected network: MqttNetworking, private ip_pinger_web_api: string) {
         super(app);
         this.network = network;
+        this.ip_pinger_web_api = ip_pinger_web_api;
     }
 
     // **** protected functions

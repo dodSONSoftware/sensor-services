@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Copyright (c) 2025-2026 dodson Software ( dodson labs )
  * Author: Randy Dodson <dodsonsoftware@gmail.com>
  * Licensed under the MIT License with Patent Grant and NOTICE preservation.
  * See the LICENSE file for the full terms.
@@ -7,14 +7,13 @@
 
 import express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
+import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import * as pinger_controller from "../controllers/pingerController";
-import { ParamsDictionary } from "express-serve-static-core";
-import { ParsedQs } from "qs";
 
 
 
 export const __routesHelp: Record<string, any> = {
-    "description": "Apis that allow control over the registered IP Pinger.",
+    "description": "Apis that gather information about and control over the registered IP Pinger.",
     "commands": [
         {
             "route": "/ippinger/about",
@@ -39,6 +38,10 @@ export const __routesHelp: Record<string, any> = {
         {
             "route": "/ippinger/ping/{ip-address}",
             "description": "Instructs the registered IP Pinger service to ping the given ip-address and return the results."
+        },
+        {
+            "route": "/ippinger/analyze-ippinger",
+            "description": "Analyzes the configured devices in the registered IP Pinger against the live-sensors and returns a report."
         }
     ]
 };
@@ -47,13 +50,14 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
 
     // **** private properties
 
-    private _ip_pinger_ipaddress: string;
+    private _ip_pinger_web_api: string;
 
     // **** ctor
 
-    constructor(protected app: express.Application, ip_pinger_web_api: string) {
+    constructor(protected app: express.Application, protected network: MqttNetworking, private ip_pinger_web_api: string) {
         super(app);
-        this._ip_pinger_ipaddress = ip_pinger_web_api;
+        this.network = network;
+        this._ip_pinger_web_api = ip_pinger_web_api;
     }
 
     // **** protected functions
@@ -77,7 +81,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/about`).get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_ipaddress));
+        this.app.route(`/ippinger/about`).get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api));
 
         // READ-CONFIG
         /**
@@ -97,7 +101,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/read-config`).get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_ipaddress));
+        this.app.route(`/ippinger/read-config`).get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api));
 
         // WRITE-CONFIG
         /**
@@ -119,7 +123,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          */
         this.app.route(`/ippinger/write-config`).post((req: express.Request, res: express.Response) => {
             const data = req.body;
-            pinger_controller.postWriteConfig(req, res, this._ip_pinger_ipaddress, data);
+            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, data);
         });
 
         // RESTART
@@ -140,7 +144,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/restart`).post((req: express.Request, res: express.Response) => pinger_controller.postRestart(req, res, this._ip_pinger_ipaddress));
+        this.app.route(`/ippinger/restart`).post((req: express.Request, res: express.Response) => pinger_controller.postRestart(req, res, this._ip_pinger_web_api));
 
         // PING
         /**
@@ -160,7 +164,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/ping`).get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_ipaddress));
+        this.app.route(`/ippinger/ping`).get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api));
 
 
         // PING/{TARGET}
@@ -181,6 +185,26 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/ping/:target`).get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_ipaddress, req.params.target));
+        this.app.route(`/ippinger/ping/:target`).get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target));
+
+        // ANALYZE-IPPINGER
+        /**
+         * @swagger
+         * /sensors/analyze-ippinger:
+         *   get:
+         *     summary: Will analyze the live sensors with the registered IP Pinger's configuration.
+         *     description: Will analyze the live sensors with the registered IP Pinger's configuration.
+         *     responses:
+         *       200:
+         *         description: 
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 about:
+         *                   type: string
+         */
+        this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api));
     }
 }

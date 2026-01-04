@@ -1,17 +1,19 @@
 /*
- * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Copyright (c) 2025-2026 dodson Software ( dodson labs )
  * Author: Randy Dodson <dodsonsoftware@gmail.com>
  * Licensed under the MIT License with Patent Grant and NOTICE preservation.
  * See the LICENSE file for the full terms.
  */
 
 import * as express from "express";
-import { Json, OK, InternalServerError } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
+import { Json, OK, InternalServerError } from "../dodsonlabs/HttpConstants";
+import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
+import { getReadConfigBySource, mqtt_command_get_messages } from "./sensorController";
 
 
 
-// **** private functions
+// ---- private functions
 
 function fetchIt(res: express.Response, originator: string, url: string) {
     const origin = `${originator}/fetchIt`;
@@ -27,6 +29,9 @@ function fetchIt(res: express.Response, originator: string, url: string) {
                 res.status(InternalServerError);
                 res.contentType(Json);
                 res.send(response);
+                // !!!!
+                // !!!! Research this: should I throw an Error
+                // !!!!
                 return null;
             }
             // next--> data as json
@@ -82,7 +87,7 @@ function postIt(res: express.Response, originator: string, url: string, data: an
 
 
 
-// **** public functions
+// ---- public functions
 
 export function getAbout(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     // get {ip-pinger} web service api
@@ -131,3 +136,118 @@ export function getPings(req: express.Request, res: express.Response, ip_pinger_
 
     fetchIt(res, originator, url);
 }
+
+// --------------------------------
+
+// ---- GET ANALYZE IP PINGER
+
+async function fetchItOnly(originator: string, url: string): Promise<any> {
+    const origin = `${originator}/fetchItOnly`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            logger.write_error(origin, `Url=${url}, Status=${response.status}`);
+            return {}; // or return null / throw depending on caller expectations
+        }
+
+        const data = await response.json();
+        logger.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
+        return data;
+
+    } catch (error) {
+        logger.write_error(origin, `Url=${url}, Error=${error}`);
+        return {}; // keep consistent return type on failure
+    }
+}
+
+interface analyzeItType {
+    source: string;
+    ip_address: string;
+}
+
+function createAnalyzeResult(state: string, state_value: string, origin: Record<string, any>): Record<string, any> {
+    origin["state"] = state;
+    origin["state-value"] = state_value;
+    return origin;
+}
+
+function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[]): Record<string, any>[] {
+    // init
+    let results: Record<string, any>[] = [];
+
+    // process each device defined in the IP Pinger configuration
+    ippinger_devices.forEach(device => {
+        const source = device["source"];
+        const ip_address = device["ip-address"];
+
+        // check if device.source is-in livesensors
+        const sensor: Record<string, any> | undefined = live_sensors.find(x => { return x["source"].toLowerCase() === source.toLowerCase(); });
+        if (sensor) {
+            if (sensor["payload"]["ip-address"] === ip_address) {
+                // state: OK
+                results.push(createAnalyzeResult("OK", "", sensor));
+
+            } else {
+                // state: IP Address Mismatch
+                results.push(createAnalyzeResult("IP Address Mismatch", sensor["ip-address"], sensor));
+            }
+
+        } else {
+            // check if device.ip-address is-in livesensors
+            const sensor_ip: Record<string, any> | undefined = live_sensors.find(x => { return x["payload"]["ip-address"] === ip_address; });
+            if (sensor_ip) {
+                // state: Name Mismatch
+                results.push(createAnalyzeResult("Name Mismatch", source, sensor_ip));
+
+            } else {
+                // state: Offline
+                results.push(createAnalyzeResult("Offline", "", device));
+            }
+        }
+    });
+
+    // process each device defined in the IP Pinger configuration
+    live_sensors.forEach(sensor => {
+        const source = sensor["source"];
+        const ip_address = sensor["payload"]["ip-address"];
+
+        // check if live_sensor.source is in ippinger-devices
+        const dude = ippinger_devices.find(x => { return x["source"].toLowerCase() === source.toLowerCase() });
+        if (!dude) {
+            const dude_2 = ippinger_devices.find(x => { return x["ip-address"] === ip_address });
+            if (!dude_2) {
+                // state: New
+                results.push(createAnalyzeResult("New", "", sensor));
+            }
+        }
+    });
+
+    // ----    
+    return results;
+}
+
+export async function getAnalyzeIpPinger(req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string) {
+    // start sensor "identify", "*"
+    const sensors_promise = mqtt_command_get_messages(network, "*", "identify");
+
+    // read configuration from ip-pinger
+    const url = `${ip_pinger_web_api}/read-config`;
+    const ippinger_config_promise = fetchItOnly("getAnalyzeIpPinger", url);
+
+    // wait-for-them
+    const request_results = await Promise.all([sensors_promise, ippinger_config_promise]);
+
+    // get results
+    const sensors = request_results[0]["results"];
+    const ippinger_devices = request_results[1]["devices"];
+
+    // analyze-it
+    const results = analyzeIt(sensors, ippinger_devices);
+
+    // send response
+    res.status(OK);
+    res.contentType(Json);
+    res.send(results);
+}
+

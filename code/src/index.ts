@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 dodson Software ( dodson labs )
+ * Copyright (c) 2025-2026 dodson Software ( dodson labs )
  * Author: Randy Dodson <dodsonsoftware@gmail.com>
  * Licensed under the MIT License with Patent Grant and NOTICE preservation.
  * See the LICENSE file for the full terms.
@@ -34,10 +34,10 @@ if (config === null) {
         "log-level": "debug",
         "prometheus-port": 3301,
         "mqtt-broker-ip-address": "192.168.1.4",
-        "mqtt-topic-telemetry": "iot/v2/telemetry",
+        "mqtt-topic-telemetry": "iot/telemetry",
         "mqtt-topic-command": "iot/v2/command",
         "mqtt-topic-command-response": "iot/v2/command-response",
-        "ip-pinger-web-api": "http://localhost:3300"
+        "ip-pinger-web-api": "http://192.168.1.215:3300"
     };
 }
 
@@ -56,7 +56,6 @@ const app = express();
 
 // create networking
 const networking = new MqttNetworking(config, logger);
-networking.start_networking();
 
 // setup swagger
 setupSwagger(app);
@@ -66,9 +65,10 @@ try {
     new middleware.CreateMiddleware(app);
 
     // create routes
+    const ip_pinger_web_api = String(config["ip-pinger-web-api"]);
     new generalRoutes.CreateGeneralRoutes(app);
-    new sensorRoutes.CreateSensorRoutes(app, networking);
-    new pingerRoutes.CreatePingerRoutes(app, String(config["ip-pinger-web-api"]));
+    new sensorRoutes.CreateSensorRoutes(app, networking, ip_pinger_web_api);
+    new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api);
 } catch (err: any) {
     // log error
     logger.write_error("index.ts", ensureError(err).message);
@@ -83,5 +83,5 @@ const port = Number(process.env.EXPRESS_PORT) || 32000;
 // start express
 app.listen(port, () => {
     logger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
-    logger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on ${ipAddress.address()}:${port} ********`);
+    logger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
 });

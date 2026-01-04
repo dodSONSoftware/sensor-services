@@ -1,4 +1,4 @@
-# Copyright (c) 2025 dodson Software ( dodson labs )
+# Copyright (c) 2025-2026 dodson Software ( dodson labs )
 # Author: Randy Dodson <dodsonsoftware@gmail.com>
 # Licensed under the MIT License with Patent Grant and NOTICE preservation.
 # See the LICENSE file for the full terms.
