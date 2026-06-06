@@ -34,8 +34,10 @@ const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
 export const setupSwagger = (app: Express, port: number, serverUrl?: string) => {
     // Use explicit URL if provided, otherwise derive from the running machine
-    swaggerOptions.swaggerDefinition.servers![0].url =
-        serverUrl ?? `http://${ipAddress.address()}:${port}/`;
+    const server = swaggerOptions.swaggerDefinition.servers?.[0];
+    if (server) {
+        server.url = serverUrl ?? `http://${ipAddress.address()}:${port}/`;
+    }
 
     app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 };

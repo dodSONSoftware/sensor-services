@@ -11,7 +11,7 @@ import { logger } from "../common/global";
 
 
 
-export const __routesHelp: Record<string, any> = {
+export const __routesHelp: Record<string, unknown> = {
     "description": "When all else fails...",
     "commands": []
 };

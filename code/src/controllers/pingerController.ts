@@ -9,7 +9,7 @@ import type * as express from "express";
 import { logger } from "../common/global";
 import { Json, OK, InternalServerError } from "../dodsonlabs/HttpConstants";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
-import { getReadConfigBySource, mqtt_command_get_messages } from "./sensorController";
+import { mqtt_command_get_messages } from "./sensorController";
 
 
 
@@ -18,7 +18,7 @@ import { getReadConfigBySource, mqtt_command_get_messages } from "./sensorContro
 function fetchIt(res: express.Response, originator: string, url: string) {
     const origin = `${originator}/fetchIt`;
 
-    const dude = fetch(url)
+    fetch(url)
         .then(response => {
             // ---- check the response
             if (!response.ok) {
@@ -52,10 +52,10 @@ function fetchIt(res: express.Response, originator: string, url: string) {
         });
 }
 
-function postIt(res: express.Response, originator: string, url: string, data: any) {
+function postIt(res: express.Response, originator: string, url: string, data: unknown) {
     const origin = `${originator}/postIt`;
 
-    const dude = fetch(url, {
+    fetch(url, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -105,7 +105,7 @@ export function getReadConfig(req: express.Request, res: express.Response, ip_pi
     fetchIt(res, originator, url);
 }
 
-export function postWriteConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string, data: any): void {
+export function postWriteConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string, data: unknown): void {
     // get {ip-pinger} web service api
     const url = `${ip_pinger_web_api}/write-config`;
     const originator = "pingerController.ts/postWriteConfig";
@@ -140,8 +140,12 @@ export function getPings(req: express.Request, res: express.Response, ip_pinger_
 // --------------------------------
 
 // ---- GET ANALYZE IP PINGER
+// NOTE: This section uses `any` because it processes dynamic JSON from MQTT sensor telemetry
+// and external HTTP APIs where the shape is not known at compile time.
 
-async function fetchItOnly(originator: string, url: string): Promise<any> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+async function fetchItOnly(originator: string, url: string): Promise<unknown> {
     const origin = `${originator}/fetchItOnly`;
 
     try {
@@ -257,8 +261,9 @@ export async function getAnalyzeIpPinger(req: express.Request, res: express.Resp
     const request_results = await Promise.all([sensors_promise, ippinger_config_promise]);
 
     // get results
-    const sensors = request_results[0]["results"];
-    const ippinger_devices = request_results[1]["devices"];
+    const [commandControl, ippingerConfig] = request_results;
+    const sensors = commandControl.results as Record<string, any>[];
+    const ippinger_devices = (ippingerConfig as Record<string, any>)["devices"] as Record<string, any>[];
 
     // analyze-it
     const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
@@ -268,4 +273,5 @@ export async function getAnalyzeIpPinger(req: express.Request, res: express.Resp
     res.contentType(Json);
     res.send(results);
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 

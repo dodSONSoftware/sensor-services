@@ -37,7 +37,7 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
     // **** private functions
 
-    private loggerMiddleware(request: express.Request, response: express.Response, next: any) {
+    private loggerMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
         // log it
         logger.write_debug("middleware.ts/loggerMiddleware", `${request.method} "${request.path}"`);
 

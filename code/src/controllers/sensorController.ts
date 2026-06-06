@@ -24,7 +24,7 @@ const _reboot_command_delay_seconds: number = 3;
 // ****************************************************************
 // **** private functions
 
-function create_mqtt_command_message(target: string, command: string, payload: Record<string, any> | null = null): Record<string, any> {
+function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null): Record<string, unknown> {
     // create base message
     const msg = {
         "message-type": "command",
@@ -43,7 +43,7 @@ function create_mqtt_command_message(target: string, command: string, payload: R
     return msg;
 }
 
-function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, any>, network: MqttNetworking) {
+function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
     // intialize timer
     dude.initialize();
 
@@ -99,7 +99,7 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     return dude;
 }
 
-async function get_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "") {
+async function get_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, _parameters: string = "") {
     try {
         // log-it
         const dude = await mqtt_command_get_messages(network, target, command);
@@ -118,7 +118,7 @@ async function get_it(req: express.Request, res: express.Response, network: Mqtt
     }
 }
 
-async function post_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, payload: Record<string, any> | null) {
+async function post_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, payload: Record<string, unknown> | null) {
     try {
         // get-it
         const dude = network.get_cr_dude(command);

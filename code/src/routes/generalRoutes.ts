@@ -11,7 +11,7 @@ import * as general_controller from "../controllers/generalController";
 
 
 
-export const __routesHelp: Record<string, any> = {
+export const __routesHelp: Record<string, unknown> = {
     "description": "Some basic apis.",
     "commands": [
         {

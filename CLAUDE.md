@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ├── THIRD-PARTY-NOTICES.txt
 ├── .gitignore
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 18.20.8)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0)
     ├── tsconfig.json      -- ES2016, commonjs, strict mode, outDir: dist
     ├── Dockerfile         -- Two-stage build (Node 22), exposes port 3301
     ├── nodemon.json       -- Dev watch config
@@ -70,7 +70,7 @@ npm run dev      # Hot-reload dev: nodemon --exec ts-node src/index.ts
 - No test framework is configured (no Jest, no test scripts).
 - No linting or formatting tooling is configured.
 - No CI/CD pipeline exists.
-- Uses Volta to pin Node 18.20.8 / npm 10.9.4.
+- Uses Volta to pin Node 22.22.0 / npm 10.9.4.
 
 ## Architecture
 

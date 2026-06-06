@@ -30,6 +30,7 @@ function validate_config(config: Record<string, unknown>): void {
     ];
     for (const key of required_strings) {
         if (!(key in config) || typeof config[key] !== "string" || (config[key] as string).length === 0) {
+            // eslint-disable-next-line no-console
             console.error(`ERROR: config.json missing or empty required string key "${key}".`);
             process.exit(1);
         }
@@ -39,6 +40,7 @@ function validate_config(config: Record<string, unknown>): void {
     const ip_regex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
     const mqtt_ip = config["mqtt-broker-ip-address"] as string;
     if (!ip_regex.test(mqtt_ip)) {
+        // eslint-disable-next-line no-console
         console.error(`ERROR: config.json "mqtt-broker-ip-address" (${mqtt_ip}) is not a valid IPv4 address.`);
         process.exit(1);
     }
@@ -47,6 +49,7 @@ function validate_config(config: Record<string, unknown>): void {
     const url_regex = /^https?:\/\/\S+$/;
     const ip_pinger_url = config["ip-pinger-web-api"] as string;
     if (!url_regex.test(ip_pinger_url)) {
+        // eslint-disable-next-line no-console
         console.error(`ERROR: config.json "ip-pinger-web-api" (${ip_pinger_url}) is not a valid URL.`);
         process.exit(1);
     }
@@ -55,6 +58,7 @@ function validate_config(config: Record<string, unknown>): void {
     const required_numbers = ["prometheus-port"];
     for (const key of required_numbers) {
         if (!(key in config) || typeof config[key] !== "number" || !Number.isInteger(config[key]) || config[key] <= 0) {
+            // eslint-disable-next-line no-console
             console.error(`ERROR: config.json missing or invalid required number key "${key}".`);
             process.exit(1);
         }
@@ -64,6 +68,7 @@ function validate_config(config: Record<string, unknown>): void {
     const required_booleans = ["case-sensitive"];
     for (const key of required_booleans) {
         if (!(key in config) || typeof config[key] !== "boolean") {
+            // eslint-disable-next-line no-console
             console.error(`ERROR: config.json missing or invalid required boolean key "${key}".`);
             process.exit(1);
         }
@@ -73,18 +78,19 @@ function validate_config(config: Record<string, unknown>): void {
 // **** start up code
 
 // read the configuration file
-const config = read_file_json("/app/dist/config.json");
+const config = read_file_json("/app/dist/config.json") ?? read_file_json("./dist/config.json");
 if (config === null) {
-    console.error("ERROR: Could not read /app/dist/config.json — cannot start without configuration.");
+    // eslint-disable-next-line no-console
+    console.error("ERROR: Could not read config.json — cannot start without configuration.");
     process.exit(1);
 }
 validate_config(config);
 
-// display configuration
-console.log(`>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
-
 // create logger
 createLogger(config);
+
+// display configuration
+logger.write_info("index.ts", `>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
 
 // log it
 const dude = aboutDude();
@@ -115,7 +121,7 @@ try {
     new sensorRoutes.CreateSensorRoutes(app, networking, ip_pinger_web_api);
     new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive);
     new CreateRouteNotFound(app);
-} catch (err: any) {
+} catch (err: unknown) {
     // log error
     logger.write_error("index.ts", ensureError(err).message);
 

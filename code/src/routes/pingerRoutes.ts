@@ -12,7 +12,7 @@ import * as pinger_controller from "../controllers/pingerController";
 
 
 
-export const __routesHelp: Record<string, any> = {
+export const __routesHelp: Record<string, unknown> = {
     "description": "Apis that gather information about and control over the registered IP Pinger.",
     "commands": [
         {

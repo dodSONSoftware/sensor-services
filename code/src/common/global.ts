@@ -5,8 +5,7 @@
  * See the LICENSE file for the full terms.
  */
 
-import type { IAbout} from "../dodsonlabs/Interfaces";
-import { LogLevel } from "../dodsonlabs/Interfaces";
+import type { IAbout } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
@@ -17,7 +16,7 @@ import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 
 export let logger: Logger;
 
-export const createLogger = (config: any) => {
+export const createLogger = (config: Record<string, unknown>) => {
     logger = new Logger(config);
 };
 
@@ -35,7 +34,7 @@ export function aboutDude(): IAbout {
 
         // TODO: ******** add system information
 
-        const sys_info: any[] = [];
+        const sys_info: unknown[] = [];
 
         _aboutDudeInfo = {
             about: {

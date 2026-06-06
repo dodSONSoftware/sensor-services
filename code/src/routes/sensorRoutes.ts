@@ -12,7 +12,7 @@ import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
 
 
-export const __routesHelp: Record<string, any> = {
+export const __routesHelp: Record<string, unknown> = {
     "description": "Apis that gather information about and control over the sensors in the sensor net.",
     "commands": [
         {

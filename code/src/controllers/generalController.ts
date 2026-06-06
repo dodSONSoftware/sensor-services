@@ -45,7 +45,14 @@ export function getHealth(req: express.Request, res: express.Response) {
     const dude = aboutDude();
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
 
-    const health: Record<string, any> = {
+    const health: {
+        status: "ok" | "degraded";
+        service: string;
+        version: string;
+        mqtt: "connected" | "disconnected";
+        uptime_seconds: number;
+        timestamp: string;
+    } = {
         status: is_connected ? "ok" : "degraded",
         service: dude.about.name,
         version: dude.about.version,

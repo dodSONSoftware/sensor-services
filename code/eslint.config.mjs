@@ -21,7 +21,7 @@ export default [
     },
     rules: {
       // eslint:recommended (individual rules for flat config)
-      "no-unused-vars": "warn",
+      "no-unused-vars": "off",
       "no-console": "warn",
       "no-const-assign": "warn",
       "no-dupe-args": "warn",
