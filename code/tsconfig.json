@@ -15,5 +15,5 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
-  "exclude": ["dist/", "eslint.config.mjs", "tests/"]
+  "exclude": ["dist/", "eslint.config.mjs", "jest.config.js", "jest.config.ts", "jest.setup.js", "jest.setup.ts", "tests/"]
 }

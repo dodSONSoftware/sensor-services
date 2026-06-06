@@ -88,6 +88,11 @@ validate_config(config);
 
 // create logger
 createLogger(config);
+if (logger === undefined) {
+    // eslint-disable-next-line no-console
+    console.error("ERROR: Logger initialization failed — cannot start without a logger.");
+    process.exit(1);
+}
 
 // display configuration
 logger.write_info("index.ts", `>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
@@ -123,7 +128,7 @@ try {
     new CreateRouteNotFound(app);
 } catch (err: unknown) {
     // log error
-    logger.write_error("index.ts", ensureError(err).message);
+    logger?.write_error("index.ts", ensureError(err).message);
 
     // terminate application
     process.exit(1);
@@ -131,8 +136,8 @@ try {
 
 // start express
 const server = app.listen(port, () => {
-    logger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
-    logger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
+    logger?.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
+    logger?.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
 });
 
 // **** graceful shutdown
@@ -140,16 +145,16 @@ const server = app.listen(port, () => {
 const start_time = Date.now();
 
 async function shutdown(signal: string): Promise<void> {
-    logger.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
+    logger?.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
 
     // stop accepting new HTTP requests
     server.close(async () => {
-        logger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
+        logger?.write_info("index.ts", "HTTP server closed. No new requests accepted.");
 
         // disconnect MQTT and close Prometheus writer
         networking.close();
 
-        logger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
+        logger?.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
         process.exit(0);
     });
 }
