@@ -22,7 +22,7 @@ const swaggerOptions = {
         },
         servers: [
             {
-                url: "http://192.168.7.131:32000/", // Change this to your server URL
+                url: "http://192.168.1.214:32000/", // Change this to your server URL
             },
         ],
     },

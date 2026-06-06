@@ -1,7 +1,7 @@
 {
   "name": "web-service",
   "version": "1.0.0",
-  "description": "A RESTful web service connecting to prometheus.",
+  "description": "A RESTful web service connecting to the sensor net and the observability stack.",
   "author": "dodson labs",
   "license": "MIT",
   "main": "index.js",

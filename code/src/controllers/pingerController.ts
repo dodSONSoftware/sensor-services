@@ -166,43 +166,68 @@ interface analyzeItType {
     ip_address: string;
 }
 
-function createAnalyzeResult(state: string, state_value: string, origin: Record<string, any>): Record<string, any> {
+function createAnalyzeResult(state: string, state_value: Record<string, any>, origin: Record<string, any>): Record<string, any> {
     origin["state"] = state;
     origin["state-value"] = state_value;
     return origin;
 }
 
-function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[]): Record<string, any>[] {
+function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[], case_sensitive: boolean): Record<string, any>[] {
+    // TODO: ********
+
     // init
     let results: Record<string, any>[] = [];
 
     // process each device defined in the IP Pinger configuration
     ippinger_devices.forEach(device => {
-        const source = device["source"];
-        const ip_address = device["ip-address"];
+        const source = String(device["source"]);
+        const ip_address = String(device["ip-address"]);
 
-        // check if device.source is-in livesensors
-        const sensor: Record<string, any> | undefined = live_sensors.find(x => { return x["source"].toLowerCase() === source.toLowerCase(); });
+        // TODO: ******** first search the live_sersors for source
+        // TODO: ******** TRUE:
+        // TODO: ********       search the live_sersors for ip_address and verifying name match
+        // TODO: ********       ????????
+
+        // TODO: ******** also consider the possibility that the configuration may contain
+        // TODO: ******** multiple entries with the same sources and/or ip_addresses
+        // TODO: ********
+
+        // find source in live_sensors
+        let sensor: Record<string, any> | undefined;
+        if (case_sensitive) {
+            sensor = live_sensors.find(x => { return x["source"] === source; });
+        } else {
+            sensor = live_sensors.find(x => { return x["source"].toLowerCase() === source.toLowerCase(); });
+        }
+
+        // check
         if (sensor) {
-            if (sensor["payload"]["ip-address"] === ip_address) {
+            // init
+            const sensor_ipaddress = String(sensor["payload"]["ip-address"]);
+
+            // check if ip-addresses are equal
+            if (sensor_ipaddress === ip_address) {
                 // state: OK
-                results.push(createAnalyzeResult("OK", "", sensor));
+                results.push(createAnalyzeResult("OK", { "sensor": "", "config": "" }, sensor));
 
             } else {
                 // state: IP Address Mismatch
-                results.push(createAnalyzeResult("IP Address Mismatch", sensor["ip-address"], sensor));
+                results.push(createAnalyzeResult("IP Address Mismatch", { "sensor": sensor_ipaddress, "config": ip_address }, sensor));
             }
 
         } else {
             // check if device.ip-address is-in livesensors
             const sensor_ip: Record<string, any> | undefined = live_sensors.find(x => { return x["payload"]["ip-address"] === ip_address; });
             if (sensor_ip) {
+                // init
+                const sensor_source = String(sensor_ip["source"]);
+
                 // state: Name Mismatch
-                results.push(createAnalyzeResult("Name Mismatch", source, sensor_ip));
+                results.push(createAnalyzeResult("Name Mismatch", { "sensor": sensor_source, "config": source }, sensor_ip));
 
             } else {
                 // state: Offline
-                results.push(createAnalyzeResult("Offline", "", device));
+                results.push(createAnalyzeResult("Offline", { "sensor": "", "config": "" }, device));
             }
         }
     });
@@ -213,12 +238,17 @@ function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record
         const ip_address = sensor["payload"]["ip-address"];
 
         // check if live_sensor.source is in ippinger-devices
-        const dude = ippinger_devices.find(x => { return x["source"].toLowerCase() === source.toLowerCase() });
+        let dude: Record<string, any> | undefined;
+        if (case_sensitive) {
+            dude = ippinger_devices.find(x => { return x["source"] === source });
+        } else {
+            dude = ippinger_devices.find(x => { return x["source"].toLowerCase() === source.toLowerCase() });
+        }
         if (!dude) {
             const dude_2 = ippinger_devices.find(x => { return x["ip-address"] === ip_address });
             if (!dude_2) {
                 // state: New
-                results.push(createAnalyzeResult("New", "", sensor));
+                results.push(createAnalyzeResult("New", { "sensor": "", "config": "" }, sensor));
             }
         }
     });
@@ -227,7 +257,7 @@ function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record
     return results;
 }
 
-export async function getAnalyzeIpPinger(req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string) {
+export async function getAnalyzeIpPinger(req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean) {
     // start sensor "identify", "*"
     const sensors_promise = mqtt_command_get_messages(network, "*", "identify");
 
@@ -243,7 +273,7 @@ export async function getAnalyzeIpPinger(req: express.Request, res: express.Resp
     const ippinger_devices = request_results[1]["devices"];
 
     // analyze-it
-    const results = analyzeIt(sensors, ippinger_devices);
+    const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
 
     // send response
     res.status(OK);

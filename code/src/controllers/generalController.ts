@@ -43,7 +43,7 @@ export function getDateCurrent(req: express.Request, res: express.Response) {
 
 export function getDateUTC(req: express.Request, res: express.Response) {
     // get UTC date-time string
-    const dt = new Date().toISOString().split(".")[0];
+    const dt = `${new Date().toISOString().split(".")[0]}Z`
 
     // log it
     logger.write_debug("generalController.ts/getDateUTC", `(${dt})`);

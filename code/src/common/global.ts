@@ -10,6 +10,7 @@ import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
+//import { __routesHelp as routeNotFoundRoutesHelp } from "../routes/routeNotFound";
 
 // **** public functions
 
@@ -26,9 +27,12 @@ let _aboutDudeInfo: IAbout | null = null;
 export function aboutDude(): IAbout {
     if (_aboutDudeInfo === null) {
         const cmds = [];
-        cmds.push({ name: "General", "help": generalRoutesHelp });
-        cmds.push({ name: "Sensors", "help": sensorRoutesHelp });
-        cmds.push({ name: "IP Pinger", "help": pingerRoutesHelp });
+        cmds.push({ "name": "General", "help": generalRoutesHelp });
+        cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
+        cmds.push({ "name": "IP Pinger", "help": pingerRoutesHelp });
+        //cmds.push({ "name": "", "help": routeNotFoundRoutesHelp })
+
+        // TODO: ******** add system information
 
         const sys_info: any[] = [];
 

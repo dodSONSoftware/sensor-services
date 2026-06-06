@@ -37,7 +37,7 @@ if (config === null) {
         "mqtt-topic-telemetry": "iot/telemetry",
         "mqtt-topic-command": "iot/v2/command",
         "mqtt-topic-command-response": "iot/v2/command-response",
-        "ip-pinger-web-api": "http://192.168.1.215:3300"
+        "ip-pinger-web-api": "http://192.168.1.4:3300"
     };
 }
 
@@ -66,9 +66,12 @@ try {
 
     // create routes
     const ip_pinger_web_api = String(config["ip-pinger-web-api"]);
+    // TODO: ******** make this a configuration item
+    const case_sensitive = true;
+
     new generalRoutes.CreateGeneralRoutes(app);
     new sensorRoutes.CreateSensorRoutes(app, networking, ip_pinger_web_api);
-    new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api);
+    new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive);
 } catch (err: any) {
     // log error
     logger.write_error("index.ts", ensureError(err).message);

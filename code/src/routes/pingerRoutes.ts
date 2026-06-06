@@ -51,13 +51,15 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
     // **** private properties
 
     private _ip_pinger_web_api: string;
+    private _case_sensitive: boolean;
 
     // **** ctor
 
-    constructor(protected app: express.Application, protected network: MqttNetworking, private ip_pinger_web_api: string) {
+    constructor(protected app: express.Application, protected network: MqttNetworking, private ip_pinger_web_api: string, case_sensitive: boolean) {
         super(app);
         this.network = network;
         this._ip_pinger_web_api = ip_pinger_web_api;
+        this._case_sensitive = case_sensitive;
     }
 
     // **** protected functions
@@ -205,6 +207,6 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api));
+        this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api, this._case_sensitive));
     }
 }
