@@ -230,11 +230,9 @@ HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, and request logging.
 - **No database** — `DBFunctions.ts` is entirely commented out (was planned MariaDB integration).
 - **No tests** — no test framework, no test scripts, no test files.
-- **`routeNotFound.ts` exists but is never wired** into the Express app in `index.ts`.
 - **`write-config` and `update-config` sensor routes are commented out** in `sensorRoutes.ts` (controller functions exist but routes are disabled).
 - **`SensorCreatorBase.ts` is an unused duplicate** of `CreatorBase.ts`.
 - **All logging goes to `console.log`** — no file logging, no structured logging, no external log aggregation. `handle_mqtt_message_log()` in MqttNetworking is a TODO stub.
 - **Sensor commands use a polling loop** — `sleep(1000)` in a `while(true)` loop checking `is_timed_out`. No async event completion.
-- **Reconnection in MqttNetworking uses blocking `sleep()`** — `on_disconnect()` and `on_error()` call `sysFunc.sleep(3000)` before reconnecting, which blocks the event loop.
-- **`case_sensitive` is hardcoded to `true`** in `index.ts:70` with a TODO to make it configurable.
+- **`sysFunc.sleep(3000)` in `on_disconnect()` and `on_error()` is fire-and-forget** — the sleep uses `setTimeout` (non-blocking), but since neither callback is `async` nor `await`s the result, the 3-second backoff never occurs. The mqtt library's built-in `reconnectPeriod: 5000` handles reconnection automatically. Manual reconnection in `on_disconnect()` created a race condition (duplicate clients), and `on_error()` calling `on_connect()` risked an error loop (subscribe on a broken client). Both have been fixed to rely on the library's auto-reconnect.
 - **`node-fetch` is in dependencies but the native `fetch` API is used** instead (Node 18+ built-in).

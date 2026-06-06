@@ -161,11 +161,6 @@ async function fetchItOnly(originator: string, url: string): Promise<any> {
     }
 }
 
-interface analyzeItType {
-    source: string;
-    ip_address: string;
-}
-
 function createAnalyzeResult(state: string, state_value: Record<string, any>, origin: Record<string, any>): Record<string, any> {
     origin["state"] = state;
     origin["state-value"] = state_value;
@@ -173,7 +168,9 @@ function createAnalyzeResult(state: string, state_value: Record<string, any>, or
 }
 
 function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[], case_sensitive: boolean): Record<string, any>[] {
-    // TODO: ********
+    // For each config device: find matching live sensor by source (then IP).
+    // Then scan for live sensors with no matching config entry (New).
+    // States: OK, IP Address Mismatch, Name Mismatch, Offline, New
 
     // init
     let results: Record<string, any>[] = [];
@@ -182,15 +179,6 @@ function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record
     ippinger_devices.forEach(device => {
         const source = String(device["source"]);
         const ip_address = String(device["ip-address"]);
-
-        // TODO: ******** first search the live_sersors for source
-        // TODO: ******** TRUE:
-        // TODO: ********       search the live_sersors for ip_address and verifying name match
-        // TODO: ********       ????????
-
-        // TODO: ******** also consider the possibility that the configuration may contain
-        // TODO: ******** multiple entries with the same sources and/or ip_addresses
-        // TODO: ********
 
         // find source in live_sensors
         let sensor: Record<string, any> | undefined;

@@ -118,6 +118,47 @@ async function get_it(req: express.Request, res: express.Response, network: Mqtt
     }
 }
 
+async function post_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, payload: Record<string, any> | null) {
+    try {
+        // get-it
+        const dude = network.get_cr_dude(command);
+
+        // check if the request is already running
+        if (dude.is_running) {
+            // log-it
+            logger.write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
+
+            // wait-for-it
+            await mqtt_command_wait_for_command_completion(dude);
+
+        } else {
+            // create mqtt request
+            const mqtt_request = create_mqtt_command_message(target, command, payload);
+
+            // start-it
+            mqtt_command_start(dude, mqtt_request, network);
+
+            // log-it
+            logger.write_debug("sensorController.ts/post_it", `${command}: Started...`);
+
+            // wait-for-it
+            await mqtt_command_wait_for_command_completion(dude);
+        }
+
+        // send response
+        res.status(OK);
+        res.contentType(Json);
+        res.send(dude.results);
+
+    } catch (err) {
+        const error = ensureError(err);
+
+        // send error response
+        res.status(InternalServerError);
+        res.send(error);
+    }
+}
+
 
 
 // ****************************************************************
@@ -174,14 +215,14 @@ export async function getReadConfigBySource(req: express.Request, res: express.R
 // WRITE CONFIG
 
 export async function postWriteConfigBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
-    // get-it
-    await get_it(req, res, network, source, "write-config");
+    // post-it with request body as config payload
+    await post_it(req, res, network, source, "write-config", req.body);
 }
 
 
 // UPDATE CONFIG
 
 export async function postUpdateConfigBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
-    // get-it
-    await get_it(req, res, network, source, "update-config");
+    // post-it with request body as config payload
+    await post_it(req, res, network, source, "update-config", req.body);
 }
