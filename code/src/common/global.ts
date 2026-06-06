@@ -14,7 +14,7 @@ import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 
 // **** public functions
 
-export let logger: Logger;
+export let logger: Logger | undefined;
 
 export const createLogger = (config: Record<string, unknown>) => {
     logger = new Logger(config);

@@ -24,7 +24,7 @@ const _reboot_command_delay_seconds: number = 3;
 // ****************************************************************
 // **** private functions
 
-function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null): Record<string, unknown> {
+export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null): Record<string, unknown> {
     // create base message
     const msg = {
         "message-type": "command",
@@ -73,7 +73,7 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     // check if the request is already running
     if (dude.is_running) {
         // log-it
-        logger.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
+        logger?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
 
         // wait-for-it
         await mqtt_command_wait_for_command_completion(dude);
@@ -86,14 +86,14 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
         mqtt_command_start(dude, mqtt_request, network);
 
         // log-it
-        logger.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
+        logger?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
 
         // wait-for-it
         await mqtt_command_wait_for_command_completion(dude);
     }
 
     // log-it
-    logger.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
+    logger?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
 
     // ----
     return dude;
@@ -126,7 +126,7 @@ async function post_it(req: express.Request, res: express.Response, network: Mqt
         // check if the request is already running
         if (dude.is_running) {
             // log-it
-            logger.write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
+            logger?.write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
 
             // wait-for-it
             await mqtt_command_wait_for_command_completion(dude);
@@ -139,7 +139,7 @@ async function post_it(req: express.Request, res: express.Response, network: Mqt
             mqtt_command_start(dude, mqtt_request, network);
 
             // log-it
-            logger.write_debug("sensorController.ts/post_it", `${command}: Started...`);
+            logger?.write_debug("sensorController.ts/post_it", `${command}: Started...`);
 
             // wait-for-it
             await mqtt_command_wait_for_command_completion(dude);

@@ -23,7 +23,7 @@ function fetchIt(res: express.Response, originator: string, url: string) {
             // ---- check the response
             if (!response.ok) {
                 // log it
-                logger.write_error(origin, `Url=${url}, Response=${response}`);
+                logger?.write_error(origin, `Url=${url}, Response=${response}`);
 
                 // publish it
                 res.status(InternalServerError);
@@ -40,7 +40,7 @@ function fetchIt(res: express.Response, originator: string, url: string) {
         .then(data => {
             // ---- process data as json
             // log it
-            logger.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
+            logger?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
 
             // publish it
             res.status(OK);
@@ -48,7 +48,7 @@ function fetchIt(res: express.Response, originator: string, url: string) {
             res.send(data);
         })
         .catch(error => {
-            logger.write_error(origin, `Url: ${url}, Error=${error}`);
+            logger?.write_error(origin, `Url: ${url}, Error=${error}`);
         });
 }
 
@@ -73,7 +73,7 @@ function postIt(res: express.Response, originator: string, url: string, data: un
     }).then((result) => {
         // ---- process data as json
         // log it
-        logger.write_debug(origin, `Data=${JSON.stringify(result)}`);
+        logger?.write_debug(origin, `Data=${JSON.stringify(result)}`);
 
         // publish it
         res.status(OK);
@@ -81,7 +81,7 @@ function postIt(res: express.Response, originator: string, url: string, data: un
         res.send(result);
 
     }).catch((error) => {
-        logger.write_error(origin, `Url: ${url}, Error=${error}`);
+        logger?.write_error(origin, `Url: ${url}, Error=${error}`);
     });
 }
 
@@ -151,27 +151,27 @@ async function fetchItOnly(originator: string, url: string): Promise<unknown> {
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            logger.write_error(origin, `Url=${url}, Status=${response.status}`);
+            logger?.write_error(origin, `Url=${url}, Status=${response.status}`);
             return {}; // or return null / throw depending on caller expectations
         }
 
         const data = await response.json();
-        logger.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
+        logger?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
         return data;
 
     } catch (error) {
-        logger.write_error(origin, `Url=${url}, Error=${error}`);
+        logger?.write_error(origin, `Url=${url}, Error=${error}`);
         return {}; // keep consistent return type on failure
     }
 }
 
-function createAnalyzeResult(state: string, state_value: Record<string, any>, origin: Record<string, any>): Record<string, any> {
+export function createAnalyzeResult(state: string, state_value: Record<string, any>, origin: Record<string, any>): Record<string, any> {
     origin["state"] = state;
     origin["state-value"] = state_value;
     return origin;
 }
 
-function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[], case_sensitive: boolean): Record<string, any>[] {
+export function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[], case_sensitive: boolean): Record<string, any>[] {
     // For each config device: find matching live sensor by source (then IP).
     // Then scan for live sensors with no matching config entry (New).
     // States: OK, IP Address Mismatch, Name Mismatch, Offline, New

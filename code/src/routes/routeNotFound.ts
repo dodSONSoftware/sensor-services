@@ -36,7 +36,7 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
                 message: "The requested resource was not found.",
             });
 
-            logger.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+            logger?.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
         });
     }
 }

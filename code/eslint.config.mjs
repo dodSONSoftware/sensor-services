@@ -3,7 +3,7 @@ import plugin from "@typescript-eslint/eslint-plugin";
 
 export default [
   {
-    ignores: ["node_modules/", "dist/", "src/dodsonlabs/"],
+    ignores: ["node_modules/", "dist/", "src/dodsonlabs/", "tests/"],
   },
   {
     files: ["**/*.ts"],

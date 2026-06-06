@@ -15,7 +15,7 @@ export function getAbout(req: express.Request, res: express.Response) {
     const dude = aboutDude();
 
     // log it
-    logger.write_debug("generalController.ts/getAbout", JSON.stringify(dude));
+    logger?.write_debug("generalController.ts/getAbout", JSON.stringify(dude));
 
     // publish it
     res.status(OK);
@@ -33,7 +33,7 @@ export function getDateCurrent(req: express.Request, res: express.Response) {
     const final = `${y}-${m}-${d}T${t}`;
 
     // log it
-    logger.write_debug("generalController.ts/getDateCurrent", `(${final})`);
+    logger?.write_debug("generalController.ts/getDateCurrent", `(${final})`);
 
     // publish it
     res.status(OK);
@@ -61,7 +61,7 @@ export function getHealth(req: express.Request, res: express.Response) {
         timestamp: new Date().toISOString(),
     };
 
-    logger.write_debug("generalController.ts/getHealth", JSON.stringify(health));
+    logger?.write_debug("generalController.ts/getHealth", JSON.stringify(health));
 
     res.status(OK);
     res.contentType(Json);
@@ -73,7 +73,7 @@ export function getDateUTC(req: express.Request, res: express.Response) {
     const dt = `${new Date().toISOString().split(".")[0]}Z`;
 
     // log it
-    logger.write_debug("generalController.ts/getDateUTC", `(${dt})`);
+    logger?.write_debug("generalController.ts/getDateUTC", `(${dt})`);
 
     // publish it
     res.status(OK);
