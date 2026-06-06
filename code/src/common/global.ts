@@ -5,7 +5,8 @@
  * See the LICENSE file for the full terms.
  */
 
-import { IAbout, LogLevel } from "../dodsonlabs/Interfaces";
+import type { IAbout} from "../dodsonlabs/Interfaces";
+import { LogLevel } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";

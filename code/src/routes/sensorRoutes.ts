@@ -5,10 +5,10 @@
  * See the LICENSE file for the full terms.
  */
 
-import express from "express";
+import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as sensor_controller from "../controllers/sensorController";
-import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
+import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
 
 
@@ -89,7 +89,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/sensors/identify`).get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
+        this.app.route("/sensors/identify").get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
 
         // IDENTIFY
         /**
@@ -116,7 +116,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/sensors/identify/:source`).get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
+        this.app.route("/sensors/identify/:source").get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
 
 
         // GET-DETAILS

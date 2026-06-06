@@ -5,9 +5,9 @@
  * See the LICENSE file for the full terms.
  */
 
-import express from "express";
+import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
-import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
+import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import * as pinger_controller from "../controllers/pingerController";
 
 
@@ -83,7 +83,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/about`).get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/about").get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api));
 
         // READ-CONFIG
         /**
@@ -103,7 +103,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/read-config`).get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/read-config").get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api));
 
         // WRITE-CONFIG
         /**
@@ -123,7 +123,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/write-config`).post((req: express.Request, res: express.Response) => {
+        this.app.route("/ippinger/write-config").post((req: express.Request, res: express.Response) => {
             const data = req.body;
             pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, data);
         });
@@ -146,7 +146,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/restart`).post((req: express.Request, res: express.Response) => pinger_controller.postRestart(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/restart").post((req: express.Request, res: express.Response) => pinger_controller.postRestart(req, res, this._ip_pinger_web_api));
 
         // PING
         /**
@@ -166,7 +166,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/ping`).get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/ping").get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api));
 
 
         // PING/{TARGET}
@@ -187,7 +187,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 about:
          *                   type: string
          */
-        this.app.route(`/ippinger/ping/:target`).get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target));
+        this.app.route("/ippinger/ping/:target").get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target));
 
         // ANALYZE-IPPINGER
         /**

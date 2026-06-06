@@ -14,5 +14,6 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
-  }
+  },
+  "exclude": ["dist/", "eslint.config.mjs"]
 }

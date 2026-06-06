@@ -5,10 +5,10 @@
  * See the LICENSE file for the full terms.
  */
 
-import * as express from "express";
+import type * as express from "express";
 import { logger } from "../common/global";
 import { Json, OK, InternalServerError } from "../dodsonlabs/HttpConstants";
-import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
+import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { getReadConfigBySource, mqtt_command_get_messages } from "./sensorController";
 
 
@@ -173,7 +173,7 @@ function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record
     // States: OK, IP Address Mismatch, Name Mismatch, Offline, New
 
     // init
-    let results: Record<string, any>[] = [];
+    const results: Record<string, any>[] = [];
 
     // process each device defined in the IP Pinger configuration
     ippinger_devices.forEach(device => {
@@ -228,12 +228,12 @@ function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record
         // check if live_sensor.source is in ippinger-devices
         let dude: Record<string, any> | undefined;
         if (case_sensitive) {
-            dude = ippinger_devices.find(x => { return x["source"] === source });
+            dude = ippinger_devices.find(x => { return x["source"] === source; });
         } else {
-            dude = ippinger_devices.find(x => { return x["source"].toLowerCase() === source.toLowerCase() });
+            dude = ippinger_devices.find(x => { return x["source"].toLowerCase() === source.toLowerCase(); });
         }
         if (!dude) {
-            const dude_2 = ippinger_devices.find(x => { return x["ip-address"] === ip_address });
+            const dude_2 = ippinger_devices.find(x => { return x["ip-address"] === ip_address; });
             if (!dude_2) {
                 // state: New
                 results.push(createAnalyzeResult("New", { "sensor": "", "config": "" }, sensor));

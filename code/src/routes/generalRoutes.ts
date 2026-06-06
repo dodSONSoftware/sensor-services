@@ -5,7 +5,7 @@
  * See the LICENSE file for the full terms.
  */
 
-import express from "express";
+import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as general_controller from "../controllers/generalController";
 

@@ -44,7 +44,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── MqttNetworking.ts    -- MQTT client, telemetry handler, command-response tracker
     │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs
     │       ├── PrometheusWriter.ts  -- Separate Express server on port 3301 with 10 Prometheus gauges
-    │       ├── DBFunctions.ts       -- Entirely commented out (was MariaDB, unused)
     │       └── SensorCreatorBase.ts -- Unused duplicate of CreatorBase
     └── dist/              -- Compiled output (tsc)
 ```
@@ -226,9 +225,9 @@ HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
 
 ## Key Patterns and Caveats
 
-- **`dodsonlabs/` is a git submodule** — cloned from a separate GitLab repo (`dodson-labs-core`). See `code/src/git-dodsonlabs-from-cloud.sh` for setup. `code/src/README.txt` has instructions.
+- **`dodsonlabs/` is a git submodule** — cloned from `http://192.168.1.5:30008/sensor-services/dodson-labs-core.git`. Run `code/src/git-dodsonlabs-from-cloud.sh` for setup. `code/src/README.txt` has instructions.
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, and request logging.
-- **No database** — `DBFunctions.ts` is entirely commented out (was planned MariaDB integration).
+
 - **No tests** — no test framework, no test scripts, no test files.
 - **`write-config` and `update-config` sensor routes are commented out** in `sensorRoutes.ts` (controller functions exist but routes are disabled).
 - **`SensorCreatorBase.ts` is an unused duplicate** of `CreatorBase.ts`.

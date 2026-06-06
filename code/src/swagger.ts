@@ -7,7 +7,8 @@
 
 import swaggerJsDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
-import { Express } from "express";
+import type { Express } from "express";
+import * as ipAddress from "ip";
 import { aboutDude } from "./common/global";
 
 const adude = aboutDude();
@@ -22,7 +23,7 @@ const swaggerOptions = {
         },
         servers: [
             {
-                url: "http://192.168.1.214:32000/", // Change this to your server URL
+                url: "", // Set at startup from config or auto-derived
             },
         ],
     },
@@ -31,6 +32,10 @@ const swaggerOptions = {
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
-export const setupSwagger = (app: Express) => {
+export const setupSwagger = (app: Express, port: number, serverUrl?: string) => {
+    // Use explicit URL if provided, otherwise derive from the running machine
+    swaggerOptions.swaggerDefinition.servers![0].url =
+        serverUrl ?? `http://${ipAddress.address()}:${port}/`;
+
     app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 };

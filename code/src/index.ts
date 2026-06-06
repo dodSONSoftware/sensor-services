@@ -17,34 +17,71 @@ import { aboutDude, createLogger, logger } from "./common/global";
 import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 
+// **** configuration validation
+
+function validate_config(config: Record<string, unknown>): void {
+    // required string keys
+    const required_strings = [
+        "mqtt-broker-ip-address",
+        "mqtt-topic-telemetry",
+        "mqtt-topic-command",
+        "mqtt-topic-command-response",
+        "ip-pinger-web-api",
+    ];
+    for (const key of required_strings) {
+        if (!(key in config) || typeof config[key] !== "string" || (config[key] as string).length === 0) {
+            console.error(`ERROR: config.json missing or empty required string key "${key}".`);
+            process.exit(1);
+        }
+    }
+
+    // validate MQTT broker IP format
+    const ip_regex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+    const mqtt_ip = config["mqtt-broker-ip-address"] as string;
+    if (!ip_regex.test(mqtt_ip)) {
+        console.error(`ERROR: config.json "mqtt-broker-ip-address" (${mqtt_ip}) is not a valid IPv4 address.`);
+        process.exit(1);
+    }
+
+    // validate ip-pinger URL format
+    const url_regex = /^https?:\/\/\S+$/;
+    const ip_pinger_url = config["ip-pinger-web-api"] as string;
+    if (!url_regex.test(ip_pinger_url)) {
+        console.error(`ERROR: config.json "ip-pinger-web-api" (${ip_pinger_url}) is not a valid URL.`);
+        process.exit(1);
+    }
+
+    // required number keys
+    const required_numbers = ["prometheus-port"];
+    for (const key of required_numbers) {
+        if (!(key in config) || typeof config[key] !== "number" || !Number.isInteger(config[key]) || config[key] <= 0) {
+            console.error(`ERROR: config.json missing or invalid required number key "${key}".`);
+            process.exit(1);
+        }
+    }
+
+    // required boolean keys
+    const required_booleans = ["case-sensitive"];
+    for (const key of required_booleans) {
+        if (!(key in config) || typeof config[key] !== "boolean") {
+            console.error(`ERROR: config.json missing or invalid required boolean key "${key}".`);
+            process.exit(1);
+        }
+    }
+}
+
 // **** start up code
 
 // read the configuration file
-let config_source = "file";
-let config = read_file_json("/app/dist/config.json");
+const config = read_file_json("/app/dist/config.json");
 if (config === null) {
-    // could not find the configuration file
-    console.log("\n================================================================");
-    console.log(">>>>>>>> WARNING");
-    console.log(`>>>>>>>> WARNING: Could not read the configuration file, using coded configuration...`);
-    console.log(">>>>>>>> WARNING");
-    console.log(">>>>>>>>");
-
-    config_source = "code";
-    config = {
-        "log-level": "debug",
-        "prometheus-port": 3301,
-        "mqtt-broker-ip-address": "192.168.1.4",
-        "mqtt-topic-telemetry": "iot/telemetry",
-        "mqtt-topic-command": "iot/v2/command",
-        "mqtt-topic-command-response": "iot/v2/command-response",
-        "ip-pinger-web-api": "http://192.168.1.4:3300",
-        "case-sensitive": true
-    };
+    console.error("ERROR: Could not read /app/dist/config.json — cannot start without configuration.");
+    process.exit(1);
 }
+validate_config(config);
 
 // display configuration
-console.log(`>>>>>>>> CONFIGURATION [ ${config_source} ]:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
+console.log(`>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
 
 // create logger
 createLogger(config);
@@ -59,8 +96,12 @@ const app = express();
 // create networking
 const networking = new MqttNetworking(config, logger);
 
-// setup swagger
-setupSwagger(app);
+// get express port (before swagger so the server URL is correct)
+const port = Number(process.env.EXPRESS_PORT) || 32000;
+
+// setup swagger (auto-derived from machine IP + port, overridable via config)
+const swagger_server_url = config["swagger-server-url"] as string | undefined;
+setupSwagger(app, port, swagger_server_url);
 
 try {
     // create middleware
@@ -81,9 +122,6 @@ try {
     // terminate application
     process.exit(1);
 }
-
-// get express port
-const port = Number(process.env.EXPRESS_PORT) || 32000;
 
 // start express
 app.listen(port, () => {

@@ -5,7 +5,7 @@
  * See the LICENSE file for the full terms.
  */
 
-import * as express from "express";
+import type * as express from "express";
 import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
 import { aboutDude, logger } from "../common/global";
 
@@ -43,7 +43,7 @@ export function getDateCurrent(req: express.Request, res: express.Response) {
 
 export function getDateUTC(req: express.Request, res: express.Response) {
     // get UTC date-time string
-    const dt = `${new Date().toISOString().split(".")[0]}Z`
+    const dt = `${new Date().toISOString().split(".")[0]}Z`;
 
     // log it
     logger.write_debug("generalController.ts/getDateUTC", `(${dt})`);

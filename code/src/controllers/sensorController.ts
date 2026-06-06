@@ -5,12 +5,12 @@
  * See the LICENSE file for the full terms.
  */
 
-import * as express from "express";
+import type * as express from "express";
 import { InternalServerError, Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
-import { MqttNetworking } from "../dodsonlabs/MqttNetworking";
+import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError, sleep } from "../dodsonlabs/SystemFunctions";
-import { IMqttCommandControl } from "../dodsonlabs/Interfaces";
+import type { IMqttCommandControl } from "../dodsonlabs/Interfaces";
 
 
 
