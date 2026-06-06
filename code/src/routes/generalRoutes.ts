@@ -25,15 +25,22 @@ export const __routesHelp: Record<string, any> = {
         {
             "route": "/date_utc",
             "description": "Returns the current date and time in Coordinated Universal Time (UTC). Format=[yyyy-mm-ddThh:mm:ssZ]"
+        },
+        {
+            "route": "/health",
+            "description": "Returns the health status of the API including MQTT broker connectivity."
         }
     ]
 };
 
 export class CreateGeneralRoutes extends RoutesCreatorBase {
+    private readonly mqtt_connected: boolean;
+
     // **** ctor
 
-    constructor(protected app: express.Application) {
+    constructor(app: express.Application, mqtt_connected: boolean) {
         super(app);
+        this.mqtt_connected = mqtt_connected;
     }
 
     // **** protected functions
@@ -100,5 +107,41 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                   format: date-time
          */
         this.app.route("/date_utc").get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
+
+        // HEALTH
+        /**
+         * @swagger
+         * /health:
+         *   get:
+         *     summary: Retrieve the health status of the API
+         *     description: Returns the current health status including MQTT broker connectivity and uptime.
+         *     responses:
+         *       200:
+         *         description: API health status
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 status:
+         *                   type: string
+         *                   enum: [ok, degraded]
+         *                 service:
+         *                   type: string
+         *                 version:
+         *                   type: string
+         *                 mqtt:
+         *                   type: string
+         *                   enum: [connected, disconnected]
+         *                 uptime_seconds:
+         *                   type: integer
+         *                 timestamp:
+         *                   type: string
+         *                   format: date-time
+         */
+        this.app.route("/health").get((req: express.Request, res: express.Response) => {
+            (req as express.Request & { mqtt_connected: boolean }).mqtt_connected = this.mqtt_connected;
+            general_controller.getHealth(req, res);
+        });
     }
 }

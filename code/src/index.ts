@@ -14,7 +14,7 @@ import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import { aboutDude, createLogger, logger } from "./common/global";
-import { ensureError, read_file_json } from "./dodsonlabs/SystemFunctions";
+import { ensureError, formatElapsedTime, read_file_json } from "./dodsonlabs/SystemFunctions";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 
 // **** configuration validation
@@ -111,7 +111,7 @@ try {
     const ip_pinger_web_api = String(config["ip-pinger-web-api"]);
     const case_sensitive = config["case-sensitive"] === true;
 
-    new generalRoutes.CreateGeneralRoutes(app);
+    new generalRoutes.CreateGeneralRoutes(app, networking.is_connected());
     new sensorRoutes.CreateSensorRoutes(app, networking, ip_pinger_web_api);
     new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive);
     new CreateRouteNotFound(app);
@@ -124,7 +124,29 @@ try {
 }
 
 // start express
-app.listen(port, () => {
+const server = app.listen(port, () => {
     logger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
     logger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
 });
+
+// **** graceful shutdown
+
+const start_time = Date.now();
+
+async function shutdown(signal: string): Promise<void> {
+    logger.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
+
+    // stop accepting new HTTP requests
+    server.close(async () => {
+        logger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
+
+        // disconnect MQTT and close Prometheus writer
+        networking.close();
+
+        logger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
+        process.exit(0);
+    });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

@@ -41,6 +41,26 @@ export function getDateCurrent(req: express.Request, res: express.Response) {
     res.send(final);
 }
 
+export function getHealth(req: express.Request, res: express.Response) {
+    const dude = aboutDude();
+    const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
+
+    const health: Record<string, any> = {
+        status: is_connected ? "ok" : "degraded",
+        service: dude.about.name,
+        version: dude.about.version,
+        mqtt: is_connected ? "connected" : "disconnected",
+        uptime_seconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+    };
+
+    logger.write_debug("generalController.ts/getHealth", JSON.stringify(health));
+
+    res.status(OK);
+    res.contentType(Json);
+    res.send(health);
+}
+
 export function getDateUTC(req: express.Request, res: express.Response) {
     // get UTC date-time string
     const dt = `${new Date().toISOString().split(".")[0]}Z`;
