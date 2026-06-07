@@ -11,9 +11,10 @@ const config: Config = {
         "src/**/*.ts",
         "!src/dodsonlabs/**/*.ts",
         "!src/index.ts",
-        "!src/swagger.ts",
     ],
     coverageDirectory: "coverage",
+    // Thresholds apply only to app code (src/**/*.ts excluding dodsonlabs/, index.ts).
+    // dodsonlabs/ is a shared submodule excluded from coverage.
     coverageThreshold: {
         global: {
             branches: 70,

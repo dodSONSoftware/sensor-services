@@ -14,6 +14,17 @@ import { Json } from "../dodsonlabs/HttpConstants";
 
 
 
+// Canonical list of route paths — kept in sync with createRoutes() to prevent drift.
+export const __routes: string[] = [
+    "/ippinger/about",
+    "/ippinger/read-config",
+    "/ippinger/write-config",
+    "/ippinger/restart",
+    "/ippinger/ping",
+    "/ippinger/ping/:target",
+    "/ippinger/analyze-ippinger",
+];
+
 export const __routesHelp: Record<string, unknown> = {
     "description": "Apis that gather information about and control over the registered IP Pinger.",
     "commands": [
@@ -57,7 +68,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
 
     // **** ctor
 
-    constructor(protected app: express.Application, protected network: MqttNetworking, private ip_pinger_web_api: string, case_sensitive: boolean) {
+    constructor(protected app: express.Application, protected network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean) {
         super(app);
         this.network = network;
         this._ip_pinger_web_api = ip_pinger_web_api;

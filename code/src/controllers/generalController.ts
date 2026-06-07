@@ -11,7 +11,7 @@ import { aboutDude, logger } from "../common/global";
 
 // **** public functions
 
-export function getAbout(req: express.Request, res: express.Response) {
+export function getAbout(_req: express.Request, res: express.Response) {
     const dude = aboutDude();
 
     // log it
@@ -23,7 +23,7 @@ export function getAbout(req: express.Request, res: express.Response) {
     res.send(dude);
 }
 
-export function getDateCurrent(req: express.Request, res: express.Response) {
+export function getDateCurrent(_req: express.Request, res: express.Response) {
     // get UTC date-time string
     const dt = new Date();
     const t = dt.toTimeString().split(" ")[0];
@@ -68,7 +68,7 @@ export function getHealth(req: express.Request, res: express.Response) {
     res.send(health);
 }
 
-export function getDateUTC(req: express.Request, res: express.Response) {
+export function getDateUTC(_req: express.Request, res: express.Response) {
     // get UTC date-time string
     const dt = `${new Date().toISOString().split(".")[0]}Z`;
 

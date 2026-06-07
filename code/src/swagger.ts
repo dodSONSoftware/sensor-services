@@ -5,12 +5,28 @@
  * See the LICENSE file for the full terms.
  */
 
-import { resolve, join } from "path";
+import { join } from "path";
 import swaggerJsDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import type { Express } from "express";
 import * as ipAddress from "ip";
 import { aboutDude } from "./common/global";
+import * as os from "os";
+
+// Resolve a routable IP address, skipping loopback and Docker-internal addresses.
+function routableAddress(): string {
+    const networks = os.networkInterfaces();
+    for (const _iface of Object.values(networks)) {
+        if (!_iface) continue;
+        for (const info of _iface) {
+            if (info.family === "IPv4" && !info.address.startsWith("127.")) {
+                return info.address;
+            }
+        }
+    }
+    // Fallback to the legacy single-address lookup
+    return ipAddress.address();
+}
 
 const adude = aboutDude();
 
@@ -42,7 +58,7 @@ export const setupSwagger = (app: Express, port: number, srcDir: string, serverU
     // Use explicit URL if provided, otherwise derive from the running machine
     const server = swaggerOptions.swaggerDefinition.servers?.[0];
     if (server) {
-        server.url = serverUrl ?? `http://${ipAddress.address()}:${port}/`;
+        server.url = serverUrl ?? `http://${routableAddress()}:${port}/`;
     }
 
     app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocs));

@@ -34,7 +34,7 @@ export function create_mqtt_command_message(target: string, command: string, pay
         "payload": {}
     };
 
-    // check for playload, add to base message
+    // check for payload, add to base message
     if (payload) {
         msg["payload"] = payload;
     }
@@ -44,7 +44,7 @@ export function create_mqtt_command_message(target: string, command: string, pay
 }
 
 function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
-    // intialize timer
+    // initialize timer
     dude.initialize();
 
     // publish mqtt request
@@ -115,7 +115,7 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     return dude;
 }
 
-async function get_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "") {
+async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "") {
     try {
         // log-it
         const dude = await mqtt_command_get_messages(network, target, command, parameters);
@@ -133,7 +133,7 @@ async function get_it(req: express.Request, res: express.Response, network: Mqtt
     }
 }
 
-async function post_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, payload: Record<string, unknown> | null) {
+async function post_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, payload: Record<string, unknown> | null) {
     try {
         // get-it
         const dude = network.get_cr_dude(command);
@@ -203,6 +203,8 @@ export async function getDetailsBySource(req: express.Request, res: express.Resp
 
 
 // REBOOT
+// NOTE: Uses get_it (not post_it) because reboot has no JSON body —
+// the delay parameter is passed as an MQTT command argument, not a request body.
 
 export async function postReboot(req: express.Request, res: express.Response, network: MqttNetworking) {
     // get-it

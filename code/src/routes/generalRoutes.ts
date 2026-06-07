@@ -11,6 +11,14 @@ import * as general_controller from "../controllers/generalController";
 
 
 
+// Canonical list of route paths — kept in sync with createRoutes() to prevent drift.
+export const __routes: string[] = [
+    "/about",
+    "/date_local",
+    "/date_utc",
+    "/health",
+];
+
 export const __routesHelp: Record<string, unknown> = {
     "description": "Some basic apis.",
     "commands": [

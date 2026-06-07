@@ -10,9 +10,23 @@ import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as sensor_controller from "../controllers/sensorController";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { validatePostBody } from "../schemas/postBody";
-import { Json, InternalServerError } from "../dodsonlabs/HttpConstants";
+import { Json } from "../dodsonlabs/HttpConstants";
 
 
+
+// Canonical list of route paths — kept in sync with createRoutes() to prevent drift.
+export const __routes: string[] = [
+    "/sensors/identify",
+    "/sensors/identify/:source",
+    "/sensors/get-details",
+    "/sensors/get-details/:source",
+    "/sensors/reboot",
+    "/sensors/reboot/:source",
+    "/sensors/read-config",
+    "/sensors/read-config/:source",
+    "/sensors/write-config/:source",
+    "/sensors/update-config/:source",
+];
 
 export const __routesHelp: Record<string, unknown> = {
     "description": "Apis that gather information about and control over the sensors in the sensor net.",
@@ -64,10 +78,9 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
 
     // **** ctor
 
-    constructor(protected app: express.Application, protected network: MqttNetworking, private ip_pinger_web_api: string) {
+    constructor(protected app: express.Application, protected network: MqttNetworking) {
         super(app);
         this.network = network;
-        this.ip_pinger_web_api = ip_pinger_web_api;
     }
 
     // **** protected functions

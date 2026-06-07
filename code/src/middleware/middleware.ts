@@ -32,14 +32,14 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
     protected createRoutes() {
         // add middleware components
-        this.app.use(this.loggerMiddleware);
+        this.app.use(this._loggerMiddleware.bind(this));
 
         // TODO: add more middleware
     }
 
     // **** private functions
 
-    private loggerMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
+    private _loggerMiddleware(request: express.Request, _response: express.Response, next: express.NextFunction) {
         // log it
         logger()?.write_debug("middleware.ts/loggerMiddleware", `${request.method} "${request.path}"`);
 
@@ -51,7 +51,8 @@ export class CreateMiddleware extends RoutesCreatorBase {
      * Validates that the request body is a plain object using Zod.
      * Returns 400 with an error message if validation fails, otherwise calls next().
      */
-    private validateBodyMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
+    // @ts-expect-error — TODO: wire into middleware chain
+    private _validateBodyMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
         if (request.body === undefined || request.body === null) {
             response.status(400).contentType(Json).send({ error: "request body is required" });
             return;

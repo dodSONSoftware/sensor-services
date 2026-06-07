@@ -71,7 +71,7 @@ describe("getHealth", () => {
   });
 
   it("should report disconnected when mqtt_connected is false", () => {
-    const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
+    const { res, sendCalls } = createMockRes();
     const req = createMockReq({ mqtt_connected: false }) as Request & { mqtt_connected: boolean };
 
     getHealth(req, res as Response);

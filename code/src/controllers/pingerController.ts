@@ -69,19 +69,19 @@ async function postIt(res: express.Response, originator: string, url: string, da
 
 // ---- public functions
 
-export async function getAbout(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
+export async function getAbout(_req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/about`;
     const originator = "pingerController.ts/getAbout";
     await fetchIt(res, originator, url);
 }
 
-export async function getReadConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
+export async function getReadConfig(_req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/read-config`;
     const originator = "pingerController.ts/getReadConfig";
     await fetchIt(res, originator, url);
 }
 
-export async function postWriteConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string, data: unknown) {
+export async function postWriteConfig(_req: express.Request, res: express.Response, ip_pinger_web_api: string, data: unknown) {
     const url = `${ip_pinger_web_api}/write-config`;
     const originator = "pingerController.ts/postWriteConfig";
     await postIt(res, originator, url, data);
@@ -93,13 +93,13 @@ export async function postRestart(req: express.Request, res: express.Response, i
     await postIt(res, originator, url, req.body);
 }
 
-export async function getPing(req: express.Request, res: express.Response, ip_pinger_web_api: string, ping_ip_address: string) {
+export async function getPing(_req: express.Request, res: express.Response, ip_pinger_web_api: string, ping_ip_address: string) {
     const url = `${ip_pinger_web_api}/ping/${ping_ip_address}`;
     const originator = "pingerController.ts/getPing";
     await fetchIt(res, originator, url);
 }
 
-export async function getPings(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
+export async function getPings(_req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/ping`;
     const originator = "pingerController.ts/getPing";
     await fetchIt(res, originator, url);
@@ -215,7 +215,7 @@ export function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices:
     return results;
 }
 
-export async function getAnalyzeIpPinger(req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean) {
+export async function getAnalyzeIpPinger(_req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean) {
     // start sensor "identify", "*"
     const sensors_promise = mqtt_command_get_messages(network, "*", "identify");
 

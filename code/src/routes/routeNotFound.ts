@@ -29,7 +29,7 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
 
     protected createRoutes() { }
 
-    // **** protected functions
+    // **** private functions
 
     protected routeNotFound() {
         this.app.use((req: express.Request, res: express.Response) => {
