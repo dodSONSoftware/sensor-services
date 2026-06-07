@@ -36,7 +36,7 @@ export const __routesHelp: Record<string, unknown> = {
             "description": "Retrieves identification information about all of the sensors."
         },
         {
-            "route": "/sensors/identify/{source}",
+            "route": "/sensors/identify/:source",
             "description": "Retrieves identification information about the named sensor."
         },
         {
@@ -44,7 +44,7 @@ export const __routesHelp: Record<string, unknown> = {
             "description": "Retrieves detailed information about all of the sensors."
         },
         {
-            "route": "/sensors/get-details/{source}",
+            "route": "/sensors/get-details/:source",
             "description": "Retrieves detailed information about the named sensor."
         },
         {
@@ -52,7 +52,7 @@ export const __routesHelp: Record<string, unknown> = {
             "description": "Instructs all sensors to reboot."
         },
         {
-            "route": "/sensors/reboot/{source}",
+            "route": "/sensors/reboot/:source",
             "description": "Instructs the sensor identified by source to reboot."
         },
         {
@@ -60,15 +60,15 @@ export const __routesHelp: Record<string, unknown> = {
             "description": "Instructs all sensors to return their configurations."
         },
         {
-            "route": "/sensors/read-config/{source}",
+            "route": "/sensors/read-config/:source",
             "description": "Instructs the sensor identified by source to return their configuration."
         },
         {
-            "route": "/sensors/write-config/{source}",
+            "route": "/sensors/write-config/:source",
             "description": "Posts the given configuration to the sensor identified by source."
         },
         {
-            "route": "/sensors/update-config/{source}",
+            "route": "/sensors/update-config/:source",
             "description": "Posts the configuration update to the sensor identified by source."
         }
     ]

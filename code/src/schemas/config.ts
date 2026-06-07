@@ -39,6 +39,8 @@ export const configSchema = z.object({
         error: "case-sensitive must be a boolean",
     }),
     "swagger-server-url": z.string().optional(),
+    "loki-url": z.string().optional(),
+    "loki-enabled": z.boolean().optional(),
 });
 
 /**

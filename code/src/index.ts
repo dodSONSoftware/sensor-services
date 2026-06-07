@@ -15,6 +15,7 @@ import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import { aboutDude, createLogger, logger } from "./common/global";
+import { Counter, Histogram } from "prom-client";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
@@ -69,11 +70,11 @@ createLogger(config);
 const appLogger = logger()!;
 
 // display configuration
-appLogger.write_info("index.ts", `>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
+appLogger.write_info("index.ts", `CONFIGURATION:\n${JSON.stringify(config, null, 2)}`);
 
 // log it
 const dude = aboutDude();
-appLogger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} starting...`);
+appLogger.write_info("index.ts", `${dude.about.name} v${dude.about.version} starting...`);
 
 // create express application
 const app = express();
@@ -94,11 +95,71 @@ try {
     // create middleware
     new middleware.CreateMiddleware(app);
 
+    // **** API Prometheus metrics
+
+    // Total HTTP requests by method, route, status code
+    const httpRequestsTotal = new Counter({
+        name: "http_requests_total",
+        help: "Total number of HTTP requests.",
+        labelNames: ["method", "route", "status"],
+    });
+
+    // HTTP request duration in seconds by method and route
+    const httpRequestDuration = new Histogram({
+        name: "http_request_duration_seconds",
+        help: "HTTP request duration in seconds.",
+        labelNames: ["method", "route"],
+        buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+    });
+
+    // HTTP 5xx errors by method and route
+    const httpErrorsTotal = new Counter({
+        name: "http_errors_total",
+        help: "Total number of HTTP 5xx errors.",
+        labelNames: ["method", "route"],
+    });
+
+    // Track request duration and status, record metrics after response is sent
+    app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+        const start = process.hrtime();
+
+        // Wrap res.end to capture the final status code
+        const originalEnd = res.end;
+        const trackedRes = res as express.Response & { _ended?: boolean };
+        trackedRes._ended = false;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.end = function (this: any, ...args: any[]) {
+            if (!trackedRes._ended) {
+                trackedRes._ended = true;
+
+                const [sec, nsec] = process.hrtime(start);
+                const duration = sec + nsec / 1e9;
+
+                const method = req.method;
+                // Use the matched route pattern (e.g., /sensors/identify/:source)
+                const route = req.route ? req.route.path : req.path;
+                const status = res.statusCode;
+
+                httpRequestsTotal.labels({ method, route, status }).inc();
+                httpRequestDuration.labels({ method, route }).observe(duration);
+
+                if (status >= 500) {
+                    httpErrorsTotal.labels({ method, route }).inc();
+                }
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-this-alias
+            return (originalEnd as any).apply(this, args);
+        } as typeof res.end;
+
+        next();
+    });
+
     // create routes
     const ip_pinger_web_api = config["ip-pinger-web-api"];
     const case_sensitive = config["case-sensitive"];
 
-    new generalRoutes.CreateGeneralRoutes(app, networking.is_connected());
+    new generalRoutes.CreateGeneralRoutes(app, networking);
     new sensorRoutes.CreateSensorRoutes(app, networking);
     new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive);
     new CreateRouteNotFound(app);
@@ -117,27 +178,49 @@ try {
 
 // start express
 const server = app.listen(port, () => {
-    appLogger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
-    appLogger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
+    appLogger.write_info("index.ts", `${dude.about.name} v${dude.about.version} started.`);
+    appLogger.write_info("index.ts", `${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port}`);
 });
 
 // **** graceful shutdown
 
 const start_time = Date.now();
 
+// Hard shutdown timeout — if graceful shutdown hangs, force exit.
+const __hard_shutdown_timeout_ms = 15_000;
+
 async function shutdown(signal: string): Promise<void> {
     appLogger.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
 
-    // stop accepting new HTTP requests
-    server.close(async () => {
-        appLogger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
+    // Set a hard timeout as a safety net to prevent hanging forever.
+    const hardTimeout = setTimeout(() => {
+        appLogger.write_error("index.ts", `Hard shutdown timeout reached (${__hard_shutdown_timeout_ms}ms). Forcing exit.`);
+        process.exit(1);
+    }, __hard_shutdown_timeout_ms);
+    hardTimeout.unref();
 
-        // disconnect MQTT and close Prometheus writer
-        networking.close();
+    try {
+        // 1. Stop accepting new HTTP requests
+        await new Promise<void>((resolve) => {
+            server.close(() => {
+                appLogger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
+                resolve();
+            });
+        });
+
+        // 2. Flush Prometheus metrics before closing the metrics server
+        await networking.prometheus_flush();
+
+        // 3. Close MQTT client with a timeout
+        networking.close(5000);
 
         appLogger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
+    } catch (err) {
+        appLogger.write_error("index.ts", `Error during graceful shutdown: ${(err as Error).message}`);
+    } finally {
+        clearTimeout(hardTimeout);
         process.exit(0);
-    });
+    }
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));

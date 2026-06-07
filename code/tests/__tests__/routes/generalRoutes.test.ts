@@ -1,11 +1,15 @@
 import request from "supertest";
 import express from "express";
 import { CreateGeneralRoutes } from "../../../src/routes/generalRoutes";
+import { createMockMqttNetworking } from "../../mocks/mqtt";
 
 function createTestApp(mqttConnected: boolean = true): express.Application {
   const app = express();
   app.use(express.json());
-  new CreateGeneralRoutes(app, mqttConnected);
+  const networking = createMockMqttNetworking({
+    is_connected: jest.fn().mockReturnValue(mqttConnected),
+  });
+  new CreateGeneralRoutes(app, networking);
   return app;
 }
 
@@ -53,7 +57,7 @@ describe("General Routes", () => {
   });
 
   describe("GET /health", () => {
-    it("should return health object with mqtt status", async () => {
+    it("should return health object with all dependency checks", async () => {
       const app = createTestApp();
 
       const res = await request(app).get("/health");
@@ -64,9 +68,26 @@ describe("General Routes", () => {
       expect(res.body).toHaveProperty("service");
       expect(res.body).toHaveProperty("version");
       expect(res.body).toHaveProperty("mqtt");
+      expect(res.body).toHaveProperty("prometheus_server");
       expect(res.body).toHaveProperty("uptime_seconds");
       expect(typeof res.body.uptime_seconds).toBe("number");
       expect(res.body).toHaveProperty("timestamp");
+      expect(res.body).toHaveProperty("memory");
+      expect(res.body.memory).toHaveProperty("rss");
+      expect(res.body.memory).toHaveProperty("heap_used");
+      expect(res.body.memory).toHaveProperty("heap_total");
+      expect(res.body).toHaveProperty("cpu");
+      expect(res.body.cpu).toHaveProperty("load");
+    });
+
+    it("should report degraded when mqtt is disconnected", async () => {
+      const app = createTestApp(false);
+
+      const res = await request(app).get("/health");
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("degraded");
+      expect(res.body.mqtt).toBe("disconnected");
     });
   });
 });

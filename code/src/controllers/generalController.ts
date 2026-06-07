@@ -8,6 +8,7 @@
 import type * as express from "express";
 import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
 import { aboutDude, logger } from "../common/global";
+import os from "os";
 
 // **** public functions
 
@@ -44,21 +45,43 @@ export function getDateCurrent(_req: express.Request, res: express.Response) {
 export function getHealth(req: express.Request, res: express.Response) {
     const dude = aboutDude();
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
+    const prom_ready = (req as express.Request & { prometheus_server_ready: boolean }).prometheus_server_ready;
+
+    const mem = process.memoryUsage();
+    const loadavg = os.loadavg();
 
     const health: {
         status: "ok" | "degraded";
         service: string;
         version: string;
         mqtt: "connected" | "disconnected";
+        prometheus_server: "ready" | "not_ready";
         uptime_seconds: number;
         timestamp: string;
+        memory: {
+            rss: number;
+            heap_used: number;
+            heap_total: number;
+        };
+        cpu: {
+            load: number;
+        };
     } = {
-        status: is_connected ? "ok" : "degraded",
+        status: is_connected && prom_ready ? "ok" : "degraded",
         service: dude.about.name,
         version: dude.about.version,
         mqtt: is_connected ? "connected" : "disconnected",
+        prometheus_server: prom_ready ? "ready" : "not_ready",
         uptime_seconds: Math.floor(process.uptime()),
         timestamp: new Date().toISOString(),
+        memory: {
+            rss: mem.rss,
+            heap_used: mem.heapUsed,
+            heap_total: mem.heapTotal,
+        },
+        cpu: {
+            load: loadavg[0],
+        },
     };
 
     logger()?.write_debug("generalController.ts/getHealth", JSON.stringify(health));

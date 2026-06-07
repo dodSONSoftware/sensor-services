@@ -49,7 +49,7 @@ export const __routesHelp: Record<string, unknown> = {
             "description": "Instructs the registered IP Pinger service to ping all of its devices and return the results."
         },
         {
-            "route": "/ippinger/ping/{ip-address}",
+            "route": "/ippinger/ping/:target",
             "description": "Instructs the registered IP Pinger service to ping the given ip-address and return the results."
         },
         {

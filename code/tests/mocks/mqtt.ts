@@ -18,6 +18,7 @@ export function createMockMqttNetworking(overrides: Partial<MqttNetworking> = {}
     mqtt_topic_command: "test/command",
     mqtt_topic_command_response: "test/command-response",
     is_connected: jest.fn().mockReturnValue(true),
+    prometheus_server_ready: jest.fn().mockReturnValue(true),
     publish_mqtt_message: jest.fn(),
     close: jest.fn(),
     get_cr_dude: jest.fn().mockReturnValue(mockCommandControl),

@@ -4,6 +4,10 @@
 # Logging
 log-level: debug
 
+# Optional: Loki structured logging
+loki-url: "http://192.168.1.62:3100"
+loki-enabled: true
+
 # Prometheus metrics server port
 prometheus-port: 3301
 

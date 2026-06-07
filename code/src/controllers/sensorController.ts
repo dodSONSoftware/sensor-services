@@ -11,6 +11,7 @@ import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError, sleep } from "../dodsonlabs/SystemFunctions";
 import type { IMqttCommandControl } from "../dodsonlabs/Interfaces";
+import { randomUUID } from "crypto";
 
 
 
@@ -24,13 +25,14 @@ const _reboot_command_delay_seconds: number = 3;
 // ****************************************************************
 // **** private functions
 
-export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null): Record<string, unknown> {
+export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null, commandId: string = randomUUID()): Record<string, unknown> {
     // create base message
     const msg = {
         "message-type": "command",
         "version": "2",
         "target": target.toLowerCase().trim(),
         "command": command.toLowerCase().trim(),
+        "command-id": commandId,
         "payload": {}
     };
 
@@ -43,9 +45,12 @@ export function create_mqtt_command_message(target: string, command: string, pay
     return msg;
 }
 
-function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
+function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking, commandId: string) {
     // initialize timer
     dude.initialize();
+
+    // register command-id for deduplication
+    network.register_command_id(commandId);
 
     // publish mqtt request
     network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
@@ -84,6 +89,7 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
 export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, parameters: string = ""): Promise<IMqttCommandControl> {
     // get-it
     const start_date = new Date();
+    const commandId = randomUUID();
     const dude = network.get_cr_dude(command);
 
     // check if the request is already running
@@ -96,10 +102,10 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
 
     } else {
         // create mqtt request
-        const mqtt_request = create_mqtt_command_message(target, `${command} ${parameters}`);
+        const mqtt_request = create_mqtt_command_message(target, `${command} ${parameters}`, null, commandId);
 
         // start-it
-        mqtt_command_start(dude, mqtt_request, network);
+        mqtt_command_start(dude, mqtt_request, network, commandId);
 
         // log-it
         logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
@@ -135,6 +141,8 @@ async function get_it(_req: express.Request, res: express.Response, network: Mqt
 
 async function post_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, payload: Record<string, unknown> | null) {
     try {
+        const commandId = randomUUID();
+
         // get-it
         const dude = network.get_cr_dude(command);
 
@@ -148,10 +156,10 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
 
         } else {
             // create mqtt request
-            const mqtt_request = create_mqtt_command_message(target, command, payload);
+            const mqtt_request = create_mqtt_command_message(target, command, payload, commandId);
 
             // start-it
-            mqtt_command_start(dude, mqtt_request, network);
+            mqtt_command_start(dude, mqtt_request, network, commandId);
 
             // log-it
             logger()?.write_debug("sensorController.ts/post_it", `${command}: Started...`);

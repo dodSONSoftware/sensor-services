@@ -8,6 +8,7 @@
 import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as general_controller from "../controllers/generalController";
+import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
 
 
@@ -36,19 +37,21 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/health",
-            "description": "Returns the health status of the API including MQTT broker connectivity."
+            "description": "Returns the health status of the API including MQTT broker, Prometheus server, memory, and CPU."
         }
     ]
 };
 
 export class CreateGeneralRoutes extends RoutesCreatorBase {
     private readonly mqtt_connected: boolean;
+    private readonly prometheus_server_ready: boolean;
 
     // **** ctor
 
-    constructor(app: express.Application, mqtt_connected: boolean) {
+    constructor(app: express.Application, networking: MqttNetworking) {
         super(app);
-        this.mqtt_connected = mqtt_connected;
+        this.mqtt_connected = networking.is_connected();
+        this.prometheus_server_ready = networking.prometheus_server_ready();
     }
 
     // **** protected functions
@@ -140,7 +143,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /health:
          *   get:
          *     summary: Retrieve the health status of the API
-         *     description: Returns the current health status including MQTT broker connectivity and uptime.
+         *     description: Returns the current health status including MQTT broker, Prometheus server, memory, and CPU.
          *     responses:
          *       200:
          *         description: API health status
@@ -159,14 +162,36 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                 mqtt:
          *                   type: string
          *                   enum: [connected, disconnected]
+         *                 prometheus_server:
+         *                   type: string
+         *                   enum: [ready, not_ready]
          *                 uptime_seconds:
          *                   type: integer
          *                 timestamp:
          *                   type: string
          *                   format: date-time
+         *                 memory:
+         *                   type: object
+         *                   properties:
+         *                     rss:
+         *                       type: integer
+         *                     heap_used:
+         *                       type: integer
+         *                     heap_total:
+         *                       type: integer
+         *                 cpu:
+         *                   type: object
+         *                   properties:
+         *                     load:
+         *                       type: number
          */
         this.app.route("/health").get((req: express.Request, res: express.Response) => {
-            (req as express.Request & { mqtt_connected: boolean }).mqtt_connected = this.mqtt_connected;
+            const typedReq = req as express.Request & {
+                mqtt_connected: boolean;
+                prometheus_server_ready: boolean;
+            };
+            typedReq.mqtt_connected = this.mqtt_connected;
+            typedReq.prometheus_server_ready = this.prometheus_server_ready;
             general_controller.getHealth(req, res);
         });
     }

@@ -1,16 +1,22 @@
 import { create_mqtt_command_message } from "../../../src/controllers/sensorController";
 
 describe("create_mqtt_command_message", () => {
-  it("should create a command message with default empty payload", () => {
+  it("should create a command message with default empty payload and a command-id", () => {
     const msg = create_mqtt_command_message("sensor-1", "identify");
 
-    expect(msg).toEqual({
+    expect(msg).toMatchObject({
       "message-type": "command",
       "version": "2",
       "target": "sensor-1",
       "command": "identify",
       "payload": {},
     });
+    expect(msg).toHaveProperty("command-id");
+    expect(typeof msg["command-id"]).toBe("string");
+    // command-id should be a valid UUID
+    expect(msg["command-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
   });
 
   it("should lowercase target and command", () => {

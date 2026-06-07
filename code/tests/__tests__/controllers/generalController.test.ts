@@ -50,9 +50,12 @@ describe("getDateUTC", () => {
 });
 
 describe("getHealth", () => {
-  it("should return health object with mqtt_connected from request", () => {
+  it("should return health object with all dependency checks when connected", () => {
     const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
-    const req = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const req = createMockReq({
+      mqtt_connected: true,
+      prometheus_server_ready: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
 
     getHealth(req, res as Response);
 
@@ -61,22 +64,65 @@ describe("getHealth", () => {
     expect(sendCalls).toHaveLength(1);
     const body = sendCalls[0] as Record<string, unknown>;
     expect(body).toHaveProperty("status");
+    expect(body.status).toBe("ok");
     expect(body).toHaveProperty("service");
     expect(body).toHaveProperty("version");
     expect(body).toHaveProperty("mqtt");
     expect(body.mqtt).toBe("connected");
+    expect(body).toHaveProperty("prometheus_server");
+    expect(body.prometheus_server).toBe("ready");
     expect(body).toHaveProperty("uptime_seconds");
     expect(typeof body.uptime_seconds).toBe("number");
     expect(body).toHaveProperty("timestamp");
+    expect(body).toHaveProperty("memory");
+    expect(body.memory).toHaveProperty("rss");
+    expect(body.memory).toHaveProperty("heap_used");
+    expect(body.memory).toHaveProperty("heap_total");
+    expect(body).toHaveProperty("cpu");
+    expect(body.cpu).toHaveProperty("load");
+    expect(typeof (body.cpu as Record<string, unknown>).load).toBe("number");
   });
 
-  it("should report disconnected when mqtt_connected is false", () => {
+  it("should report degraded when mqtt is disconnected", () => {
     const { res, sendCalls } = createMockRes();
-    const req = createMockReq({ mqtt_connected: false }) as Request & { mqtt_connected: boolean };
+    const req = createMockReq({
+      mqtt_connected: false,
+      prometheus_server_ready: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
 
     getHealth(req, res as Response);
 
     const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("degraded");
     expect(body.mqtt).toBe("disconnected");
+  });
+
+  it("should report degraded when prometheus server is not ready", () => {
+    const { res, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+      prometheus_server_ready: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+
+    getHealth(req, res as Response);
+
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("degraded");
+    expect(body.prometheus_server).toBe("not_ready");
+  });
+
+  it("should report degraded when both dependencies are down", () => {
+    const { res, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: false,
+      prometheus_server_ready: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+
+    getHealth(req, res as Response);
+
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("degraded");
+    expect(body.mqtt).toBe("disconnected");
+    expect(body.prometheus_server).toBe("not_ready");
   });
 });
