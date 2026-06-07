@@ -1,0 +1,8 @@
+services:
+  sensor-web-services:
+    build: .
+    container_name: sensor-web-services
+    ports:
+      - "3301:3301"
+    volumes:
+      - /mnt/sensor-web-services/config.yml:/app/dist/config.yml
