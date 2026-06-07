@@ -13,17 +13,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ├── .gitignore
 └── code/                  -- Application source (all development happens here)
     ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0)
-    ├── tsconfig.json      -- ES2016, commonjs, strict mode, outDir: dist, excludes tests/
+    ├── tsconfig.json      -- ES2016, commonjs, strict mode, outDir: dist, excludes tests/ and dodsonlabs/
     ├── jest.config.ts     -- Jest config (ts-jest preset, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
     ├── Dockerfile         -- Two-stage build (Node 22), exposes port 3301
     ├── nodemon.json       -- Dev watch config
     ├── docker-create.sh   -- Build image + run privileged container (Docker socket mounted)
     ├── docker-destroy.sh  -- Stop/remove container and image
-    ├── eslint.config.mjs  -- ESLint 9.x flat config (@typescript-eslint v8)
+    ├── eslint.config.mjs  -- ESLint 9.x flat config (@typescript-eslint v8), excludes tests/ and dodsonlabs/
     ├── src/
     │   ├── index.ts       -- Entry point: config load, MQTT init, Swagger, middleware, routes, listen
-    │   ├── config.json    -- Runtime configuration (MQTT broker, topics, ports)
+    │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, YAML format)
     │   ├── swagger.ts     -- Swagger UI setup at /swagger
     │   ├── common/
     │   │   └── global.ts  -- Global logger singleton, aboutDude() metadata
@@ -70,7 +70,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 All commands run from the `code/` directory.
 
 ```bash
-npm run build          # Install deps, compile TypeScript, copy config.json to dist/
+npm run build          # Install deps, compile TypeScript, copy config.yml to dist/
 npm start              # Run compiled app: node ./dist/index.js
 npm run dev            # Hot-reload dev: nodemon --exec ts-node src/index.ts
 npm run lint           # ESLint 9.x check (eslint.config.mjs, @typescript-eslint v8)
@@ -109,8 +109,8 @@ The app connects to an MQTT broker (`192.168.1.4` by default) for real-time sens
 
 ### Startup Flow (`src/index.ts`)
 
-1. Read config from `/app/dist/config.json` (falls back to `./dist/config.json`)
-2. Validate config: required string keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`), MQTT broker IP format, ip-pinger URL format, required number key (`prometheus-port`), required boolean key (`case-sensitive`)
+1. Read config from `/app/dist/config.yml` (falls back to `./dist/config.yml`)
+2. Validate config with Zod: required string keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`), MQTT broker IP format, ip-pinger URL format, required number key (`prometheus-port`), required boolean key (`case-sensitive`)
 3. Create global `Logger` instance via `createLogger(config)`
 4. Create `MqttNetworking` instance (connects to MQTT broker, starts PrometheusWriter)
 5. Get port from `EXPRESS_PORT` env var (default 32000)
@@ -235,47 +235,62 @@ HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
 
 ## Configuration
 
-**File:** `code/src/config.json`
+**File:** `code/src/config.yml`
 
-```json
-{
-  "log-level": "debug",
-  "prometheus-port": 3301,
-  "mqtt-broker-ip-address": "192.168.1.4",
-  "mqtt-topic-telemetry": "iot/telemetry",
-  "mqtt-topic-command": "iot/v2/command",
-  "mqtt-topic-command-response": "iot/v2/command-response",
-  "ip-pinger-web-api": "http://192.168.1.4:3300",
-  "case-sensitive": true
-}
+```yaml
+# Logging
+log-level: debug
+
+# Optional: Loki structured logging
+# loki-url: "http://192.168.1.62:3100"
+# loki-enabled: true
+
+# Prometheus metrics server port
+prometheus-port: 3301
+
+# MQTT broker connection
+mqtt-broker-ip-address: "192.168.1.4"
+mqtt-topic-telemetry: "iot/telemetry"
+mqtt-topic-command: "iot/v2/command"
+mqtt-topic-command-response: "iot/v2/command-response"
+
+# External services
+ip-pinger-web-api: "http://192.168.1.4:3300"
+
+# Behavior
+case-sensitive: true
+
+# Optional: override auto-derived Swagger server URL
+# swagger-server-url: "http://192.168.1.214:32000/"
 ```
 
-**Optional config key:** `swagger-server-url` — overrides auto-derived Swagger server URL (from machine IP + port). Not set by default.
+**Optional config keys:** `loki-url` / `loki-enabled` — Loki structured logging integration (disabled by default). `swagger-server-url` — overrides auto-derived Swagger server URL (from machine IP + port).
 
 **Env var override:** `EXPRESS_PORT` — main HTTP server port (default 32000)
 
-**Docker config mount:** `docker-create.sh` mounts a host `config.json` into the container at `/app/dist/config.json`.
+**Docker config mount:** `docker-create.sh` mounts a host `config.yml` into the container at `/app/dist/config.yml`.
 
 ## Key Patterns and Caveats
 
-- **`dodsonlabs/` is a git submodule** — cloned from `http://192.168.1.5:30008/sensor-services/dodson-labs-core.git`. Run `code/src/git-dodsonlabs-from-cloud.sh` for setup. `code/src/README.txt` has instructions.
+- **`dodsonlabs/` is a git submodule** — cloned from `http://192.168.1.5:30008/sensor-services/dodson-labs-core.git`. Excluded from ESLint and test coverage (shared submodule library). Run `code/src/git-dodsonlabs-from-cloud.sh` for setup. `code/src/README.txt` has instructions.
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, and request logging.
 - **No CI/CD pipeline** — no GitHub Actions, GitLab CI, or other automation.
 - **All logging goes to `console.log`** — no file logging, no structured logging, no external log aggregation. `handle_mqtt_message_log()` in MqttNetworking is a TODO stub (references Loki integration).
 - **Sensor commands use a polling loop** — `sleep(1000)` in an `async` loop checking `is_timed_out`. No async event completion.
 - **`on_disconnect()` and `on_error()` rely on the mqtt library's auto-reconnect** — manual reconnection was removed (created race conditions). The `reconnectPeriod: 5000` handles reconnection automatically.
 - **Native `fetch` API is used** (Node 18+ built-in) — `node-fetch` was removed from dependencies.
-- **`swagger-server-url` is configurable** via `config.json` (falls back to auto-derived from machine IP + port).
-- **`case-sensitive` is configurable** via `config.json` (used by `analyzeIt()` in pingerController).
+- **`swagger-server-url` is configurable** via `config.yml` (falls back to auto-derived from machine IP + port).
+- **`case-sensitive` is configurable** via `config.yml` (used by `analyzeIt()` in pingerController).
 - **`write-config` and `update-config` sensor routes are active** POST endpoints in `sensorRoutes.ts`.
 - **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`.
-- **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean.
+- **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).
 - **`sys_info` array in `aboutDude()` is always empty** — has a TODO to populate with system information (OS, uptime, etc.).
 - **`docker-create.sh` runs a privileged container** with Docker socket mounted — a security concern for production use.
-- **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list, but there's no validation that the routes actually exist for each entry — easy to get out of sync.
+- **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list; `validateRoutesHelp()` in `index.ts` checks for drift at startup between `__routesHelp` entries and actual registered routes.
 - **`createAnalyzeResult` mutates its `origin` argument in-place** — callers should not assume the object is unchanged after the call.
 - **`pingerController.ts` has two fetch patterns** — `fetchIt()`/`postIt()` use promise chains with `.then()`/`.catch()` (fire-and-forget to `res`), while `fetchItOnly()` uses `async/await` for composability (used in `getAnalyzeIpPinger`).
+- **Config migrated from JSON to YAML** — `config.yml` is loaded via `read_file_yaml()` and validated with Zod schemas in `src/schemas/config.ts`. The old `config.json` was replaced.
 
 ## Resolved Issues (from `to-fix.md`, deleted)
 
@@ -283,8 +298,8 @@ The following issues from the old `to-fix.md` have been resolved:
 
 - **Blocking `sleep()` in MQTT reconnect** — removed; mqtt library's `reconnectPeriod: 5000` handles reconnection.
 - **`routeNotFound.ts` never wired** — now instantiated via `new CreateRouteNotFound(app)` in `index.ts`.
-- **`case_sensitive` hardcoded to `true`** — moved to `config.json` as `case-sensitive`.
-- **`swagger-server-url` hardcoded** — now configurable via `config.json` (`swagger-server-url`).
+- **`case_sensitive` hardcoded to `true`** — moved to `config.yml` as `case-sensitive`.
+- **`swagger-server-url` hardcoded** — now configurable via `config.yml` (`swagger-server-url`).
 - **`write-config`/`update-config` commented out** — now active POST endpoints.
 - **No test framework** — Jest + ts-jest configured with 8 test suites, 70% coverage threshold.
 - **No linting** — ESLint 9.x with flat config and `@typescript-eslint` v8.
@@ -292,3 +307,8 @@ The following issues from the old `to-fix.md` have been resolved:
 - **`node-fetch` unused** — removed from dependencies; native `fetch` used throughout.
 - **`SensorCreatorBase.ts` duplicate** — removed (consolidated into `CreatorBase.ts`).
 - **`swagger-server-url` hardcoded to `192.168.1.214`** — now auto-derived or configurable.
+- **Config file format** — migrated from `config.json` to `config.yml` with Zod validation schemas.
+- **ESLint ignores not reflected in config** — `tests/` and `src/dodsonlabs/` now properly excluded in `eslint.config.mjs`.
+- **Route drift detection** — `validateRoutesHelp()` in `index.ts` compares `__routesHelp` against actual registered routes at startup.
+- **`logger()` non-null assertion removed** — replaced with explicit type assertion (`as Logger`) backed by `createLogger()` call guarantee.
+- **Duplicate imports merged** — `./schemas/config` imports consolidated into single statement in `index.ts`.

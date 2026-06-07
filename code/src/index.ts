@@ -15,14 +15,16 @@ import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import { aboutDude, createLogger, logger } from "./common/global";
+import type { Logger } from "./dodsonlabs/Logger";
 import { Counter, Histogram } from "prom-client";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
 import { ensureError, formatElapsedTime, read_file_yaml } from "./dodsonlabs/SystemFunctions";
-import { validateConfig, configSchema } from "./schemas/config";
+import { validateConfig, type configSchema } from "./schemas/config";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
+import { InternalServerError } from "./dodsonlabs/HttpConstants";
 
 // **** route drift validation
 
@@ -67,7 +69,8 @@ const config = validate_config(rawConfig);
 
 // create logger
 createLogger(config);
-const appLogger = logger()!;
+// createLogger(config) above guarantees logger() returns a defined Logger
+const appLogger = logger() as Logger;
 
 // display configuration
 appLogger.write_info("index.ts", `CONFIGURATION:\n${JSON.stringify(config, null, 2)}`);
@@ -144,11 +147,11 @@ try {
                 httpRequestsTotal.labels({ method, route, status }).inc();
                 httpRequestDuration.labels({ method, route }).observe(duration);
 
-                if (status >= 500) {
+                if (status >= InternalServerError) {
                     httpErrorsTotal.labels({ method, route }).inc();
                 }
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-this-alias
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return (originalEnd as any).apply(this, args);
         } as typeof res.end;
 

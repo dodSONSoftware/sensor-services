@@ -19,7 +19,7 @@ export const configSchema = z.object({
     "prometheus-port": z.number({
         error: "prometheus-port must be a number",
     }).int("prometheus-port must be an integer")
-     .positive("prometheus-port must be greater than 0"),
+        .positive("prometheus-port must be greater than 0"),
     "mqtt-broker-ip-address": z.string({
         error: "mqtt-broker-ip-address must be a string",
     }).min(1, "mqtt-broker-ip-address must not be empty"),
