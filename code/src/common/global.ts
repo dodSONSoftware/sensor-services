@@ -5,19 +5,25 @@
  * See the LICENSE file for the full terms.
  */
 
+import os from "os";
 import type { IAbout } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
+import type { configSchema } from "../schemas/config";
+import type { z } from "zod";
 //import { __routesHelp as routeNotFoundRoutesHelp } from "../routes/routeNotFound";
 
 // **** public functions
 
-export let logger: Logger | undefined;
+let _logger: Logger | undefined;
 
-export const createLogger = (config: Record<string, unknown>) => {
-    logger = new Logger(config);
+export function setLogger(l: Logger) { _logger = l; }
+export const logger = () => _logger;
+
+export const createLogger = (config: z.infer<typeof configSchema>) => {
+    setLogger(new Logger(config));
 };
 
 // --------------------------------
@@ -32,9 +38,14 @@ export function aboutDude(): IAbout {
         cmds.push({ "name": "IP Pinger", "help": pingerRoutesHelp });
         //cmds.push({ "name": "", "help": routeNotFoundRoutesHelp })
 
-        // TODO: ******** add system information
-
-        const sys_info: unknown[] = [];
+        const sys_info: { key: string; value: string }[] = [
+            { key: "platform", value: os.platform() },
+            { key: "arch", value: os.arch() },
+            { key: "hostname", value: os.hostname() },
+            { key: "uptime_seconds", value: String(Math.floor(os.uptime())) },
+            { key: "total_memory", value: `${Math.round(os.totalmem() / 1024 / 1024 / 1024)} GB` },
+            { key: "free_memory", value: `${Math.round(os.freemem() / 1024 / 1024 / 1024)} GB` },
+        ];
 
         _aboutDudeInfo = {
             about: {

@@ -8,6 +8,7 @@
 import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import { logger } from "../common/global";
+import { NotFound } from "../dodsonlabs/HttpConstants";
 
 
 
@@ -32,11 +33,11 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
 
     protected routeNotFound() {
         this.app.use((req: express.Request, res: express.Response) => {
-            res.status(404).json({
+            res.status(NotFound).json({
                 message: "The requested resource was not found.",
             });
 
-            logger?.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+            logger()?.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
         });
     }
 }

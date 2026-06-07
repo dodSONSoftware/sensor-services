@@ -1,13 +1,15 @@
 import { analyzeIt, createAnalyzeResult } from "../../../src/controllers/pingerController";
 
 describe("createAnalyzeResult", () => {
-  it("should attach state and state-value to the origin object", () => {
+  it("should attach state and state-value to a new object without mutating origin", () => {
     const origin = { source: "sensor-1", "ip-address": "192.168.1.10" };
     const result = createAnalyzeResult("OK", { sensor: "", config: "" }, origin);
 
-    expect(result).toBe(origin);
+    expect(result).not.toBe(origin);
     expect(result["state"]).toBe("OK");
     expect(result["state-value"]).toEqual({ sensor: "", config: "" });
+    expect(origin).not.toHaveProperty("state");
+    expect(origin).not.toHaveProperty("state-value");
   });
 
   it("should preserve all original properties", () => {

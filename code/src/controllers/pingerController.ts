@@ -15,126 +15,94 @@ import { mqtt_command_get_messages } from "./sensorController";
 
 // ---- private functions
 
-function fetchIt(res: express.Response, originator: string, url: string) {
+async function fetchIt(res: express.Response, originator: string, url: string) {
     const origin = `${originator}/fetchIt`;
 
-    fetch(url)
-        .then(response => {
-            // ---- check the response
-            if (!response.ok) {
-                // log it
-                logger?.write_error(origin, `Url=${url}, Response=${response}`);
+    try {
+        const response = await fetch(url);
 
-                // publish it
-                res.status(InternalServerError);
-                res.contentType(Json);
-                res.send(response);
-                // !!!!
-                // !!!! Research this: should I throw an Error
-                // !!!!
-                return null;
-            }
-            // next--> data as json
-            return response.json();
-        })
-        .then(data => {
-            // ---- process data as json
-            // log it
-            logger?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
+        if (!response.ok) {
+            logger()?.write_error(origin, `Url=${url}, Status=${response.status}`);
+            res.status(InternalServerError).contentType(Json).send({
+                error: `upstream error: ${response.status} ${response.statusText}`
+            });
+            return;
+        }
 
-            // publish it
-            res.status(OK);
-            res.contentType(Json);
-            res.send(data);
-        })
-        .catch(error => {
-            logger?.write_error(origin, `Url: ${url}, Error=${error}`);
-        });
+        const data = await response.json();
+        logger()?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
+        res.status(OK).contentType(Json).send(data);
+
+    } catch (error) {
+        logger()?.write_error(origin, `Url: ${url}, Error=${error}`);
+        res.status(502).contentType(Json).send({ error: "upstream unavailable" });
+    }
 }
 
-function postIt(res: express.Response, originator: string, url: string, data: unknown) {
+async function postIt(res: express.Response, originator: string, url: string, data: unknown) {
     const origin = `${originator}/postIt`;
 
-    fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
 
-    }).then((response) => {
-        // Check if the response is okay
         if (!response.ok) {
-            // log it/throw error
-            throw new Error(`HTTP error! Response=${response.status}::${response.statusText}`);
+            throw new Error(`HTTP error! Status=${response.status}::${response.statusText}`);
         }
-        return response.json();
 
-    }).then((result) => {
-        // ---- process data as json
-        // log it
-        logger?.write_debug(origin, `Data=${JSON.stringify(result)}`);
+        const result = await response.json();
+        logger()?.write_debug(origin, `Data=${JSON.stringify(result)}`);
+        res.status(OK).contentType(Json).send(result);
 
-        // publish it
-        res.status(OK);
-        res.contentType(Json);
-        res.send(result);
-
-    }).catch((error) => {
-        logger?.write_error(origin, `Url: ${url}, Error=${error}`);
-    });
+    } catch (error) {
+        logger()?.write_error(origin, `Url: ${url}, Error=${error}`);
+        res.status(502).contentType(Json).send({ error: "upstream unavailable" });
+    }
 }
 
 
 
 // ---- public functions
 
-export function getAbout(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
-    // get {ip-pinger} web service api
+export async function getAbout(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/about`;
     const originator = "pingerController.ts/getAbout";
-
-    fetchIt(res, originator, url);
+    await fetchIt(res, originator, url);
 }
 
-export function getReadConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
-    // get {ip-pinger} web service api
+export async function getReadConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/read-config`;
     const originator = "pingerController.ts/getReadConfig";
-
-    fetchIt(res, originator, url);
+    await fetchIt(res, originator, url);
 }
 
-export function postWriteConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string, data: unknown): void {
-    // get {ip-pinger} web service api
+export async function postWriteConfig(req: express.Request, res: express.Response, ip_pinger_web_api: string, data: unknown) {
     const url = `${ip_pinger_web_api}/write-config`;
     const originator = "pingerController.ts/postWriteConfig";
-
-    postIt(res, originator, url, data);
+    await postIt(res, originator, url, data);
 }
 
-export function postRestart(req: express.Request, res: express.Response, ip_pinger_web_api: string): void {
-    // get {ip-pinger} web service api
+export async function postRestart(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/restart`;
     const originator = "pingerController.ts/postRestart";
-
-    postIt(res, originator, url, req.body);
+    await postIt(res, originator, url, req.body);
 }
 
-export function getPing(req: express.Request, res: express.Response, ip_pinger_web_api: string, ping_ip_address: string): void {
-    // get {ip-pinger} web service api
+export async function getPing(req: express.Request, res: express.Response, ip_pinger_web_api: string, ping_ip_address: string) {
     const url = `${ip_pinger_web_api}/ping/${ping_ip_address}`;
     const originator = "pingerController.ts/getPing";
-
-    fetchIt(res, originator, url);
+    await fetchIt(res, originator, url);
 }
 
-export function getPings(req: express.Request, res: express.Response, ip_pinger_web_api: string): void {
-    // get {ip-pinger} web service api
+export async function getPings(req: express.Request, res: express.Response, ip_pinger_web_api: string) {
     const url = `${ip_pinger_web_api}/ping`;
     const originator = "pingerController.ts/getPing";
-
-    fetchIt(res, originator, url);
+    await fetchIt(res, originator, url);
 }
 
 // --------------------------------
@@ -151,24 +119,22 @@ async function fetchItOnly(originator: string, url: string): Promise<unknown> {
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            logger?.write_error(origin, `Url=${url}, Status=${response.status}`);
+            logger()?.write_error(origin, `Url=${url}, Status=${response.status}`);
             return {}; // or return null / throw depending on caller expectations
         }
 
         const data = await response.json();
-        logger?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
+        logger()?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
         return data;
 
     } catch (error) {
-        logger?.write_error(origin, `Url=${url}, Error=${error}`);
+        logger()?.write_error(origin, `Url=${url}, Error=${error}`);
         return {}; // keep consistent return type on failure
     }
 }
 
 export function createAnalyzeResult(state: string, state_value: Record<string, any>, origin: Record<string, any>): Record<string, any> {
-    origin["state"] = state;
-    origin["state-value"] = state_value;
-    return origin;
+    return { ...origin, state, "state-value": state_value };
 }
 
 export function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices: Record<string, any>[], case_sensitive: boolean): Record<string, any>[] {
@@ -195,7 +161,7 @@ export function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices:
         // check
         if (sensor) {
             // init
-            const sensor_ipaddress = String(sensor["payload"]["ip-address"]);
+            const sensor_ipaddress = String(sensor?.["payload"]?.["ip-address"] ?? "");
 
             // check if ip-addresses are equal
             if (sensor_ipaddress === ip_address) {
@@ -209,7 +175,7 @@ export function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices:
 
         } else {
             // check if device.ip-address is-in livesensors
-            const sensor_ip: Record<string, any> | undefined = live_sensors.find(x => { return x["payload"]["ip-address"] === ip_address; });
+            const sensor_ip: Record<string, any> | undefined = live_sensors.find(x => { return x?.["payload"]?.["ip-address"] === ip_address; });
             if (sensor_ip) {
                 // init
                 const sensor_source = String(sensor_ip["source"]);
@@ -227,7 +193,7 @@ export function analyzeIt(live_sensors: Record<string, any>[], ippinger_devices:
     // process each device defined in the IP Pinger configuration
     live_sensors.forEach(sensor => {
         const source = sensor["source"];
-        const ip_address = sensor["payload"]["ip-address"];
+        const ip_address = sensor?.["payload"]?.["ip-address"];
 
         // check if live_sensor.source is in ippinger-devices
         let dude: Record<string, any> | undefined;
@@ -263,7 +229,7 @@ export async function getAnalyzeIpPinger(req: express.Request, res: express.Resp
     // get results
     const [commandControl, ippingerConfig] = request_results;
     const sensors = commandControl.results as Record<string, any>[];
-    const ippinger_devices = (ippingerConfig as Record<string, any>)["devices"] as Record<string, any>[];
+    const ippinger_devices = ((ippingerConfig as Record<string, any>)["devices"] ?? []) as Record<string, any>[];
 
     // analyze-it
     const results = analyzeIt(sensors, ippinger_devices, case_sensitive);

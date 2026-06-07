@@ -1,0 +1,23 @@
+# Sensor Web Services configuration
+# Environment variable overrides: EXPRESS_PORT (main HTTP port)
+
+# Logging
+log-level: debug
+
+# Prometheus metrics server port
+prometheus-port: 3301
+
+# MQTT broker connection
+mqtt-broker-ip-address: "192.168.1.4"
+mqtt-topic-telemetry: "iot/telemetry"
+mqtt-topic-command: "iot/v2/command"
+mqtt-topic-command-response: "iot/v2/command-response"
+
+# External services
+ip-pinger-web-api: "http://192.168.1.4:3300"
+
+# Behavior
+case-sensitive: true
+
+# Optional: override auto-derived Swagger server URL
+# swagger-server-url: "http://192.168.1.214:32000/"

@@ -5,9 +5,12 @@
  * See the LICENSE file for the full terms.
  */
 
+import cors from "cors";
 import * as express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import { logger } from "../common/global";
+import { validatePostBody } from "../schemas/postBody";
+import { Json } from "../dodsonlabs/HttpConstants";
 
 // **** public classes
 
@@ -16,7 +19,6 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
     constructor(protected app: express.Application) {
         // add CORS
-        const cors = require("cors");
         app.use(cors());
 
         // add JSON
@@ -39,9 +41,30 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
     private loggerMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
         // log it
-        logger?.write_debug("middleware.ts/loggerMiddleware", `${request.method} "${request.path}"`);
+        logger()?.write_debug("middleware.ts/loggerMiddleware", `${request.method} "${request.path}"`);
 
         // continue
+        next();
+    }
+
+    /**
+     * Validates that the request body is a plain object using Zod.
+     * Returns 400 with an error message if validation fails, otherwise calls next().
+     */
+    private validateBodyMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
+        if (request.body === undefined || request.body === null) {
+            response.status(400).contentType(Json).send({ error: "request body is required" });
+            return;
+        }
+
+        const validated = validatePostBody(request.body);
+        if (validated === null) {
+            response.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
+            return;
+        }
+
+        // Replace req.body with the validated object so downstream handlers get the clean data
+        request.body = validated;
         next();
     }
 }

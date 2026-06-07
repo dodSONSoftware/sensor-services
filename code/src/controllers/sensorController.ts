@@ -51,8 +51,24 @@ function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<stri
     network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
 }
 
+// Maximum time to wait for a single MQTT command to complete (30 seconds).
+// This is a hard safety cap — if restart_clock() keeps pushing the timeout,
+// the loop must eventually exit to avoid hanging the caller forever.
+const __max_wait_ms = 30_000;
+
 async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl) {
+    const start = Date.now();
+
     while (true) {
+        // hard time cap
+        if (Date.now() - start > __max_wait_ms) {
+            logger()?.write_error(
+                "sensorController.ts/mqtt_command_wait_for_command_completion",
+                `Command timed out after ${__max_wait_ms}ms hard cap`
+            );
+            break;
+        }
+
         // wait-a-bit
         await sleep(1000);
         // check dude
@@ -73,7 +89,7 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     // check if the request is already running
     if (dude.is_running) {
         // log-it
-        logger?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
+        logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
 
         // wait-for-it
         await mqtt_command_wait_for_command_completion(dude);
@@ -86,23 +102,23 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
         mqtt_command_start(dude, mqtt_request, network);
 
         // log-it
-        logger?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
+        logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
 
         // wait-for-it
         await mqtt_command_wait_for_command_completion(dude);
     }
 
     // log-it
-    logger?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
+    logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
 
     // ----
     return dude;
 }
 
-async function get_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, _parameters: string = "") {
+async function get_it(req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "") {
     try {
         // log-it
-        const dude = await mqtt_command_get_messages(network, target, command);
+        const dude = await mqtt_command_get_messages(network, target, command, parameters);
 
         // send response
         res.status(OK);
@@ -113,8 +129,7 @@ async function get_it(req: express.Request, res: express.Response, network: Mqtt
         const error = ensureError(err);
 
         // send error response
-        res.status(InternalServerError);
-        res.send(error);
+        res.status(InternalServerError).json({ error: error.message });
     }
 }
 
@@ -126,7 +141,7 @@ async function post_it(req: express.Request, res: express.Response, network: Mqt
         // check if the request is already running
         if (dude.is_running) {
             // log-it
-            logger?.write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
+            logger()?.write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
 
             // wait-for-it
             await mqtt_command_wait_for_command_completion(dude);
@@ -139,7 +154,7 @@ async function post_it(req: express.Request, res: express.Response, network: Mqt
             mqtt_command_start(dude, mqtt_request, network);
 
             // log-it
-            logger?.write_debug("sensorController.ts/post_it", `${command}: Started...`);
+            logger()?.write_debug("sensorController.ts/post_it", `${command}: Started...`);
 
             // wait-for-it
             await mqtt_command_wait_for_command_completion(dude);
@@ -154,8 +169,7 @@ async function post_it(req: express.Request, res: express.Response, network: Mqt
         const error = ensureError(err);
 
         // send error response
-        res.status(InternalServerError);
-        res.send(error);
+        res.status(InternalServerError).json({ error: error.message });
     }
 }
 
@@ -194,7 +208,7 @@ export async function postReboot(req: express.Request, res: express.Response, ne
     // get-it
     await get_it(req, res, network, "*", "reboot", `${_reboot_command_delay_seconds}`);
 }
-export async function PostRebootBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
+export async function postRebootBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
     // get-it
     await get_it(req, res, network, source, "reboot", `${_reboot_command_delay_seconds}`);
 }

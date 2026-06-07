@@ -52,17 +52,38 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /about:
          *   get:
          *     summary: Retrieve information about the API
-         *     description: Returns a description of the API and its purpose.
+         *     description: Returns API metadata including name, version, author, and a list of available commands.
          *     responses:
          *       200:
-         *         description: A brief introduction to the API
+         *         description: API metadata and command list
          *         content:
          *           application/json:
          *             schema:
          *               type: object
          *               properties:
          *                 about:
-         *                   type: string
+         *                   type: object
+         *                   properties:
+         *                     name:
+         *                       type: string
+         *                     version:
+         *                       type: string
+         *                     author:
+         *                       type: string
+         *                     description:
+         *                       type: string
+         *                     copyright:
+         *                       type: string
+         *                     license:
+         *                       type: string
+         *                 system_info:
+         *                   type: array
+         *                   items:
+         *                     type: object
+         *                 commands:
+         *                   type: array
+         *                   items:
+         *                     type: object
          */
         this.app.route("/about").get((req: express.Request, res: express.Response) => general_controller.getAbout(req, res));
 
@@ -72,18 +93,15 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /date_local:
          *   get:
          *     summary: Retrieve the current local date and time
-         *     description: Returns the current local date and time of the server's timezone.
+         *     description: Returns the current local date and time of the server's timezone as a plain text string in yyyy-mm-ddThh:mm:ss format.
          *     responses:
          *       200:
          *         description: The current local date and time
          *         content:
-         *           application/json:
+         *           text/plain:
          *             schema:
-         *               type: object
-         *               properties:
-         *                 localTime:
-         *                   type: string
-         *                   format: date-time
+         *               type: string
+         *               example: "2026-06-06T14:30:00"
          */
         this.app.route("/date_local").get((req: express.Request, res: express.Response) => general_controller.getDateCurrent(req, res));
 

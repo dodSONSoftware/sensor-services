@@ -5,6 +5,7 @@
  * See the LICENSE file for the full terms.
  */
 
+import { resolve } from "path";
 import express from "express";
 import { setupSwagger } from "./swagger";
 import * as ipAddress from "ip";
@@ -14,113 +15,73 @@ import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import { aboutDude, createLogger, logger } from "./common/global";
-import { ensureError, formatElapsedTime, read_file_json } from "./dodsonlabs/SystemFunctions";
+
+// Guard: logger must be initialized before any module-level code uses it.
+// createLogger() is called below; this check catches misconfiguration.
+import { ensureError, formatElapsedTime, read_file_yaml } from "./dodsonlabs/SystemFunctions";
+import { validateConfig, configSchema } from "./schemas/config";
+import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 
 // **** configuration validation
 
-function validate_config(config: Record<string, unknown>): void {
-    // required string keys
-    const required_strings = [
-        "mqtt-broker-ip-address",
-        "mqtt-topic-telemetry",
-        "mqtt-topic-command",
-        "mqtt-topic-command-response",
-        "ip-pinger-web-api",
-    ];
-    for (const key of required_strings) {
-        if (!(key in config) || typeof config[key] !== "string" || (config[key] as string).length === 0) {
-            // eslint-disable-next-line no-console
-            console.error(`ERROR: config.json missing or empty required string key "${key}".`);
-            process.exit(1);
-        }
-    }
-
-    // validate MQTT broker IP format
-    const ip_regex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-    const mqtt_ip = config["mqtt-broker-ip-address"] as string;
-    if (!ip_regex.test(mqtt_ip)) {
+function validate_config(raw: unknown): z.infer<typeof configSchema> {
+    try {
+        return validateConfig(raw);
+    } catch (err) {
+        const message = ensureError(err).message;
         // eslint-disable-next-line no-console
-        console.error(`ERROR: config.json "mqtt-broker-ip-address" (${mqtt_ip}) is not a valid IPv4 address.`);
+        console.error(`ERROR: Invalid config.yml — ${message}`);
         process.exit(1);
-    }
-
-    // validate ip-pinger URL format
-    const url_regex = /^https?:\/\/\S+$/;
-    const ip_pinger_url = config["ip-pinger-web-api"] as string;
-    if (!url_regex.test(ip_pinger_url)) {
-        // eslint-disable-next-line no-console
-        console.error(`ERROR: config.json "ip-pinger-web-api" (${ip_pinger_url}) is not a valid URL.`);
-        process.exit(1);
-    }
-
-    // required number keys
-    const required_numbers = ["prometheus-port"];
-    for (const key of required_numbers) {
-        if (!(key in config) || typeof config[key] !== "number" || !Number.isInteger(config[key]) || config[key] <= 0) {
-            // eslint-disable-next-line no-console
-            console.error(`ERROR: config.json missing or invalid required number key "${key}".`);
-            process.exit(1);
-        }
-    }
-
-    // required boolean keys
-    const required_booleans = ["case-sensitive"];
-    for (const key of required_booleans) {
-        if (!(key in config) || typeof config[key] !== "boolean") {
-            // eslint-disable-next-line no-console
-            console.error(`ERROR: config.json missing or invalid required boolean key "${key}".`);
-            process.exit(1);
-        }
     }
 }
 
 // **** start up code
 
 // read the configuration file
-const config = read_file_json("/app/dist/config.json") ?? read_file_json("./dist/config.json");
-if (config === null) {
+const rawConfig = read_file_yaml("/app/dist/config.yml") ?? read_file_yaml("./dist/config.yml");
+if (rawConfig === null) {
     // eslint-disable-next-line no-console
-    console.error("ERROR: Could not read config.json — cannot start without configuration.");
+    console.error("ERROR: Could not read config.yml — cannot start without configuration.");
     process.exit(1);
 }
-validate_config(config);
+
+// validate and type the config with Zod
+const config = validate_config(rawConfig);
 
 // create logger
 createLogger(config);
-if (logger === undefined) {
-    // eslint-disable-next-line no-console
-    console.error("ERROR: Logger initialization failed — cannot start without a logger.");
-    process.exit(1);
-}
+const appLogger = logger()!;
 
 // display configuration
-logger.write_info("index.ts", `>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
+appLogger.write_info("index.ts", `>>>>>>>> CONFIGURATION:\n${JSON.stringify(config, null, 2)}\n================================================================\n`);
 
 // log it
 const dude = aboutDude();
-logger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} starting...`);
+appLogger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} starting...`);
 
 // create express application
 const app = express();
 
 // create networking
-const networking = new MqttNetworking(config, logger);
+const networking = new MqttNetworking(config, appLogger);
 
 // get express port (before swagger so the server URL is correct)
-const port = Number(process.env.EXPRESS_PORT) || 32000;
+const port = process.env.EXPRESS_PORT !== undefined ? Number(process.env.EXPRESS_PORT) : 32000;
 
 // setup swagger (auto-derived from machine IP + port, overridable via config)
+// Resolve source dir relative to CWD so the glob finds .ts files regardless of WORKDIR
+const srcDir = resolve(process.cwd(), "..");
 const swagger_server_url = config["swagger-server-url"] as string | undefined;
-setupSwagger(app, port, swagger_server_url);
+setupSwagger(app, port, srcDir, swagger_server_url);
 
 try {
     // create middleware
     new middleware.CreateMiddleware(app);
 
     // create routes
-    const ip_pinger_web_api = String(config["ip-pinger-web-api"]);
-    const case_sensitive = config["case-sensitive"] === true;
+    const ip_pinger_web_api = config["ip-pinger-web-api"];
+    const case_sensitive = config["case-sensitive"];
 
     new generalRoutes.CreateGeneralRoutes(app, networking.is_connected());
     new sensorRoutes.CreateSensorRoutes(app, networking, ip_pinger_web_api);
@@ -128,7 +89,7 @@ try {
     new CreateRouteNotFound(app);
 } catch (err: unknown) {
     // log error
-    logger?.write_error("index.ts", ensureError(err).message);
+    appLogger.write_error("index.ts", ensureError(err).message);
 
     // terminate application
     process.exit(1);
@@ -136,8 +97,8 @@ try {
 
 // start express
 const server = app.listen(port, () => {
-    logger?.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
-    logger?.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
+    appLogger.write_debug("index.ts", `${dude.about.name} v${dude.about.version} started.`);
+    appLogger.write_info("index.ts", `******** ${dude.about.name} v${dude.about.version} listening on http://${ipAddress.address()}:${port} ********`);
 });
 
 // **** graceful shutdown
@@ -145,16 +106,16 @@ const server = app.listen(port, () => {
 const start_time = Date.now();
 
 async function shutdown(signal: string): Promise<void> {
-    logger?.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
+    appLogger.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
 
     // stop accepting new HTTP requests
     server.close(async () => {
-        logger?.write_info("index.ts", "HTTP server closed. No new requests accepted.");
+        appLogger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
 
         // disconnect MQTT and close Prometheus writer
         networking.close();
 
-        logger?.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
+        appLogger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
         process.exit(0);
     });
 }

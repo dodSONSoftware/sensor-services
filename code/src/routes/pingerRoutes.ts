@@ -9,6 +9,8 @@ import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import * as pinger_controller from "../controllers/pingerController";
+import { validatePostBody } from "../schemas/postBody";
+import { Json } from "../dodsonlabs/HttpConstants";
 
 
 
@@ -70,18 +72,15 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          * @swagger
          * /ippinger/about:
          *   get:
-         *     summary: 
-         *     description: .
+         *     summary: Get IP Pinger service information
+         *     description: Proxies to the IP Pinger service /about endpoint to retrieve service metadata.
          *     responses:
          *       200:
-         *         description: 
+         *         description: IP Pinger service information
          *         content:
          *           application/json:
          *             schema:
          *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
          */
         this.app.route("/ippinger/about").get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api));
 
@@ -90,18 +89,15 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          * @swagger
          * /ippinger/read-config:
          *   get:
-         *     summary: 
-         *     description: .
+         *     summary: Get IP Pinger configuration
+         *     description: Proxies to the IP Pinger service /read-config endpoint to retrieve its current configuration.
          *     responses:
          *       200:
-         *         description: 
+         *         description: IP Pinger configuration data
          *         content:
          *           application/json:
          *             schema:
          *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
          */
         this.app.route("/ippinger/read-config").get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api));
 
@@ -110,22 +106,31 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          * @swagger
          * /ippinger/write-config:
          *   post:
-         *     summary: 
-         *     description: .
+         *     summary: Write IP Pinger configuration
+         *     description: Proxies a POST to the IP Pinger service /write-config endpoint to update its configuration.
+         *     requestBody:
+         *       required: true
+         *       description: The configuration object to write.
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
          *     responses:
          *       200:
-         *         description: 
+         *         description: Configuration write result
          *         content:
          *           application/json:
          *             schema:
          *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
          */
         this.app.route("/ippinger/write-config").post((req: express.Request, res: express.Response) => {
-            const data = req.body;
-            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, data);
+            const validated = validatePostBody(req.body);
+            if (validated === null) {
+                res.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
+                return;
+            }
+            req.body = validated;
+            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, validated);
         });
 
         // RESTART
@@ -133,38 +138,49 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          * @swagger
          * /ippinger/restart:
          *   post:
-         *     summary: 
-         *     description: .
+         *     summary: Restart IP Pinger service
+         *     description: Proxies a POST to the IP Pinger service /restart endpoint to trigger a service restart.
+         *     requestBody:
+         *       required: true
+         *       description: Configuration data sent with the restart request.
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
          *     responses:
          *       200:
-         *         description: 
+         *         description: Restart result
          *         content:
          *           application/json:
          *             schema:
          *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
          */
-        this.app.route("/ippinger/restart").post((req: express.Request, res: express.Response) => pinger_controller.postRestart(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/restart").post((req: express.Request, res: express.Response) => {
+            const validated = validatePostBody(req.body);
+            if (validated === null) {
+                res.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
+                return;
+            }
+            req.body = validated;
+            pinger_controller.postRestart(req, res, this._ip_pinger_web_api);
+        });
 
         // PING
         /**
          * @swagger
          * /ippinger/ping:
-         *   post:
-         *     summary: 
-         *     description: .
+         *   get:
+         *     summary: Ping all IP Pinger devices
+         *     description: Proxies to the IP Pinger service /ping endpoint to ping all configured devices and return results.
          *     responses:
          *       200:
-         *         description: 
+         *         description: Ping results for all configured devices
          *         content:
          *           application/json:
          *             schema:
-         *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
+         *               type: array
+         *               items:
+         *                 type: object
          */
         this.app.route("/ippinger/ping").get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api));
 
@@ -173,39 +189,44 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
         /**
          * @swagger
          * /ippinger/ping/{target}:
-         *   post:
-         *     summary: 
-         *     description: .
+         *   get:
+         *     summary: Ping a specific IP address
+         *     description: Proxies to the IP Pinger service /ping/{target} endpoint to ping a specific IP address.
+         *     parameters:
+         *       - name: target
+         *         in: path
+         *         required: true
+         *         description: The IP address to ping.
+         *         schema:
+         *           type: string
          *     responses:
          *       200:
-         *         description: 
+         *         description: Ping result for the specified IP address
          *         content:
          *           application/json:
          *             schema:
-         *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
+         *               type: array
+         *               items:
+         *                 type: object
          */
         this.app.route("/ippinger/ping/:target").get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target));
 
         // ANALYZE-IPPINGER
         /**
          * @swagger
-         * /sensors/analyze-ippinger:
+         * /ippinger/analyze-ippinger:
          *   get:
-         *     summary: Will analyze the live sensors with the registered IP Pinger's configuration.
-         *     description: Will analyze the live sensors with the registered IP Pinger's configuration.
+         *     summary: Analyze IP Pinger configuration against live sensors
+         *     description: Compares the configured devices in the IP Pinger against live sensor telemetry and returns a report with states: OK, IP Address Mismatch, Name Mismatch, Offline, New.
          *     responses:
          *       200:
-         *         description: 
+         *         description: Analysis report comparing IP Pinger config to live sensors
          *         content:
          *           application/json:
          *             schema:
-         *               type: object
-         *               properties:
-         *                 about:
-         *                   type: string
+         *               type: array
+         *               items:
+         *                 type: object
          */
         this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api, this._case_sensitive));
     }
