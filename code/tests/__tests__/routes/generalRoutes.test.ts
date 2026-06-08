@@ -90,4 +90,56 @@ describe("General Routes", () => {
       expect(res.body.mqtt).toBe("disconnected");
     });
   });
+
+  describe("GET /ready", () => {
+    it("should return 200 when all subsystems are ready", async () => {
+      const app = createTestApp();
+
+      const res = await request(app).get("/ready");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+      expect(res.body.status).toBe("ready");
+      expect(res.body.dependencies.mqtt).toBe("connected");
+      expect(res.body.dependencies.prometheus_server).toBe("ready");
+    });
+
+    it("should return 503 when MQTT is disconnected", async () => {
+      const app = createTestApp(false);
+
+      const res = await request(app).get("/ready");
+
+      expect(res.status).toBe(503);
+      expect(res.body.status).toBe("not_ready");
+      expect(res.body.dependencies.mqtt).toBe("disconnected");
+    });
+  });
+
+  describe("GET /metrics/api", () => {
+    it("should return Prometheus-formatted API metrics", async () => {
+      const app = createTestApp();
+
+      const res = await request(app).get("/metrics/api");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/text\/plain/);
+      expect(res.text).toContain("http_requests_total");
+      expect(res.text).toContain("http_request_duration_seconds");
+      expect(res.text).toContain("http_errors_total");
+    });
+
+    it("should return HELP and TYPE lines for all API metrics", async () => {
+      const app = createTestApp();
+
+      const res = await request(app).get("/metrics/api");
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("# HELP http_requests_total Total number of HTTP requests.");
+      expect(res.text).toContain("# TYPE http_requests_total counter");
+      expect(res.text).toContain("# HELP http_request_duration_seconds HTTP request duration in seconds.");
+      expect(res.text).toContain("# TYPE http_request_duration_seconds histogram");
+      expect(res.text).toContain("# HELP http_errors_total Total number of HTTP 5xx errors.");
+      expect(res.text).toContain("# TYPE http_errors_total counter");
+    });
+  });
 });

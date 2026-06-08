@@ -9,8 +9,6 @@ import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as sensor_controller from "../controllers/sensorController";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
-import { validatePostBody } from "../schemas/postBody";
-import { Json } from "../dodsonlabs/HttpConstants";
 
 
 
@@ -49,11 +47,11 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/sensors/reboot",
-            "description": "Instructs all sensors to reboot."
+            "description": "Posts a reboot command to all sensors via MQTT."
         },
         {
             "route": "/sensors/reboot/:source",
-            "description": "Instructs the sensor identified by source to reboot."
+            "description": "Posts a reboot command to the sensor identified by source via MQTT."
         },
         {
             "route": "/sensors/read-config",
@@ -99,9 +97,22 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *         content:
          *           application/json:
          *             schema:
+         *               type: array
+         *               items:
+         *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
          *               type: object
          *               properties:
-         *                 about:
+         *                 error:
          *                   type: string
          */
         this.app.route("/sensors/identify").get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
@@ -126,9 +137,22 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *         content:
          *           application/json:
          *             schema:
+         *               type: array
+         *               items:
+         *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
          *               type: object
          *               properties:
-         *                 about:
+         *                 error:
          *                   type: string
          */
         this.app.route("/sensors/identify/:source").get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
@@ -143,13 +167,26 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     description: Returns all information for all of the sensors.
          *     responses:
          *       200:
-         *         description: all information for all of the sensors
+         *         description: All information for all of the sensors
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: array
+         *               items:
+         *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
          *         content:
          *           application/json:
          *             schema:
          *               type: object
          *               properties:
-         *                 about:
+         *                 error:
          *                   type: string
          */
         this.app.route("/sensors/get-details").get((req: express.Request, res: express.Response) => sensor_controller.getDetails(req, res, this.network));
@@ -177,6 +214,20 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/sensors/get-details/:source").get((req: express.Request, res: express.Response) => sensor_controller.getDetailsBySource(req, res, this.network, req.params.source));
 
@@ -184,7 +235,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         /**
          * @swagger
          * /sensors/reboot:
-         *   get:
+         *   post:
          *     summary: Instructs all sensors to reboot
          *     description: Sends a reboot command to all sensors via MQTT.
          *     responses:
@@ -196,14 +247,28 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
-        this.app.route("/sensors/reboot").get((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
+        this.app.route("/sensors/reboot").post((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
 
         // REBOOT
         /**
          * @swagger
          * /sensors/reboot/{source}:
-         *   get:
+         *   post:
          *     summary: Instructs a specific sensor to reboot
          *     description: Sends a reboot command to the sensor identified by source via MQTT.
          *     parameters:
@@ -222,8 +287,22 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
-        this.app.route("/sensors/reboot/:source").get((req: express.Request, res: express.Response) => sensor_controller.postRebootBySource(req, res, this.network, req.params.source));
+        this.app.route("/sensors/reboot/:source").post((req: express.Request, res: express.Response) => sensor_controller.postRebootBySource(req, res, this.network, req.params.source));
 
 
         // READ-CONFIG
@@ -242,6 +321,20 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/sensors/read-config").get((req: express.Request, res: express.Response) => sensor_controller.getReadConfig(req, res, this.network));
 
@@ -269,6 +362,20 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/sensors/read-config/:source").get((req: express.Request, res: express.Response) => sensor_controller.getReadConfigBySource(req, res, this.network, req.params.source));
 
@@ -300,18 +407,25 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *         content:
          *           application/json:
          *             schema:
+         *               type: array
+         *               items:
+         *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
          *               type: object
          *               properties:
-         *                 about:
+         *                 error:
          *                   type: string
          */
         this.app.route("/sensors/write-config/:source").post((req: express.Request, res: express.Response) => {
-            const validated = validatePostBody(req.body);
-            if (validated === null) {
-                res.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
-                return;
-            }
-            req.body = validated;
             sensor_controller.postWriteConfigBySource(req, res, this.network, req.params.source);
         });
 
@@ -343,18 +457,25 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *         content:
          *           application/json:
          *             schema:
+         *               type: array
+         *               items:
+         *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   payload:
+         *                     type: object
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
          *               type: object
          *               properties:
-         *                 about:
+         *                 error:
          *                   type: string
          */
         this.app.route("/sensors/update-config/:source").post((req: express.Request, res: express.Response) => {
-            const validated = validatePostBody(req.body);
-            if (validated === null) {
-                res.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
-                return;
-            }
-            req.body = validated;
             sensor_controller.postUpdateConfigBySource(req, res, this.network, req.params.source);
         });
     }

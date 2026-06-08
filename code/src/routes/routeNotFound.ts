@@ -10,13 +10,6 @@ import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import { logger } from "../common/global";
 import { NotFound } from "../dodsonlabs/HttpConstants";
 
-
-
-export const __routesHelp: Record<string, unknown> = {
-    "description": "When all else fails...",
-    "commands": []
-};
-
 export class CreateRouteNotFound extends RoutesCreatorBase {
     // **** ctor
 

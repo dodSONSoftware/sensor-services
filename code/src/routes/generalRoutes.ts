@@ -9,6 +9,7 @@ import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import * as general_controller from "../controllers/generalController";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
+import { apiMetricsRegistry } from "../common/metrics";
 
 
 
@@ -18,6 +19,8 @@ export const __routes: string[] = [
     "/date_local",
     "/date_utc",
     "/health",
+    "/metrics/api",
+    "/ready",
 ];
 
 export const __routesHelp: Record<string, unknown> = {
@@ -38,20 +41,26 @@ export const __routesHelp: Record<string, unknown> = {
         {
             "route": "/health",
             "description": "Returns the health status of the API including MQTT broker, Prometheus server, memory, and CPU."
+        },
+        {
+            "route": "/metrics/api",
+            "description": "Prometheus scrape endpoint for API-specific metrics (HTTP requests, duration, errors). Separate from sensor metrics on port 3301."
+        },
+        {
+            "route": "/ready",
+            "description": "Readiness probe — returns 200 when all subsystems (MQTT, Prometheus) are connected, 503 otherwise."
         }
     ]
 };
 
 export class CreateGeneralRoutes extends RoutesCreatorBase {
-    private readonly mqtt_connected: boolean;
-    private readonly prometheus_server_ready: boolean;
+    private readonly networking: MqttNetworking;
 
     // **** ctor
 
     constructor(app: express.Application, networking: MqttNetworking) {
         super(app);
-        this.mqtt_connected = networking.is_connected();
-        this.prometheus_server_ready = networking.prometheus_server_ready();
+        this.networking = networking;
     }
 
     // **** protected functions
@@ -91,10 +100,20 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                   type: array
          *                   items:
          *                     type: object
+         *                     properties:
+         *                       key:
+         *                         type: string
+         *                       value:
+         *                         type: string
          *                 commands:
          *                   type: array
          *                   items:
          *                     type: object
+         *                     properties:
+         *                       name:
+         *                         type: string
+         *                       help:
+         *                         type: object
          */
         this.app.route("/about").get((req: express.Request, res: express.Response) => general_controller.getAbout(req, res));
 
@@ -134,6 +153,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                 utcTime:
          *                   type: string
          *                   format: date-time
+         *                   example: "2026-06-07T14:30:00Z"
          */
         this.app.route("/date_utc").get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
 
@@ -190,9 +210,86 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
                 mqtt_connected: boolean;
                 prometheus_server_ready: boolean;
             };
-            typedReq.mqtt_connected = this.mqtt_connected;
-            typedReq.prometheus_server_ready = this.prometheus_server_ready;
+            typedReq.mqtt_connected = this.networking.is_connected();
+            typedReq.prometheus_server_ready = this.networking.prometheus_server_ready();
             general_controller.getHealth(req, res);
+        });
+
+        // API METRICS
+        /**
+         * @swagger
+         * /metrics/api:
+         *   get:
+         *     summary: Prometheus scrape endpoint for API metrics
+         *     description: Returns Prometheus-formatted metrics for HTTP requests, request duration, and 5xx errors. This endpoint serves API-specific metrics separately from the sensor metrics exposed by PrometheusWriter on port 3301.
+         *     responses:
+         *       200:
+         *         description: Prometheus-formatted API metrics text
+         *         content:
+         *           text/plain; version=0.0.4; charset=utf-8:
+         *             schema:
+         *               type: string
+         */
+        this.app.route("/metrics/api").get(async (_req: express.Request, res: express.Response) => {
+            res.set("Content-Type", apiMetricsRegistry.contentType);
+            res.end(await apiMetricsRegistry.metrics());
+        });
+
+        // READINESS PROBE
+        /**
+         * @swagger
+         * /ready:
+         *   get:
+         *     summary: Readiness probe for Kubernetes or orchestration tools
+         *     description: Returns 200 when all subsystems (MQTT broker, Prometheus server) are connected and ready to serve. Returns 503 when still starting up or a dependency is unavailable.
+         *     responses:
+         *       200:
+         *         description: All subsystems are ready
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 status:
+         *                   type: string
+         *                   enum: [ready, not_ready]
+         *                 dependencies:
+         *                   type: object
+         *                   properties:
+         *                     mqtt:
+         *                       type: string
+         *                       enum: [connected, disconnected]
+         *                     prometheus_server:
+         *                       type: string
+         *                       enum: [ready, not_ready]
+         *       503:
+         *         description: One or more subsystems are not ready
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 status:
+         *                   type: string
+         *                   enum: [ready, not_ready]
+         *                 dependencies:
+         *                   type: object
+         *                   properties:
+         *                     mqtt:
+         *                       type: string
+         *                       enum: [connected, disconnected]
+         *                     prometheus_server:
+         *                       type: string
+         *                       enum: [ready, not_ready]
+         */
+        this.app.route("/ready").get((req: express.Request, res: express.Response) => {
+            const typedReq = req as express.Request & {
+                mqtt_connected: boolean;
+                prometheus_server_ready: boolean;
+            };
+            typedReq.mqtt_connected = this.networking.is_connected();
+            typedReq.prometheus_server_ready = this.networking.prometheus_server_ready();
+            general_controller.getReady(req, res);
         });
     }
 }

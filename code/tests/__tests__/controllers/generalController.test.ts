@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { getAbout, getDateCurrent, getDateUTC, getHealth } from "../../../src/controllers/generalController";
+import { getAbout, getDateCurrent, getDateUTC, getHealth, getReady } from "../../../src/controllers/generalController";
 import { createMockRes, createMockReq } from "../../mocks/express";
 
 describe("getAbout", () => {
@@ -124,5 +124,71 @@ describe("getHealth", () => {
     expect(body.status).toBe("degraded");
     expect(body.mqtt).toBe("disconnected");
     expect(body.prometheus_server).toBe("not_ready");
+  });
+});
+
+describe("getReady", () => {
+  it("should return 200 when all subsystems are ready", () => {
+    const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+      prometheus_server_ready: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+
+    getReady(req, res as Response);
+
+    expect(statusCalls).toContain(200);
+    expect(contentTypeCalls).toContain("application/json");
+    expect(sendCalls).toHaveLength(1);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("ready");
+    expect(body.dependencies.mqtt).toBe("connected");
+    expect(body.dependencies.prometheus_server).toBe("ready");
+  });
+
+  it("should return 503 when MQTT is disconnected", () => {
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: false,
+      prometheus_server_ready: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+
+    getReady(req, res as Response);
+
+    expect(statusCalls).toContain(503);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("not_ready");
+    expect(body.dependencies.mqtt).toBe("disconnected");
+  });
+
+  it("should return 503 when Prometheus server is not ready", () => {
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+      prometheus_server_ready: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+
+    getReady(req, res as Response);
+
+    expect(statusCalls).toContain(503);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("not_ready");
+    expect(body.dependencies.prometheus_server).toBe("not_ready");
+  });
+
+  it("should return 503 when both dependencies are down", () => {
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: false,
+      prometheus_server_ready: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+
+    getReady(req, res as Response);
+
+    expect(statusCalls).toContain(503);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("not_ready");
+    expect(body.dependencies.mqtt).toBe("disconnected");
+    expect(body.dependencies.prometheus_server).toBe("not_ready");
   });
 });

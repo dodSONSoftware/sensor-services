@@ -1,7 +1,9 @@
 # Sensor Web Services configuration
-# Environment variable overrides: EXPRESS_PORT (main HTTP port)
 
-# Logging
+# Main HTTP server port
+express-port: 32000
+
+# Logging (debug, error, warn, info)
 log-level: debug
 
 # Optional: Loki structured logging
@@ -25,3 +27,16 @@ case-sensitive: true
 
 # Optional: override auto-derived Swagger server URL
 # swagger-server-url: "http://192.168.1.214:32000/"
+
+# Optional: disable forwarding of sensor application logs to the app logger (default: true)
+# forward-sensor-logs: false
+# Minimum log level for forwarded sensor logs (default: debug = forward everything)
+# (debug, error, warn, info)
+# forward-sensor-logs-level: info
+
+# Optional: Express JSON body size limit (default: 1mb)
+#express-body-limit: "1mb"
+
+# Optional: Rate limiting (applied to all routes)
+# rate-limit-window-ms: 900000    # 15 minutes in milliseconds
+# rate-limit-max: 100              # max requests per window

@@ -43,7 +43,12 @@ RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 USER appuser
 
 # Exposed ports
+EXPOSE 32000
 EXPOSE 3301
+
+# Healthcheck: verify the process is alive (liveness)
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+  CMD curl -f http://localhost:32000/health || exit 1
 
 # Command to run the application
 CMD ["node", "index.js"]

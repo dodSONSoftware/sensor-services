@@ -7,22 +7,34 @@
 
 import cors from "cors";
 import * as express from "express";
+import rateLimit from "express-rate-limit";
+import { randomUUID } from "crypto";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
-import { logger } from "../common/global";
+import { logger, setReqIdStore } from "../common/global";
 import { validatePostBody } from "../schemas/postBody";
 import { Json } from "../dodsonlabs/HttpConstants";
+import type { configSchema } from "../schemas/config";
+import type { z } from "zod";
+import type { AppRequest } from "../common/app-request";
+
+// Module-level config reference — set in constructor before super() so
+// createRoutes() (called from super()) can access it. Safe in Node.js (single-threaded).
+let _config: z.infer<typeof configSchema>;
 
 // **** public classes
 
 export class CreateMiddleware extends RoutesCreatorBase {
     // **** ctor
 
-    constructor(protected app: express.Application) {
+    constructor(protected app: express.Application, config: z.infer<typeof configSchema>) {
+        _config = config;
+
         // add CORS
         app.use(cors());
 
-        // add JSON
-        app.use(express.json());
+        // add JSON (configurable body limit, default 1mb)
+        const bodyLimit = config["express-body-limit"] ?? "1mb";
+        app.use(express.json({ limit: bodyLimit }));
 
         // ----
         super(app);
@@ -31,27 +43,31 @@ export class CreateMiddleware extends RoutesCreatorBase {
     // **** protected functions
 
     protected createRoutes() {
+        // add rate limiting (configurable, default 100 requests per 15 minutes)
+        const windowMs = _config["rate-limit-window-ms"] ?? 900_000;
+        const max = _config["rate-limit-max"] ?? 100;
+        this.app.use(rateLimit({
+            windowMs,
+            max,
+            standardHeaders: true,
+            legacyHeaders: false,
+            message: { error: "too many requests, please try again later" },
+        }));
+
+        // add request ID middleware (must run before logger so every log has a traceable ID)
+        this.app.use(this._requestIdMiddleware.bind(this));
+
         // add middleware components
         this.app.use(this._loggerMiddleware.bind(this));
-
-        // TODO: add more middleware
+        this.app.use(this._validateBodyMiddleware.bind(this));
     }
 
     // **** private functions
-
-    private _loggerMiddleware(request: express.Request, _response: express.Response, next: express.NextFunction) {
-        // log it
-        logger()?.write_debug("middleware.ts/loggerMiddleware", `${request.method} "${request.path}"`);
-
-        // continue
-        next();
-    }
 
     /**
      * Validates that the request body is a plain object using Zod.
      * Returns 400 with an error message if validation fails, otherwise calls next().
      */
-    // @ts-expect-error — TODO: wire into middleware chain
     private _validateBodyMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
         if (request.body === undefined || request.body === null) {
             response.status(400).contentType(Json).send({ error: "request body is required" });
@@ -66,6 +82,37 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
         // Replace req.body with the validated object so downstream handlers get the clean data
         request.body = validated;
+        next();
+    }
+
+    /**
+     * Ensures every request has a unique X-Request-ID.
+     * If the client sent one, reuse it; otherwise generate a UUID.
+     * Stores the ID in AsyncLocalStorage so any code path can access it.
+     */
+    private _requestIdMiddleware(
+        request: AppRequest,
+        response: express.Response,
+        next: express.NextFunction,
+    ) {
+        const id = request.headers["x-request-id"] as string | undefined;
+        const requestId = id ?? randomUUID();
+
+        // Attach to request and response for downstream access
+        request.id = requestId;
+        response.setHeader("X-Request-ID", requestId);
+
+        // Store in AsyncLocalStorage so Logger methods can pick it up
+        setReqIdStore(requestId);
+
+        next();
+    }
+
+    private _loggerMiddleware(_request: express.Request, _response: express.Response, next: express.NextFunction) {
+        // log it — request ID is picked up automatically from AsyncLocalStorage
+        logger()?.write_debug("middleware.ts/loggerMiddleware", "request received");
+
+        // continue
         next();
     }
 }

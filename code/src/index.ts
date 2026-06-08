@@ -16,7 +16,12 @@ import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import { aboutDude, createLogger, logger } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
-import { Counter, Histogram } from "prom-client";
+import { InternalServerError } from "./dodsonlabs/HttpConstants";
+import {
+    httpRequestsTotal,
+    httpRequestDuration,
+    httpErrorsTotal,
+} from "./common/metrics";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
@@ -24,7 +29,6 @@ import { ensureError, formatElapsedTime, read_file_yaml } from "./dodsonlabs/Sys
 import { validateConfig, type configSchema } from "./schemas/config";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
-import { InternalServerError } from "./dodsonlabs/HttpConstants";
 
 // **** route drift validation
 
@@ -56,16 +60,21 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
 // **** start up code
 
-// read the configuration file
-const rawConfig = read_file_yaml("/app/dist/config.yml") ?? read_file_yaml("./dist/config.yml");
-if (rawConfig === null) {
+// read the configuration file (try container path first, then CWD-relative)
+let configResult = read_file_yaml<z.infer<typeof configSchema>>(
+    "/app/dist/config.yml"
+);
+if (configResult.data === null) {
+    configResult = read_file_yaml<z.infer<typeof configSchema>>("./dist/config.yml");
+}
+if (configResult.data === null) {
     // eslint-disable-next-line no-console
-    console.error("ERROR: Could not read config.yml — cannot start without configuration.");
+    console.error(`ERROR: Could not read config.yml — ${configResult.error ?? "unknown error"} — cannot start without configuration.`);
     process.exit(1);
 }
 
 // validate and type the config with Zod
-const config = validate_config(rawConfig);
+const config = validate_config(configResult.data);
 
 // create logger
 createLogger(config);
@@ -86,7 +95,7 @@ const app = express();
 const networking = new MqttNetworking(config, appLogger);
 
 // get express port (before swagger so the server URL is correct)
-const port = process.env.EXPRESS_PORT !== undefined ? Number(process.env.EXPRESS_PORT) : 32000;
+const port = config["express-port"];
 
 // setup swagger (auto-derived from machine IP + port, overridable via config)
 // Resolve source dir relative to CWD so the glob finds .ts files regardless of WORKDIR
@@ -96,31 +105,11 @@ setupSwagger(app, port, srcDir, swagger_server_url);
 
 try {
     // create middleware
-    new middleware.CreateMiddleware(app);
+    new middleware.CreateMiddleware(app, config);
 
-    // **** API Prometheus metrics
-
-    // Total HTTP requests by method, route, status code
-    const httpRequestsTotal = new Counter({
-        name: "http_requests_total",
-        help: "Total number of HTTP requests.",
-        labelNames: ["method", "route", "status"],
-    });
-
-    // HTTP request duration in seconds by method and route
-    const httpRequestDuration = new Histogram({
-        name: "http_request_duration_seconds",
-        help: "HTTP request duration in seconds.",
-        labelNames: ["method", "route"],
-        buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
-    });
-
-    // HTTP 5xx errors by method and route
-    const httpErrorsTotal = new Counter({
-        name: "http_errors_total",
-        help: "Total number of HTTP 5xx errors.",
-        labelNames: ["method", "route"],
-    });
+    // **** API Prometheus metrics (separate registry, exposed at /metrics/api)
+    // Registry and metrics are imported from common/metrics.ts so they can
+    // also be used by route handlers (e.g. generalRoutes.ts).
 
     // Track request duration and status, record metrics after response is sent
     app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -215,7 +204,7 @@ async function shutdown(signal: string): Promise<void> {
         await networking.prometheus_flush();
 
         // 3. Close MQTT client with a timeout
-        networking.close(5000);
+        await networking.close(5000);
 
         appLogger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
     } catch (err) {

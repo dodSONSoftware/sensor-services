@@ -9,8 +9,6 @@ import type express from "express";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import * as pinger_controller from "../controllers/pingerController";
-import { validatePostBody } from "../schemas/postBody";
-import { Json } from "../dodsonlabs/HttpConstants";
 
 
 
@@ -92,6 +90,24 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *           application/json:
          *             schema:
          *               type: object
+         *       500:
+         *         description: Upstream error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *       502:
+         *         description: Upstream unavailable
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/about").get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api));
 
@@ -109,6 +125,24 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *           application/json:
          *             schema:
          *               type: object
+         *       500:
+         *         description: Upstream error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *       502:
+         *         description: Upstream unavailable
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/read-config").get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api));
 
@@ -133,15 +167,27 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *           application/json:
          *             schema:
          *               type: object
+         *       500:
+         *         description: Upstream error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *       502:
+         *         description: Upstream unavailable
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/write-config").post((req: express.Request, res: express.Response) => {
-            const validated = validatePostBody(req.body);
-            if (validated === null) {
-                res.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
-                return;
-            }
-            req.body = validated;
-            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, validated);
+            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, req.body);
         });
 
         // RESTART
@@ -165,15 +211,27 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *           application/json:
          *             schema:
          *               type: object
+         *       500:
+         *         description: Upstream error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *       502:
+         *         description: Upstream unavailable
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/restart").post((req: express.Request, res: express.Response) => {
-            const validated = validatePostBody(req.body);
-            if (validated === null) {
-                res.status(400).contentType(Json).send({ error: "request body must be a JSON object" });
-                return;
-            }
-            req.body = validated;
-            pinger_controller.postRestart(req, res, this._ip_pinger_web_api);
+            pinger_controller.postRestart(req, res, this._ip_pinger_web_api, req.body);
         });
 
         // PING
@@ -192,6 +250,31 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   ip-address:
+         *                     type: string
+         *                   reachable:
+         *                     type: boolean
+         *       500:
+         *         description: Upstream error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *       502:
+         *         description: Upstream unavailable
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/ping").get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api));
 
@@ -219,6 +302,31 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   ip-address:
+         *                     type: string
+         *                   reachable:
+         *                     type: boolean
+         *       500:
+         *         description: Upstream error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *       502:
+         *         description: Upstream unavailable
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/ping/:target").get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target));
 
@@ -238,6 +346,25 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *               type: array
          *               items:
          *                 type: object
+         *                 properties:
+         *                   source:
+         *                     type: string
+         *                   state:
+         *                     type: string
+         *                     enum: [OK, IP Address Mismatch, Name Mismatch, Offline, New]
+         *                   state-value:
+         *                     type: object
+         *                     additionalProperties:
+         *                       type: string
+         *       500:
+         *         description: Internal error
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api, this._case_sensitive));
     }

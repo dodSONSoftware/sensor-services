@@ -9,7 +9,7 @@ import type * as express from "express";
 import { InternalServerError, Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
-import { ensureError, sleep } from "../dodsonlabs/SystemFunctions";
+import { ensureError } from "../dodsonlabs/SystemFunctions";
 import type { IMqttCommandControl } from "../dodsonlabs/Interfaces";
 import { randomUUID } from "crypto";
 
@@ -56,33 +56,34 @@ function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<stri
     network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
 }
 
-// Maximum time to wait for a single MQTT command to complete (30 seconds).
+// Maximum time to wait for a single MQTT command to complete (10 seconds).
 // This is a hard safety cap — if restart_clock() keeps pushing the timeout,
-// the loop must eventually exit to avoid hanging the caller forever.
-const __max_wait_ms = 30_000;
+// the wait must eventually exit to avoid hanging the caller forever.
+const __max_wait_ms = 10_000;
 
 async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl) {
-    const start = Date.now();
+    // Event-based wait: resolves when no more responses arrive within the timeout window,
+    // or when deinitialize() is called. Eliminates the 1-second polling loop.
+    const completion = dude.waitForCompletion();
 
-    while (true) {
-        // hard time cap
-        if (Date.now() - start > __max_wait_ms) {
+    // Hard safety cap: if restart_clock() keeps resetting the timeout,
+    // we must eventually exit to avoid hanging the caller forever.
+    // Uses AbortController so the setTimeout is cancelled when the race resolves.
+    const controller = new AbortController();
+    const hard_timeout = new Promise<void>((resolve) => {
+        const tid = setTimeout(() => {
             logger()?.write_error(
                 "sensorController.ts/mqtt_command_wait_for_command_completion",
                 `Command timed out after ${__max_wait_ms}ms hard cap`
             );
-            break;
-        }
+            dude.deinitialize();
+            resolve();
+        }, __max_wait_ms);
+        controller.signal.addEventListener("abort", () => clearTimeout(tid), { once: true });
+    });
 
-        // wait-a-bit
-        await sleep(1000);
-        // check dude
-        if (dude.is_timed_out) {
-            break;
-        }
-    }
-
-    // terminate timer
+    await Promise.race([completion, hard_timeout]);
+    controller.abort();
     dude.deinitialize();
 }
 

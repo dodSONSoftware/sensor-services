@@ -91,6 +91,27 @@ export function getHealth(req: express.Request, res: express.Response) {
     res.send(health);
 }
 
+export function getReady(req: express.Request, res: express.Response) {
+    const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
+    const prom_ready = (req as express.Request & { prometheus_server_ready: boolean }).prometheus_server_ready;
+
+    const ready = is_connected && prom_ready;
+
+    const body = {
+        status: ready ? "ready" : "not_ready",
+        dependencies: {
+            mqtt: is_connected ? "connected" : "disconnected",
+            prometheus_server: prom_ready ? "ready" : "not_ready",
+        },
+    };
+
+    logger()?.write_debug("generalController.ts/getReady", JSON.stringify(body));
+
+    res.status(ready ? OK : 503);
+    res.contentType(Json);
+    res.send(body);
+}
+
 export function getDateUTC(_req: express.Request, res: express.Response) {
     // get UTC date-time string
     const dt = `${new Date().toISOString().split(".")[0]}Z`;

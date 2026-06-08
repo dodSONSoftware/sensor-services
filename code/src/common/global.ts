@@ -6,6 +6,7 @@
  */
 
 import os from "os";
+import { AsyncLocalStorage } from "async_hooks";
 import type { IAbout } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
@@ -13,7 +14,6 @@ import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
-//import { __routesHelp as routeNotFoundRoutesHelp } from "../routes/routeNotFound";
 
 // **** public functions
 
@@ -25,6 +25,24 @@ export const logger = () => _logger;
 export const createLogger = (config: z.infer<typeof configSchema>) => {
     setLogger(new Logger(config));
 };
+
+// ---- Request ID propagation via AsyncLocalStorage
+
+const _reqIdStore = new AsyncLocalStorage<string>();
+
+/**
+ * Store the current request's ID in AsyncLocalStorage.
+ * Call from middleware at the start of each request.
+ */
+export function setReqIdStore(id: string) {
+    _reqIdStore.enterWith(id);
+}
+
+/**
+ * Return the current request's ID, or "none" if outside a request context.
+ * Use this in Logger methods so every log line is traceable.
+ */
+export const reqId = () => _reqIdStore.getStore() ?? "none";
 
 // --------------------------------
 

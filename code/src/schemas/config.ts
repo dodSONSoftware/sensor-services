@@ -16,6 +16,10 @@ export const configSchema = z.object({
     "log-level": z.enum(["error", "info", "debug"], {
         error: "log-level must be one of: error, info, debug",
     }),
+    "express-port": z.number({
+        error: "express-port must be a number",
+    }).int("express-port must be an integer")
+        .positive("express-port must be greater than 0"),
     "prometheus-port": z.number({
         error: "prometheus-port must be a number",
     }).int("prometheus-port must be an integer")
@@ -41,6 +45,19 @@ export const configSchema = z.object({
     "swagger-server-url": z.string().optional(),
     "loki-url": z.string().optional(),
     "loki-enabled": z.boolean().optional(),
+    "forward-sensor-logs": z.boolean().optional(),
+    "forward-sensor-logs-level": z.enum(["error", "warn", "info", "debug"], {
+        error: "forward-sensor-logs-level must be one of: error, warn, info, debug",
+    }).optional(),
+    "express-body-limit": z.string().optional(),
+    "rate-limit-window-ms": z.number({
+        error: "rate-limit-window-ms must be a number",
+    }).int("rate-limit-window-ms must be an integer")
+        .positive("rate-limit-window-ms must be greater than 0").optional(),
+    "rate-limit-max": z.number({
+        error: "rate-limit-max must be a number",
+    }).int("rate-limit-max must be an integer")
+        .positive("rate-limit-max must be greater than 0").optional(),
 });
 
 /**

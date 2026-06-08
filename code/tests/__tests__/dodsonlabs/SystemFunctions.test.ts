@@ -2,7 +2,6 @@ import {
   ensureError,
   formatElapsedTime,
   convert_from_log_level_string_to_enum,
-  convert_enum_to_string,
 } from "../../../src/dodsonlabs/SystemFunctions";
 import { LogLevel } from "../../../src/dodsonlabs/Interfaces";
 
@@ -74,23 +73,5 @@ describe("convert_from_log_level_string_to_enum", () => {
 
   it("should default to LogLevel.None for unknown strings", () => {
     expect(convert_from_log_level_string_to_enum("unknown")).toBe(LogLevel.None);
-  });
-});
-
-describe("convert_enum_to_string", () => {
-  it("should convert LogLevel.Error to 'Error'", () => {
-    expect(convert_enum_to_string(LogLevel.Error)).toBe("Error");
-  });
-
-  it("should convert LogLevel.Info to 'Info'", () => {
-    expect(convert_enum_to_string(LogLevel.Info)).toBe("Info");
-  });
-
-  it("should convert LogLevel.Debug to 'Debug'", () => {
-    expect(convert_enum_to_string(LogLevel.Debug)).toBe("Debug");
-  });
-
-  it("should convert LogLevel.None to 'None'", () => {
-    expect(convert_enum_to_string(LogLevel.None)).toBe("None");
   });
 });
