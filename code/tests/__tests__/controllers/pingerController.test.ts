@@ -1,6 +1,21 @@
-import { analyzeIt, createAnalyzeResult, getAnalyzeIpPinger } from "../../../src/controllers/pingerController";
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
+import { analyzeIt, createAnalyzeResult, getAbout, getAnalyzeIpPinger, getPing, postWriteConfig } from "../../../src/controllers/pingerController";
 import type { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
 import type express from "express";
+
+// Mock AbortSignal.timeout so tests don't hang on real timers.
+// Returns a signal that never fires (aborts only if explicitly aborted).
+const _neverAbortSignal = new AbortController().signal;
+beforeAll(() => {
+  jest.spyOn(AbortSignal, "timeout").mockImplementation((_ms: number) => _neverAbortSignal);
+});
+afterAll(() => {
+  jest.restoreAllMocks();
+});
 
 describe("createAnalyzeResult", () => {
   it("should attach state and state-value to a new object without mutating origin", () => {
@@ -150,33 +165,42 @@ describe("analyzeIt", () => {
   });
 });
 
-describe("getAnalyzeIpPinger", () => {
-  function createMockNetwork(liveResults: unknown[]): MqttNetworking {
-    return {
-      mqtt_topic_telemetry: "iot/telemetry",
-      mqtt_topic_command: "iot/v2/command",
-      mqtt_topic_command_response: "iot/v2/command-response",
-      is_connected: jest.fn().mockReturnValue(true),
-      prometheus_server_ready: jest.fn().mockReturnValue(true),
-      publish_mqtt_message: jest.fn(),
-      close: jest.fn(),
-      get_cr_dude: jest.fn().mockReturnValue({
-        is_running: false,
-        is_timed_out: true,
-        timeout: null,
-        results: liveResults,
-        initialize: jest.fn(),
-        deinitialize: jest.fn(),
-        restart_clock: jest.fn(),
-        cancel_clock: jest.fn(),
-        // Return an already-resolved promise so mqtt_command_wait_for_command_completion
-        // skips the hard-timeout setTimeout entirely.
-        waitForCompletion: jest.fn().mockImplementation(() => Promise.resolve()),
-      }),
-      register_command_id: jest.fn().mockReturnValue(true),
-    } as unknown as MqttNetworking;
-  }
+function createMockNetwork(liveResults: unknown[]): MqttNetworking {
+  return {
+    mqtt_topic_telemetry: "iot/telemetry",
+    mqtt_topic_command: "iot/v2/command",
+    mqtt_topic_command_response: "iot/v2/command-response",
+    is_connected: jest.fn().mockReturnValue(true),
+    prometheus_server_ready: jest.fn().mockReturnValue(true),
+    publish_mqtt_message: jest.fn(),
+    close: jest.fn(),
+    get_cr_dude: jest.fn().mockReturnValue({
+      is_running: false,
+      is_timed_out: true,
+      timeout: null,
+      results: liveResults,
+      initialize: jest.fn(),
+      deinitialize: jest.fn(),
+      clear_results: jest.fn(),
+      restart_clock: jest.fn(),
+      cancel_clock: jest.fn(),
+      // Return an already-resolved promise so mqtt_command_wait_for_command_completion
+      // skips the hard-timeout setTimeout entirely.
+      waitForCompletion: jest.fn().mockImplementation(() => Promise.resolve()),
+    }),
+    register_command_id: jest.fn().mockReturnValue(true),
+  } as unknown as MqttNetworking;
+}
 
+function createMockRes() {
+  return {
+    status: jest.fn().mockReturnThis(),
+    contentType: jest.fn().mockReturnThis(),
+    send: jest.fn(),
+  };
+}
+
+describe("getAnalyzeIpPinger", () => {
   beforeEach(() => {
     // Mock fetch globally
     (globalThis.fetch as jest.Mock) = jest.fn();
@@ -205,7 +229,8 @@ describe("getAnalyzeIpPinger", () => {
       res,
       network,
       "http://192.168.1.4:3300",
-      true
+      true,
+      10_000
     );
 
     expect(res.status).toHaveBeenCalledWith(200);
@@ -244,7 +269,8 @@ describe("getAnalyzeIpPinger", () => {
       res,
       network,
       "http://192.168.1.4:3300",
-      true
+      true,
+      10_000
     );
 
     expect(res.status).toHaveBeenCalledWith(200);
@@ -275,7 +301,8 @@ describe("getAnalyzeIpPinger", () => {
       res,
       network,
       "http://192.168.1.4:3300",
-      true
+      true,
+      10_000
     );
 
     expect(res.status).toHaveBeenCalledWith(200);
@@ -284,6 +311,440 @@ describe("getAnalyzeIpPinger", () => {
         warning: "ip-pinger service unavailable — analysis incomplete",
         live_sensors: [],
       })
+    );
+  });
+});
+
+// **** fetchIt / postIt / fetchItOnly non-OK response branches
+
+describe("fetchIt non-OK response", () => {
+  it("should return 502 when fetchIt receives a non-OK response", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: "Service Unavailable",
+    });
+
+    const res = createMockRes();
+
+    await getAbout(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.contentType).toHaveBeenCalledWith("application/json");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "upstream error: 503 Service Unavailable",
+      })
+    );
+  });
+});
+
+describe("fetchIt timeout", () => {
+  it("should return 502 when fetch times out", async () => {
+    // Restore real AbortSignal.timeout so the signal actually fires.
+    jest.restoreAllMocks();
+
+    const mockFetch = globalThis.fetch as jest.Mock;
+    // Simulate a hanging fetch that never resolves on its own,
+    // but does reject when the AbortSignal fires.
+    mockFetch.mockImplementation((_url, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new Error("The operation was aborted"));
+        }, { once: true });
+      });
+    });
+
+    const res = createMockRes();
+
+    await getAbout(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      50  // 50ms timeout for fast test
+    );
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.contentType).toHaveBeenCalledWith("application/json");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "upstream unavailable",
+      })
+    );
+
+    // Re-apply the mock for subsequent tests.
+    jest.spyOn(AbortSignal, "timeout").mockImplementation((_ms: number) => _neverAbortSignal);
+  });
+});
+
+describe("postIt non-OK response", () => {
+  it("should return 502 when postIt receives a non-OK response", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+    });
+
+    const res = createMockRes();
+
+    await postWriteConfig(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      { key: "value" },
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.contentType).toHaveBeenCalledWith("application/json");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "upstream unavailable",
+      })
+    );
+  });
+});
+
+describe("fetchItOnly non-OK response", () => {
+  it("should return warning when fetchItOnly receives a non-OK response", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: "Bad Gateway",
+    });
+
+    const network = createMockNetwork([
+      { source: "sensor-1", payload: { "ip-address": "192.168.1.10" } },
+    ]);
+
+    const res = createMockRes();
+
+    await getAnalyzeIpPinger(
+      {} as express.Request,
+      res,
+      network,
+      "http://192.168.1.4:3300",
+      true,
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.contentType).toHaveBeenCalledWith("application/json");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        warning: "ip-pinger service unavailable — analysis incomplete",
+        live_sensors: [{ source: "sensor-1", payload: { "ip-address": "192.168.1.10" } }],
+      })
+    );
+  });
+
+  it("should call clear_results even when analyzeIt throws", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        devices: "not-an-array", // invalid shape — analyzeIt will throw
+      }),
+    });
+
+    const network = createMockNetwork([
+      { source: "sensor-1", payload: { "ip-address": "192.168.1.10" } },
+    ]);
+
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await expect(
+      getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:3300",
+        true,
+        10_000
+      )
+    ).rejects.toThrow();
+
+    // clear_results must be called even on error path
+    expect(network.get_cr_dude("identify")!.clear_results).toHaveBeenCalled();
+  });
+});
+
+// **** getPing IP validation
+
+describe("getPing IP validation", () => {
+  beforeEach(() => {
+    (globalThis.fetch as jest.Mock) = jest.fn();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("should forward valid public IP to upstream", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({ status: "ok" }),
+    });
+
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "8.8.8.8",
+      10_000
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(mockFetch).toHaveBeenCalledWith("http://192.168.1.4:3300/ping/8.8.8.8", expect.anything());
+  });
+
+  it("should reject empty string", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("non-empty") })
+    );
+  });
+
+  it("should reject non-IPv4 strings", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "not-an-ip",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("IPv4") })
+    );
+  });
+
+  it("should reject out-of-range octets", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "999.999.999.999",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("out of range") })
+    );
+  });
+
+  it("should reject loopback 127.0.0.1", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "127.0.0.1",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
+    );
+  });
+
+  it("should reject AWS metadata 169.254.169.254", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "169.254.169.254",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
+    );
+  });
+
+  it("should reject path traversal attempts", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "../../etc/passwd",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringMatching(/invalid characters|IPv4/) })
+    );
+  });
+
+  it("should reject URL-encoded SSRF payloads", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "127.0.0.1%2F..%2Fetc%2Fpasswd",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("invalid characters") })
+    );
+  });
+
+  it("should reject private 10.x.x.x addresses", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "10.0.0.1",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
+    );
+  });
+
+  it("should reject private 172.16-31.x.x addresses", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "172.16.0.1",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
+    );
+  });
+
+  it("should reject private 192.168.x.x addresses", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "192.168.1.100",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
+    );
+  });
+
+  it("should reject multicast 224.x.x.x addresses", async () => {
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await getPing(
+      {} as express.Request,
+      res,
+      "http://192.168.1.4:3300",
+      "224.0.0.1",
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
     );
   });
 });

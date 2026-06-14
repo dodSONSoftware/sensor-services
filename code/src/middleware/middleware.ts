@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import cors from "cors";
@@ -10,7 +8,7 @@ import * as express from "express";
 import rateLimit from "express-rate-limit";
 import { randomUUID } from "crypto";
 import { RoutesCreatorBase } from "../dodsonlabs/CreatorBase";
-import { logger, setReqIdStore } from "../common/global";
+import { _reqIdStore, logger } from "../common/global";
 import { validatePostBody } from "../schemas/postBody";
 import { Json } from "../dodsonlabs/HttpConstants";
 import type { configSchema } from "../schemas/config";
@@ -102,10 +100,11 @@ export class CreateMiddleware extends RoutesCreatorBase {
         request.id = requestId;
         response.setHeader("X-Request-ID", requestId);
 
-        // Store in AsyncLocalStorage so Logger methods can pick it up
-        setReqIdStore(requestId);
-
-        next();
+        // Scope the entire request lifecycle (including async handlers)
+        // to this request's async context.  Long-running operations from
+        // previous requests won't inherit this ID, and this request won't
+        // pick up a stale ID from a previous request.
+        _reqIdStore.run(requestId, next);
     }
 
     private _loggerMiddleware(_request: express.Request, _response: express.Response, next: express.NextFunction) {

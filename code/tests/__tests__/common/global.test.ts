@@ -1,4 +1,9 @@
-import { aboutDude } from "../../../src/common/global";
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
+import { aboutDude, createLogger, logger, reqId, setLogger, setReqIdStore } from "../../../src/common/global";
 
 describe("aboutDude", () => {
   it("should return an IAbout object with expected structure", () => {
@@ -31,5 +36,65 @@ describe("aboutDude", () => {
   it("should have a version string", () => {
     const about = aboutDude();
     expect(typeof about.about.version).toBe("string");
+  });
+});
+
+// **** createLogger / setReqIdStore
+
+describe("createLogger", () => {
+  afterEach(() => {
+    setLogger(undefined as any);
+  });
+
+  it("should create a Logger and set it via setLogger", () => {
+    const config = {
+      "log-level": "info",
+      "express-port": 32000,
+      "prometheus-port": 3301,
+      "mqtt-broker-ip-address": "127.0.0.1",
+      "mqtt-topic-telemetry": "iot/telemetry",
+      "mqtt-topic-command": "iot/v2/command",
+      "mqtt-topic-command-response": "iot/v2/command-response",
+      "ip-pinger-web-api": "http://127.0.0.1:3300",
+      "case-sensitive": true,
+    } as any;
+
+    createLogger(config);
+
+    const log = logger();
+    expect(log).toBeDefined();
+    expect(log).toHaveProperty("write_info");
+    expect(log).toHaveProperty("write_error");
+    expect(log).toHaveProperty("write_debug");
+    expect(log).toHaveProperty("write_warn");
+  });
+
+  it("should create a Logger with debug level when config specifies debug", () => {
+    const config = {
+      "log-level": "debug",
+      "express-port": 32000,
+      "prometheus-port": 3301,
+      "mqtt-broker-ip-address": "127.0.0.1",
+      "mqtt-topic-telemetry": "iot/telemetry",
+      "mqtt-topic-command": "iot/v2/command",
+      "mqtt-topic-command-response": "iot/v2/command-response",
+      "ip-pinger-web-api": "http://127.0.0.1:3300",
+      "case-sensitive": true,
+    } as any;
+
+    createLogger(config);
+
+    const log = logger();
+    expect(log).toBeDefined();
+  });
+});
+
+describe("setReqIdStore", () => {
+  it("is a no-op — the middleware manages the store via AsyncLocalStorage.run()", () => {
+    // setReqIdStore no longer directly sets the store; the middleware
+    // in middleware.ts wraps next() in _reqIdStore.run(id, next) so
+    // each request gets its own isolated async context.
+    setReqIdStore("ignored");
+    expect(reqId()).toBe("none");
   });
 });

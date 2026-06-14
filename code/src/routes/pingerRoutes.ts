@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import type express from "express";
@@ -63,14 +61,16 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
 
     private _ip_pinger_web_api: string;
     private _case_sensitive: boolean;
+    private _fetch_timeout_ms: number;
 
     // **** ctor
 
-    constructor(protected app: express.Application, protected network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean) {
+    constructor(protected app: express.Application, protected network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean, fetch_timeout_ms: number) {
         super(app);
         this.network = network;
         this._ip_pinger_web_api = ip_pinger_web_api;
         this._case_sensitive = case_sensitive;
+        this._fetch_timeout_ms = fetch_timeout_ms;
     }
 
     // **** protected functions
@@ -109,7 +109,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/ippinger/about").get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/about").get((req: express.Request, res: express.Response) => pinger_controller.getAbout(req, res, this._ip_pinger_web_api, this._fetch_timeout_ms));
 
         // READ-CONFIG
         /**
@@ -144,7 +144,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/ippinger/read-config").get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/read-config").get((req: express.Request, res: express.Response) => pinger_controller.getReadConfig(req, res, this._ip_pinger_web_api, this._fetch_timeout_ms));
 
         // WRITE-CONFIG
         /**
@@ -187,7 +187,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                   type: string
          */
         this.app.route("/ippinger/write-config").post((req: express.Request, res: express.Response) => {
-            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, req.body);
+            pinger_controller.postWriteConfig(req, res, this._ip_pinger_web_api, req.body, this._fetch_timeout_ms);
         });
 
         // RESTART
@@ -231,7 +231,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                   type: string
          */
         this.app.route("/ippinger/restart").post((req: express.Request, res: express.Response) => {
-            pinger_controller.postRestart(req, res, this._ip_pinger_web_api, req.body);
+            pinger_controller.postRestart(req, res, this._ip_pinger_web_api, req.body, this._fetch_timeout_ms);
         });
 
         // PING
@@ -276,7 +276,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/ippinger/ping").get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api));
+        this.app.route("/ippinger/ping").get((req: express.Request, res: express.Response) => pinger_controller.getPings(req, res, this._ip_pinger_web_api, this._fetch_timeout_ms));
 
 
         // PING/{TARGET}
@@ -328,7 +328,7 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/ippinger/ping/:target").get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target));
+        this.app.route("/ippinger/ping/:target").get((req: express.Request, res: express.Response) => pinger_controller.getPing(req, res, this._ip_pinger_web_api, req.params.target, this._fetch_timeout_ms));
 
         // ANALYZE-IPPINGER
         /**
@@ -366,6 +366,6 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api, this._case_sensitive));
+        this.app.route("/ippinger/analyze-ippinger").get((req: express.Request, res: express.Response) => pinger_controller.getAnalyzeIpPinger(req, res, this.network, this._ip_pinger_web_api, this._case_sensitive, this._fetch_timeout_ms));
     }
 }

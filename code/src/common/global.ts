@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import os from "os";
 import { AsyncLocalStorage } from "async_hooks";
+import { createRequire } from "module";
 import type { IAbout } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
@@ -14,6 +13,10 @@ import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
+
+// Load version from package.json at module load time
+const pkgRequire = createRequire(__filename);
+const { version } = pkgRequire("../../package.json") as { version: string };
 
 // **** public functions
 
@@ -28,15 +31,17 @@ export const createLogger = (config: z.infer<typeof configSchema>) => {
 
 // ---- Request ID propagation via AsyncLocalStorage
 
-const _reqIdStore = new AsyncLocalStorage<string>();
+export const _reqIdStore = new AsyncLocalStorage<string>();
 
 /**
- * Store the current request's ID in AsyncLocalStorage.
- * Call from middleware at the start of each request.
+ * Return the current request's ID, or "none" if outside a request context.
+ * (Kept as a no-op stub for callers that may import it; the middleware
+ *  now manages the store directly via `run()`.)
  */
-export function setReqIdStore(id: string) {
-    _reqIdStore.enterWith(id);
-}
+export const setReqIdStore = (_id: string) => {
+    // No-op — the middleware wraps `next()` in `_reqIdStore.run()`
+    // so the store is managed at the middleware level.
+};
 
 /**
  * Return the current request's ID, or "none" if outside a request context.
@@ -68,7 +73,7 @@ export function aboutDude(): IAbout {
         _aboutDudeInfo = {
             about: {
                 name: "Sensor Web Services",
-                version: "2.0.0",
+                version,
                 author: "Randy Dodson (dodsonsoftware@gmail.com)",
                 description: "Provides sensor-related web services.",
                 copyright: "Copyright (c) 2025-2026 dodson Software ( dodson labs )",

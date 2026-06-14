@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import request from "supertest";
 import express from "express";
 import { CreateGeneralRoutes } from "../../../src/routes/generalRoutes";
@@ -49,6 +54,30 @@ describe("General Routes", () => {
       const app = createTestApp();
 
       const res = await request(app).get("/date_utc");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/text\/plain/);
+      expect(res.text).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    });
+  });
+
+  describe("GET /date-local", () => {
+    it("should return a formatted local date string", async () => {
+      const app = createTestApp();
+
+      const res = await request(app).get("/date-local");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/text\/plain/);
+      expect(res.text).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    });
+  });
+
+  describe("GET /date-utc", () => {
+    it("should return a formatted UTC date string", async () => {
+      const app = createTestApp();
+
+      const res = await request(app).get("/date-utc");
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/text\/plain/);

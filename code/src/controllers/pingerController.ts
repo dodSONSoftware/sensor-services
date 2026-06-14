@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import type * as express from "express";
@@ -30,17 +28,78 @@ export interface AnalyzeResultBase {
     "state-value": Record<string, string>;
 }
 
+// ---- IP validation helpers
+
+/** Strict IPv4 address regex — four octets, each 0-255. */
+const IPV4_REGEX = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+/** Check if an octet is in a private/reserved range. */
+function isPrivateOrReserved(ip: string): boolean {
+    const match = ip.match(IPV4_REGEX);
+    if (!match) return false;
+
+    const [, a, b] = match.map(Number);
+
+    // 10.0.0.0/8
+    if (a === 10) return true;
+    // 172.16.0.0/12
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    // 192.168.0.0/16
+    if (a === 192 && b === 168) return true;
+    // 127.0.0.0/8 (loopback)
+    if (a === 127) return true;
+    // 169.254.0.0/16 (link-local)
+    if (a === 169 && b === 254) return true;
+    // 0.0.0.0/8
+    if (a === 0) return true;
+    // 224.0.0.0/4 (multicast) and 240.0.0.0/4 (reserved)
+    if (a >= 224) return true;
+
+    return false;
+}
+
+/** Validate that `ip` is a well-formed IPv4 address and not private/reserved. */
+function validateIpAddress(ip: string): string | null {
+    if (typeof ip !== "string" || ip.trim() === "") {
+        return "target must be a non-empty string";
+    }
+
+    // Reject URL injection characters (but allow dots — they're valid in IPv4)
+    if (/[?#]/.test(ip) || /\s/.test(ip) || /%/.test(ip)) {
+        return "target contains invalid characters";
+    }
+
+    const match = ip.match(IPV4_REGEX);
+    if (!match) {
+        return "target must be a valid IPv4 address";
+    }
+
+    // Validate each octet is 0-255
+    for (let i = 1; i <= 4; i++) {
+        const octet = Number(match[i]);
+        if (octet < 0 || octet > 255) {
+            return `target octet ${i} out of range (0-255)`;
+        }
+    }
+
+    if (isPrivateOrReserved(ip)) {
+        return "target IP is in a private or reserved range";
+    }
+
+    return null; // valid
+}
+
 // ---- private functions
 
-async function fetchIt(res: express.Response, originator: string, url: string) {
+async function fetchIt(res: express.Response, originator: string, url: string, timeoutMs: number) {
     const origin = `${originator}/fetchIt`;
 
     try {
-        const response = await fetch(url);
+        const response = await fetchWithTimeout(url, timeoutMs);
 
         if (!response.ok) {
             logger()?.write_error(origin, `Url=${url}, Status=${response.status}`);
-            res.status(InternalServerError).contentType(Json).send({
+            res.status(502).contentType(Json).send({
                 error: `upstream error: ${response.status} ${response.statusText}`
             });
             return;
@@ -56,11 +115,11 @@ async function fetchIt(res: express.Response, originator: string, url: string) {
     }
 }
 
-async function postIt(res: express.Response, originator: string, url: string, data: Record<string, unknown>) {
+async function postIt(res: express.Response, originator: string, url: string, data: Record<string, unknown>, timeoutMs: number) {
     const origin = `${originator}/postIt`;
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, timeoutMs, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -86,51 +145,73 @@ async function postIt(res: express.Response, originator: string, url: string, da
 
 // ---- public functions
 
-export async function getAbout(_req: express.Request, res: express.Response, ip_pinger_web_api: string) {
+export async function getAbout(_req: express.Request, res: express.Response, ip_pinger_web_api: string, timeoutMs: number) {
     const url = `${ip_pinger_web_api}/about`;
     const originator = "pingerController.ts/getAbout";
-    await fetchIt(res, originator, url);
+    await fetchIt(res, originator, url, timeoutMs);
 }
 
-export async function getReadConfig(_req: express.Request, res: express.Response, ip_pinger_web_api: string) {
+export async function getReadConfig(_req: express.Request, res: express.Response, ip_pinger_web_api: string, timeoutMs: number) {
     const url = `${ip_pinger_web_api}/read-config`;
     const originator = "pingerController.ts/getReadConfig";
-    await fetchIt(res, originator, url);
+    await fetchIt(res, originator, url, timeoutMs);
 }
 
-export async function postWriteConfig(_req: express.Request, res: express.Response, ip_pinger_web_api: string, data: Record<string, unknown>) {
+export async function postWriteConfig(_req: express.Request, res: express.Response, ip_pinger_web_api: string, data: Record<string, unknown>, timeoutMs: number) {
     const url = `${ip_pinger_web_api}/write-config`;
     const originator = "pingerController.ts/postWriteConfig";
-    await postIt(res, originator, url, data);
+    await postIt(res, originator, url, data, timeoutMs);
 }
 
-export async function postRestart(_req: express.Request, res: express.Response, ip_pinger_web_api: string, data: Record<string, unknown>) {
+export async function postRestart(_req: express.Request, res: express.Response, ip_pinger_web_api: string, data: Record<string, unknown>, timeoutMs: number) {
     const url = `${ip_pinger_web_api}/restart`;
     const originator = "pingerController.ts/postRestart";
-    await postIt(res, originator, url, data);
+    await postIt(res, originator, url, data, timeoutMs);
 }
 
-export async function getPing(_req: express.Request, res: express.Response, ip_pinger_web_api: string, ping_ip_address: string) {
-    const url = `${ip_pinger_web_api}/ping/${ping_ip_address}`;
+export async function getPing(_req: express.Request, res: express.Response, ip_pinger_web_api: string, target: string, timeoutMs: number) {
     const originator = "pingerController.ts/getPing";
-    await fetchIt(res, originator, url);
+
+    const error = validateIpAddress(target);
+    if (error) {
+        logger()?.write_warn(originator, `Invalid target: ${target}, Reason: ${error}`);
+        res.status(400).contentType(Json).send({ error });
+        return;
+    }
+
+    const url = `${ip_pinger_web_api}/ping/${target}`;
+    await fetchIt(res, originator, url, timeoutMs);
 }
 
-export async function getPings(_req: express.Request, res: express.Response, ip_pinger_web_api: string) {
+export async function getPings(_req: express.Request, res: express.Response, ip_pinger_web_api: string, timeoutMs: number) {
     const url = `${ip_pinger_web_api}/ping`;
     const originator = "pingerController.ts/getPings";
-    await fetchIt(res, originator, url);
+    await fetchIt(res, originator, url, timeoutMs);
 }
 
 // --------------------------------
 
 // ---- GET ANALYZE IP PINGER
 
-async function fetchItOnly(originator: string, url: string): Promise<unknown | null> {
+/**
+ * Wrapper around native fetch() with an AbortSignal timeout.
+ * Throws an AbortError when the timeout fires, which callers
+ * catch and translate to HTTP 502.
+ */
+async function fetchWithTimeout(
+    url: string,
+    timeoutMs: number,
+    init?: RequestInit
+): Promise<Response> {
+    const signal = AbortSignal.timeout(timeoutMs);
+    return fetch(url, { ...init, signal });
+}
+
+async function fetchItOnly(originator: string, url: string, timeoutMs: number): Promise<unknown | null> {
     const origin = `${originator}/fetchItOnly`;
 
     try {
-        const response = await fetch(url);
+        const response = await fetchWithTimeout(url, timeoutMs);
         if (!response.ok) {
             logger()?.write_warn(origin, `Url=${url}, Status=${response.status}`);
             return null;
@@ -236,23 +317,22 @@ export function analyzeIt(
     return results;
 }
 
-export async function getAnalyzeIpPinger(_req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean) {
-    // start sensor "identify", "*"
-    const sensors_promise = mqtt_command_get_messages(network, "*", "identify");
-
-    // read configuration from ip-pinger
+export async function getAnalyzeIpPinger(_req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean, timeoutMs: number) {
+    // read configuration from ip-pinger first — fast path, fails quickly on error
     const url = `${ip_pinger_web_api}/read-config`;
-    const ippinger_config_promise = fetchItOnly("getAnalyzeIpPinger", url);
-
-    // wait-for-them
-    const request_results = await Promise.all([sensors_promise, ippinger_config_promise]);
-
-    // get results
-    const [commandControl, ippingerConfig] = request_results;
-    const sensors = commandControl.results as LiveSensor[];
+    const ippingerConfig = await fetchItOnly("getAnalyzeIpPinger", url, timeoutMs);
 
     if (ippingerConfig === null) {
-        // IP pinger unreachable — return live sensors with a warning instead of a hard error.
+        // IP pinger unreachable — fall back to live sensors only.
+        // Start the MQTT identify in parallel so we don't block on the slow path.
+        const commandControl = await mqtt_command_get_messages(network, "*", "identify");
+        if (commandControl === null) {
+            res.status(InternalServerError).json({ error: "Unknown command type received from sensor" });
+            return;
+        }
+        const sensors = commandControl.results as LiveSensor[];
+        commandControl.clear_results();
+
         logger()?.write_warn(
             "pingerController.ts/getAnalyzeIpPinger",
             "IP pinger service unavailable — returning partial result with live sensors only"
@@ -266,14 +346,23 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
         return;
     }
 
-    const ippinger_devices = (ippingerConfig as { devices: IppingerDevice[] })["devices"];
+    // Both sources available — fetch sensors and run full analysis
+    const commandControl = await mqtt_command_get_messages(network, "*", "identify");
+    if (commandControl === null) {
+        res.status(InternalServerError).json({ error: "Unknown command type received from sensor" });
+        return;
+    }
+    const sensors = commandControl.results as LiveSensor[];
 
-    // analyze-it
-    const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
+    try {
+        const ippinger_devices = (ippingerConfig as { devices: IppingerDevice[] })["devices"];
+        const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
 
-    // send response
-    res.status(OK);
-    res.contentType(Json);
-    res.send(results);
+        res.status(OK);
+        res.contentType(Json);
+        res.send(results);
+    } finally {
+        commandControl.clear_results();
+    }
 }
 

@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import type * as express from "express";
@@ -10,8 +8,21 @@ import { InternalServerError, Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
-import type { IMqttCommandControl } from "../dodsonlabs/Interfaces";
+import type { IMqttCommandControl, ILogger } from "../dodsonlabs/Interfaces";
 import { randomUUID } from "crypto";
+
+// Null-safe logger: falls back to no-op methods when logger() is undefined
+// (e.g., during tests where createLogger() is not called).
+// In production, createLogger() is always called before any controller use.
+const _noopLogger: ILogger = {
+    global_log_level: () => 0,
+    global_log_level_string: () => "none",
+    write_info: () => {},
+    write_warn: () => {},
+    write_error: () => {},
+    write_debug: () => {},
+};
+const _log = () => logger() ?? _noopLogger;
 
 
 
@@ -27,32 +38,21 @@ const _reboot_command_delay_seconds: number = 3;
 
 export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null, commandId: string = randomUUID()): Record<string, unknown> {
     // create base message
-    const msg = {
+    return {
         "message-type": "command",
         "version": "2",
         "target": target.toLowerCase().trim(),
         "command": command.toLowerCase().trim(),
         "command-id": commandId,
-        "payload": {}
+        "payload": payload ?? {}
     };
-
-    // check for payload, add to base message
-    if (payload) {
-        msg["payload"] = payload;
-    }
-
-    // return completed message
-    return msg;
 }
 
-function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking, commandId: string) {
+function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
     // initialize timer
     dude.initialize();
 
-    // register command-id for deduplication
-    network.register_command_id(commandId);
-
-    // publish mqtt request
+    // publish mqtt request (dedup handled inline by publish_mqtt_message)
     network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
 }
 
@@ -72,7 +72,7 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     const controller = new AbortController();
     const hard_timeout = new Promise<void>((resolve) => {
         const tid = setTimeout(() => {
-            logger()?.write_error(
+            _log().write_error(
                 "sensorController.ts/mqtt_command_wait_for_command_completion",
                 `Command timed out after ${__max_wait_ms}ms hard cap`
             );
@@ -87,16 +87,20 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     dude.deinitialize();
 }
 
-export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, parameters: string = ""): Promise<IMqttCommandControl> {
+export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, parameters: string = ""): Promise<IMqttCommandControl | null> {
     // get-it
     const start_date = new Date();
     const commandId = randomUUID();
     const dude = network.get_cr_dude(command);
+    if (dude === null) {
+        _log().write_error("sensorController.ts/mqtt_command_get_messages", `Unknown command type '${command}', rejecting`);
+        throw new Error(`Unknown command type: ${command}`);
+    }
 
     // check if the request is already running
     if (dude.is_running) {
         // log-it
-        logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
+        _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
 
         // wait-for-it
         await mqtt_command_wait_for_command_completion(dude);
@@ -106,17 +110,17 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
         const mqtt_request = create_mqtt_command_message(target, `${command} ${parameters}`, null, commandId);
 
         // start-it
-        mqtt_command_start(dude, mqtt_request, network, commandId);
+        mqtt_command_start(dude, mqtt_request, network);
 
         // log-it
-        logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
+        _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
 
         // wait-for-it
         await mqtt_command_wait_for_command_completion(dude);
     }
 
     // log-it
-    logger()?.write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
+    _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
 
     // ----
     return dude;
@@ -126,11 +130,15 @@ async function get_it(_req: express.Request, res: express.Response, network: Mqt
     try {
         // log-it
         const dude = await mqtt_command_get_messages(network, target, command, parameters);
+        if (dude === null) {
+            return; // error already sent by mqtt_command_get_messages
+        }
 
         // send response
         res.status(OK);
         res.contentType(Json);
         res.send(dude.results);
+        dude.clear_results();
 
     } catch (err) {
         const error = ensureError(err);
@@ -146,11 +154,16 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
 
         // get-it
         const dude = network.get_cr_dude(command);
+        if (dude === null) {
+            _log().write_error("sensorController.ts/post_it", `Unknown command type '${command}', rejecting`);
+            res.status(InternalServerError).json({ error: `Unknown command type: ${command}` });
+            return;
+        }
 
         // check if the request is already running
         if (dude.is_running) {
             // log-it
-            logger()?.write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
+            _log().write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
 
             // wait-for-it
             await mqtt_command_wait_for_command_completion(dude);
@@ -160,7 +173,7 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
             const mqtt_request = create_mqtt_command_message(target, command, payload, commandId);
 
             // start-it
-            mqtt_command_start(dude, mqtt_request, network, commandId);
+            mqtt_command_start(dude, mqtt_request, network);
 
             // log-it
             logger()?.write_debug("sensorController.ts/post_it", `${command}: Started...`);
@@ -173,6 +186,7 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
         res.status(OK);
         res.contentType(Json);
         res.send(dude.results);
+        dude.clear_results();
 
     } catch (err) {
         const error = ensureError(err);

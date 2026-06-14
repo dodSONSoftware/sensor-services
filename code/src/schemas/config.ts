@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import { z } from "zod";
@@ -13,8 +11,8 @@ import { z } from "zod";
  * Optional keys (swagger-server-url) are added via .partial() at the call site.
  */
 export const configSchema = z.object({
-    "log-level": z.enum(["error", "info", "debug"], {
-        error: "log-level must be one of: error, info, debug",
+    "log-level": z.enum(["error", "warn", "info", "debug"], {
+        error: "log-level must be one of: error, warn, info, debug",
     }),
     "express-port": z.number({
         error: "express-port must be a number",
@@ -58,6 +56,17 @@ export const configSchema = z.object({
         error: "rate-limit-max must be a number",
     }).int("rate-limit-max must be an integer")
         .positive("rate-limit-max must be greater than 0").optional(),
+    "sensor-source-max-length": z.number({
+        error: "sensor-source-max-length must be a number",
+    }).int("sensor-source-max-length must be an integer")
+        .positive("sensor-source-max-length must be greater than 0")
+        .optional(),
+    "sensor-source-valid-chars-regex": z.string().optional(),
+    "fetch-timeout-ms": z.number({
+        error: "fetch-timeout-ms must be a number",
+    }).int("fetch-timeout-ms must be an integer")
+        .positive("fetch-timeout-ms must be greater than 0")
+        .optional(),
 });
 
 /**

@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import {
   ensureError,
   formatElapsedTime,
@@ -71,7 +76,7 @@ describe("convert_from_log_level_string_to_enum", () => {
     expect(convert_from_log_level_string_to_enum("Debug")).toBe(LogLevel.Debug);
   });
 
-  it("should default to LogLevel.None for unknown strings", () => {
-    expect(convert_from_log_level_string_to_enum("unknown")).toBe(LogLevel.None);
+  it("should default to LogLevel.Info for unknown strings", () => {
+    expect(convert_from_log_level_string_to_enum("unknown")).toBe(LogLevel.Info);
   });
 });

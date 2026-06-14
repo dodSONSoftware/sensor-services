@@ -1,9 +1,14 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import ts from "@typescript-eslint/parser";
 import plugin from "@typescript-eslint/eslint-plugin";
 
 export default [
   {
-    ignores: ["node_modules/", "dist/", "jest.config.ts", "jest.setup.ts", "tests/", "src/dodsonlabs/"],
+    ignores: ["node_modules/", "dist/", "coverage/", "jest.config.ts", "jest.setup.ts", "tests/", "src/dodsonlabs/"],
   },
   {
     files: ["**/*.ts"],

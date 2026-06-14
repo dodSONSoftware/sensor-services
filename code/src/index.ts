@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import { resolve } from "path";
@@ -38,10 +36,11 @@ function validateRoutesHelp(name: string, routes: string[], help: Record<string,
     const missing = helpRoutes.filter((r: string) => !routes.includes(r));
     const extra = routes.filter((r: string) => !helpRoutes.includes(r));
     if (missing.length || extra.length) {
-        appLogger.write_error("index.ts/validateRoutesHelp",
+        throw new Error(
             `${name}: __routesHelp drift detected — ` +
             `missing in __routes: ${missing.join(", ") || "none"}, ` +
-            `extra in __routes: ${extra.join(", ") || "none"}`);
+            `extra in __routes: ${extra.join(", ") || "none"}`
+        );
     }
 }
 
@@ -98,8 +97,9 @@ const networking = new MqttNetworking(config, appLogger);
 const port = config["express-port"];
 
 // setup swagger (auto-derived from machine IP + port, overridable via config)
-// Resolve source dir relative to CWD so the glob finds .ts files regardless of WORKDIR
-const srcDir = resolve(process.cwd(), "..");
+// Resolve source dir relative to __dirname (compiled output directory) so the
+// glob finds .ts files regardless of CWD or WORKDIR.
+const srcDir = resolve(__dirname, "..", "src");
 const swagger_server_url = config["swagger-server-url"] as string | undefined;
 setupSwagger(app, port, srcDir, swagger_server_url);
 
@@ -153,7 +153,7 @@ try {
 
     new generalRoutes.CreateGeneralRoutes(app, networking);
     new sensorRoutes.CreateSensorRoutes(app, networking);
-    new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive);
+    new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000);
     new CreateRouteNotFound(app);
 
     // Validate __routesHelp entries match __routes arrays
@@ -200,12 +200,10 @@ async function shutdown(signal: string): Promise<void> {
             });
         });
 
-        // 2. Flush Prometheus metrics before closing the metrics server
-        await networking.prometheus_flush();
-
-        // 3. Close MQTT client with a timeout
+        // 2. Close MQTT client with a timeout
         await networking.close(5000);
 
+        // 3. Shutdown complete — gauges are in-memory and always available via /metrics
         appLogger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
     } catch (err) {
         appLogger.write_error("index.ts", `Error during graceful shutdown: ${(err as Error).message}`);
@@ -217,3 +215,12 @@ async function shutdown(signal: string): Promise<void> {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("uncaughtException", (err) => {
+    appLogger.write_error("index.ts/uncaughtException", `Uncaught exception: ${(err as Error).message}\n${(err as Error).stack ?? ""}`);
+    shutdown("uncaughtException");
+});
+process.on("unhandledRejection", (reason, _promise) => {
+    const message = ensureError(reason).message;
+    appLogger.write_error("index.ts/unhandledRejection", `Unhandled rejection: ${message}`);
+    shutdown("unhandledRejection");
+});

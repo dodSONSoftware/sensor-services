@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import type express from "express";
@@ -18,6 +16,8 @@ export const __routes: string[] = [
     "/about",
     "/date_local",
     "/date_utc",
+    "/date-local",
+    "/date-utc",
     "/health",
     "/metrics/api",
     "/ready",
@@ -36,6 +36,14 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/date_utc",
+            "description": "Returns the current date and time in Coordinated Universal Time (UTC). Format=[yyyy-mm-ddThh:mm:ssZ]"
+        },
+        {
+            "route": "/date-local",
+            "description": "Returns the current local date and time of the server's timezone. Format=[yyyy-mm-ddThh:mm:ss]"
+        },
+        {
+            "route": "/date-utc",
             "description": "Returns the current date and time in Coordinated Universal Time (UTC). Format=[yyyy-mm-ddThh:mm:ssZ]"
         },
         {
@@ -135,6 +143,24 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          */
         this.app.route("/date_local").get((req: express.Request, res: express.Response) => general_controller.getDateCurrent(req, res));
 
+        // LOCAL DATETIME (dash variant)
+        /**
+         * @swagger
+         * /date-local:
+         *   get:
+         *     summary: Retrieve the current local date and time
+         *     description: Returns the current local date and time of the server's timezone as a plain text string in yyyy-mm-ddThh:mm:ss format.
+         *     responses:
+         *       200:
+         *         description: The current local date and time
+         *         content:
+         *           text/plain:
+         *             schema:
+         *               type: string
+         *               example: "2026-06-06T14:30:00"
+         */
+        this.app.route("/date-local").get((req: express.Request, res: express.Response) => general_controller.getDateCurrent(req, res));
+
         // UTC DATETIME
         /**
          * @swagger
@@ -156,6 +182,28 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                   example: "2026-06-07T14:30:00Z"
          */
         this.app.route("/date_utc").get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
+
+        // UTC DATETIME (dash variant)
+        /**
+         * @swagger
+         * /date-utc:
+         *   get:
+         *     summary: Retrieve the current UTC date and time
+         *     description: Returns the current date and time in Coordinated Universal Time (UTC).
+         *     responses:
+         *       200:
+         *         description: The current UTC date and time
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 utcTime:
+         *                   type: string
+         *                   format: date-time
+         *                   example: "2026-06-07T14:30:00Z"
+         */
+        this.app.route("/date-utc").get((req: express.Request, res: express.Response) => general_controller.getDateUTC(req, res));
 
         // HEALTH
         /**

@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import type { Config } from "jest";
 
 const config: Config = {

@@ -1,8 +1,6 @@
 /*
- * Copyright (c) 2025-2026 dodson Software ( dodson labs )
- * Author: Randy Dodson <dodsonsoftware@gmail.com>
- * Licensed under the MIT License with Patent Grant and NOTICE preservation.
- * See the LICENSE file for the full terms.
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
  */
 
 import { z } from "zod";
@@ -10,9 +8,20 @@ import { z } from "zod";
 /**
  * Validates that a request body is a plain object (not an array, string, number, etc.).
  * The actual keys/values are left unconstrained — downstream code decides what's allowed.
- * This prevents injection of non-object types that could cause unexpected behaviour.
+ * Rejects `constructor` and `prototype` keys to prevent prototype pollution.
+ * (Zod's `.object({})` already strips `__proto__` automatically.)
  */
-export const postBodySchema = z.object({}).passthrough();
+const hasOwn = Object.prototype.hasOwnProperty.call.bind(Object.prototype.hasOwnProperty);
+
+export const postBodySchema = z
+    .object({})
+    .passthrough()
+    .refine(
+        (obj) =>
+            !hasOwn(obj, "constructor") &&
+            !hasOwn(obj, "prototype"),
+        { message: "request body contains disallowed keys" }
+    );
 
 /**
  * Parses and validates a request body against the postBodySchema.

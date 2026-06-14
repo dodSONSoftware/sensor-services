@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import type { Request, Response } from "express";
 import { getAbout, getDateCurrent, getDateUTC, getHealth, getReady } from "../../../src/controllers/generalController";
 import { createMockRes, createMockReq } from "../../mocks/express";

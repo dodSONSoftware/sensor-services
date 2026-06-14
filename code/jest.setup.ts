@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 // Suppress console output during tests
 let logSpy: jest.SpyInstance;
 let errorSpy: jest.SpyInstance;

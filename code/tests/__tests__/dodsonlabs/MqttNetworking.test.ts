@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import { register } from "prom-client";
 import { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
 import { LogLevel } from "../../../src/dodsonlabs/Interfaces";
@@ -189,5 +194,90 @@ describe("MqttNetworking command latency histogram", () => {
 
         // No command-id means no registration — size unchanged
         expect(seenIds.size).toBe(sizeBefore);
+    });
+
+    it("should evict oldest entry when dedup map reaches capacity", () => {
+        const anyNetworking = networking as any;
+        const seenIds = anyNetworking.seen_command_ids;
+        const maxCapacity = anyNetworking.__dedup_max_size;
+
+        // Clear pre-existing entries so we start from zero
+        seenIds.clear();
+
+        // Fill to capacity
+        for (let i = 0; i < maxCapacity; i++) {
+            networking.publish_mqtt_message("iot/v2/command", {
+                "message-type": "command",
+                "command-id": `cap-dedup-${i}`,
+                "command": "identify",
+            });
+        }
+        expect(seenIds.size).toBe(maxCapacity);
+
+        // Next insert evicts oldest, size stays at cap
+        networking.publish_mqtt_message("iot/v2/command", {
+            "message-type": "command",
+            "command-id": "cap-dedup-new",
+            "command": "identify",
+        });
+        expect(seenIds.size).toBe(maxCapacity);
+        expect(seenIds.has("cap-dedup-new")).toBe(true);
+        expect(seenIds.has("cap-dedup-0")).toBe(false);
+    });
+
+    it("should evict oldest entry when latency map reaches capacity", () => {
+        const anyNetworking = networking as any;
+        const publishTimes = anyNetworking.__command_publish_times;
+        const maxCapacity = anyNetworking.__latency_max_size;
+
+        // Clear pre-existing entries
+        publishTimes.clear();
+
+        // Fill to capacity
+        for (let i = 0; i < maxCapacity; i++) {
+            networking.publish_mqtt_message("iot/v2/command", {
+                "message-type": "command",
+                "command-id": `cap-latency-${i}`,
+                "command": "identify",
+            });
+        }
+        expect(publishTimes.size).toBe(maxCapacity);
+
+        // Next insert evicts oldest, size stays at cap
+        networking.publish_mqtt_message("iot/v2/command", {
+            "message-type": "command",
+            "command-id": "cap-latency-new",
+            "command": "identify",
+        });
+        expect(publishTimes.size).toBe(maxCapacity);
+        expect(publishTimes.has("cap-latency-new")).toBe(true);
+        expect(publishTimes.has("cap-latency-0")).toBe(false);
+    });
+
+    // ---- unknown command type rejection (M1: cr_dude_dict never evicts)
+
+    it("should reject unknown command types in get_cr_dude", () => {
+        const anyNetworking = networking as any;
+        const result = networking.get_cr_dude("unknown-type");
+
+        expect(result).toBeNull();
+        expect(logger.write_warn).toHaveBeenCalledWith(
+            "networking",
+            expect.stringContaining("Unknown command type 'unknown-type'")
+        );
+
+        // Known types should still work
+        const knownResult = networking.get_cr_dude("identify");
+        expect(knownResult).not.toBeNull();
+    });
+
+    it("should not create cr_dude_dict entries for unknown command types", () => {
+        const anyNetworking = networking as any;
+        const dictBefore = { ...anyNetworking.cr_dude_dict };
+
+        networking.get_cr_dude("bogus-command");
+
+        const dictAfter = anyNetworking.cr_dude_dict;
+        expect(dictAfter).toEqual(dictBefore); // no new entry created
     });
 });

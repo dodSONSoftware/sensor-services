@@ -1,5 +1,11 @@
+/*
+ * Copyright (c) 2026 dodson Software ( dodson labs )
+ * SPDX-License-Identifier: MIT
+ */
+
 import request from "supertest";
 import express from "express";
+import { logger, setLogger } from "../../../src/common/global";
 import { CreateRouteNotFound } from "../../../src/routes/routeNotFound";
 
 function createTestApp(): express.Application {
@@ -36,5 +42,22 @@ describe("Route Not Found (404)", () => {
     const res = await request(app).put("/another/fake/route");
 
     expect(res.status).toBe(404);
+  });
+
+  it("should return 404 even when logger is not initialized", async () => {
+    const savedLogger = logger();
+
+    setLogger(undefined as any);
+
+    try {
+      const app = createTestApp();
+
+      const res = await request(app).get("/nonexistent-without-logger");
+
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe("The requested resource was not found.");
+    } finally {
+      setLogger(savedLogger);
+    }
   });
 });
