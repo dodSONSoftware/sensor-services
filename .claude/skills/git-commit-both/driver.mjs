@@ -265,23 +265,17 @@ function generateMessage(cwd, newVersion) {
 // ---- commit logic ----
 
 function commitRepo(name, repoPath, message) {
-  const staged = getStagedCount(repoPath);
-  if (staged === 0) {
-    console.log(`[${name}] No staged changes — skipping.`);
-    return;
-  }
-
   // Stage everything except .claude/ (the skill itself)
   run("git add -A -- . ':!.claude/'", repoPath);
 
-  // Check again after add
-  const afterAdd = getStagedCount(repoPath);
-  if (afterAdd === 0) {
+  // Check what's staged after add
+  const staged = getStagedCount(repoPath);
+  if (staged === 0) {
     console.log(`[${name}] Nothing new to stage — skipping.`);
     return;
   }
 
-  console.log(`\n[${name}] Staged ${afterAdd} file(s):`);
+  console.log(`\n[${name}] Staged ${staged} file(s):`);
   console.log(run("git diff --cached --stat", repoPath));
 
   // Use multiline commit message
