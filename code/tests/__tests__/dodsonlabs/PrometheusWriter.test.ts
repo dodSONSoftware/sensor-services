@@ -249,3 +249,77 @@ describe("PrometheusWriter Number.isFinite guards", () => {
         expect(logger.write_warn).not.toHaveBeenCalled();
     });
 });
+
+describe("sanitizeSource", () => {
+    let port: number;
+    let writer: PrometheusWriter;
+    let logger: TestLogger;
+
+    beforeAll(async () => {
+        port = await findFreePort();
+        logger = createTestLogger();
+
+        const config = {
+            "mqtt-broker-ip-address": "127.0.0.1",
+            "mqtt-topic-telemetry": "iot/telemetry",
+            "mqtt-topic-command": "iot/v2/command",
+            "mqtt-topic-command-response": "iot/v2/command-response",
+            "prometheus-port": port,
+            "ip-pinger-web-api": "http://127.0.0.1:3300",
+            "case-sensitive": true,
+            "sensor-source-max-length": 30,
+            "sensor-source-valid-chars-regex": "a-zA-Z0-9._-",
+        } as any;
+
+        writer = new PrometheusWriter(config, logger);
+    }, 10000);
+
+    afterAll(() => {
+        writer.close();
+    });
+
+    beforeEach(() => {
+        register.clear();
+        jest.clearAllMocks();
+    });
+
+    it("should preserve hyphens in source names", () => {
+        (writer as any).publish_air({
+            air: { "temperature-c": 72, "humidity-percent": 50, "pressure-pascal": 101325 },
+        }, "Air-1");
+
+        expect(logger.write_warn).not.toHaveBeenCalled();
+    });
+
+    it("should strip spaces from source names", () => {
+        (writer as any).publish_rain({
+            rain: { "in-h2o": 0.5 },
+        }, "Rain Gauge");
+
+        expect(logger.write_warn).not.toHaveBeenCalled();
+    });
+
+    it("should preserve hyphens in water source names", () => {
+        (writer as any).publish_water({
+            water: { "temperature-c": 15 },
+        }, "Water-1");
+
+        expect(logger.write_warn).not.toHaveBeenCalled();
+    });
+
+    it("should return 'unknown' for empty source", () => {
+        (writer as any).publish_air({
+            air: { "temperature-c": 72, "humidity-percent": 50, "pressure-pascal": 101325 },
+        }, "");
+
+        expect(logger.write_warn).not.toHaveBeenCalled();
+    });
+
+    it("should strip slashes from source names", () => {
+        (writer as any).publish_light({
+            light: { "uv-index": 5, "lux": 1000 },
+        }, "sensor/01");
+
+        expect(logger.write_warn).not.toHaveBeenCalled();
+    });
+});

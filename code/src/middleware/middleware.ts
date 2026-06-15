@@ -107,6 +107,7 @@ export class CreateMiddleware extends RoutesCreatorBase {
         _reqIdStore.run(requestId, next);
     }
 
+    // 
     private _loggerMiddleware(_request: express.Request, _response: express.Response, next: express.NextFunction) {
         // log it — request ID is picked up automatically from AsyncLocalStorage
         logger()?.write_debug("middleware.ts/loggerMiddleware", "request received");
