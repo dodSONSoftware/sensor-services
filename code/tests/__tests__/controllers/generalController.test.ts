@@ -84,8 +84,12 @@ describe("getHealth", () => {
     expect(body.memory).toHaveProperty("heap_used");
     expect(body.memory).toHaveProperty("heap_total");
     expect(body).toHaveProperty("cpu");
-    expect(body.cpu).toHaveProperty("load");
-    expect(typeof (body.cpu as Record<string, unknown>).load).toBe("number");
+    expect(body.cpu).toHaveProperty("load_1min");
+    expect(body.cpu).toHaveProperty("load_5min");
+    expect(body.cpu).toHaveProperty("load_15min");
+    expect(typeof (body.cpu as Record<string, unknown>).load_1min).toBe("number");
+    expect(typeof (body.cpu as Record<string, unknown>).load_5min).toBe("number");
+    expect(typeof (body.cpu as Record<string, unknown>).load_15min).toBe("number");
   });
 
   it("should report degraded when mqtt is disconnected", () => {
@@ -133,12 +137,13 @@ describe("getHealth", () => {
 });
 
 describe("getReady", () => {
-  it("should return 200 when all subsystems are ready", () => {
+  it("should return 200 with status ready when all subsystems are ready", () => {
     const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: true,
       prometheus_server_ready: true,
-    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+      ippinger_reachable: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean; ippinger_reachable: boolean };
 
     getReady(req, res as Response);
 
@@ -149,14 +154,16 @@ describe("getReady", () => {
     expect(body.status).toBe("ready");
     expect(body.dependencies.mqtt).toBe("connected");
     expect(body.dependencies.prometheus_server).toBe("ready");
+    expect(body.dependencies.ippinger).toBe("ready");
   });
 
-  it("should return 503 when MQTT is disconnected", () => {
+  it("should return 503 with status not_ready when MQTT is disconnected", () => {
     const { res, statusCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: false,
       prometheus_server_ready: true,
-    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+      ippinger_reachable: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean; ippinger_reachable: boolean };
 
     getReady(req, res as Response);
 
@@ -166,12 +173,13 @@ describe("getReady", () => {
     expect(body.dependencies.mqtt).toBe("disconnected");
   });
 
-  it("should return 503 when Prometheus server is not ready", () => {
+  it("should return 503 with status not_ready when Prometheus server is not ready", () => {
     const { res, statusCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: true,
       prometheus_server_ready: false,
-    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+      ippinger_reachable: true,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean; ippinger_reachable: boolean };
 
     getReady(req, res as Response);
 
@@ -181,12 +189,32 @@ describe("getReady", () => {
     expect(body.dependencies.prometheus_server).toBe("not_ready");
   });
 
-  it("should return 503 when both dependencies are down", () => {
+  it("should return 200 with status diminished when only IP pinger is unreachable", () => {
+    const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+      prometheus_server_ready: true,
+      ippinger_reachable: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean; ippinger_reachable: boolean };
+
+    getReady(req, res as Response);
+
+    expect(statusCalls).toContain(200);
+    expect(contentTypeCalls).toContain("application/json");
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("diminished");
+    expect(body.dependencies.mqtt).toBe("connected");
+    expect(body.dependencies.prometheus_server).toBe("ready");
+    expect(body.dependencies.ippinger).toBe("not_ready");
+  });
+
+  it("should return 503 with status not_ready when all dependencies are down", () => {
     const { res, statusCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: false,
       prometheus_server_ready: false,
-    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean };
+      ippinger_reachable: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean; ippinger_reachable: boolean };
 
     getReady(req, res as Response);
 
@@ -195,5 +223,23 @@ describe("getReady", () => {
     expect(body.status).toBe("not_ready");
     expect(body.dependencies.mqtt).toBe("disconnected");
     expect(body.dependencies.prometheus_server).toBe("not_ready");
+    expect(body.dependencies.ippinger).toBe("not_ready");
+  });
+
+  it("should return 503 with status not_ready when MQTT and ippinger are down but Prometheus is up", () => {
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: false,
+      prometheus_server_ready: true,
+      ippinger_reachable: false,
+    }) as Request & { mqtt_connected: boolean; prometheus_server_ready: boolean; ippinger_reachable: boolean };
+
+    getReady(req, res as Response);
+
+    expect(statusCalls).toContain(503);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("not_ready");
+    expect(body.dependencies.mqtt).toBe("disconnected");
+    expect(body.dependencies.ippinger).toBe("not_ready");
   });
 });

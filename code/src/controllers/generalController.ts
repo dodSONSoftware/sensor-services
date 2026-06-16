@@ -62,7 +62,9 @@ export function getHealth(req: express.Request, res: express.Response) {
             heap_total: number;
         };
         cpu: {
-            load: number;
+            load_1min: number;
+            load_5min: number;
+            load_15min: number;
         };
     } = {
         status: is_connected && prom_ready ? "ok" : "degraded",
@@ -78,7 +80,9 @@ export function getHealth(req: express.Request, res: express.Response) {
             heap_total: mem.heapTotal,
         },
         cpu: {
-            load: loadavg[0],
+            load_1min: loadavg[0],
+            load_5min: loadavg[1],
+            load_15min: loadavg[2],
         },
     };
 
@@ -92,20 +96,25 @@ export function getHealth(req: express.Request, res: express.Response) {
 export function getReady(req: express.Request, res: express.Response) {
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
     const prom_ready = (req as express.Request & { prometheus_server_ready: boolean }).prometheus_server_ready;
+    const ippinger_reachable = (req as express.Request & { ippinger_reachable: boolean }).ippinger_reachable;
 
-    const ready = is_connected && prom_ready;
+    // MQTT and Prometheus are critical — if either is down, the service is not ready.
+    // The IP pinger is non-critical — if only it is down, the service is diminished.
+    const critical_ok = is_connected && prom_ready;
+    const status = !critical_ok ? "not_ready" : ippinger_reachable ? "ready" : "diminished";
 
     const body = {
-        status: ready ? "ready" : "not_ready",
+        status,
         dependencies: {
             mqtt: is_connected ? "connected" : "disconnected",
             prometheus_server: prom_ready ? "ready" : "not_ready",
+            ippinger: ippinger_reachable ? "ready" : "not_ready",
         },
     };
 
     logger()?.write_debug("generalController.ts/getReady", JSON.stringify(body));
 
-    res.status(ready ? OK : 503);
+    res.status(status === "not_ready" ? 503 : OK);
     res.contentType(Json);
     res.send(body);
 }

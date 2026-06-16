@@ -56,19 +56,23 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/ready",
-            "description": "Readiness probe — returns 200 when all subsystems (MQTT, Prometheus) are connected, 503 otherwise."
+            "description": "Readiness probe — returns 200 when all subsystems (MQTT, Prometheus, IP pinger) are connected, 503 otherwise."
         }
     ]
 };
 
 export class CreateGeneralRoutes extends RoutesCreatorBase {
     private readonly networking: MqttNetworking;
+    private readonly ip_pinger_web_api: string;
+    private readonly fetch_timeout_ms: number;
 
     // **** ctor
 
-    constructor(app: express.Application, networking: MqttNetworking) {
+    constructor(app: express.Application, networking: MqttNetworking, ip_pinger_web_api: string, fetch_timeout_ms: number) {
         super(app);
         this.networking = networking;
+        this.ip_pinger_web_api = ip_pinger_web_api;
+        this.fetch_timeout_ms = fetch_timeout_ms;
     }
 
     // **** protected functions
@@ -250,7 +254,11 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                 cpu:
          *                   type: object
          *                   properties:
-         *                     load:
+         *                     load_1min:
+         *                       type: number
+         *                     load_5min:
+         *                       type: number
+         *                     load_15min:
          *                       type: number
          */
         this.app.route("/health").get((req: express.Request, res: express.Response) => {
@@ -289,7 +297,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /ready:
          *   get:
          *     summary: Readiness probe for Kubernetes or orchestration tools
-         *     description: Returns 200 when all subsystems (MQTT broker, Prometheus server) are connected and ready to serve. Returns 503 when still starting up or a dependency is unavailable.
+         *     description: Returns 200 when all subsystems are connected and ready to serve. Returns 503 when critical subsystems (MQTT, Prometheus) are unavailable. Returns 200 with status "diminished" when only the IP pinger is unavailable.
          *     responses:
          *       200:
          *         description: All subsystems are ready
@@ -300,7 +308,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *               properties:
          *                 status:
          *                   type: string
-         *                   enum: [ready, not_ready]
+         *                   enum: [ready, diminished]
          *                 dependencies:
          *                   type: object
          *                   properties:
@@ -310,8 +318,11 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                     prometheus_server:
          *                       type: string
          *                       enum: [ready, not_ready]
+         *                     ippinger:
+         *                       type: string
+         *                       enum: [ready, not_ready]
          *       503:
-         *         description: One or more subsystems are not ready
+         *         description: One or more critical subsystems are not ready
          *         content:
          *           application/json:
          *             schema:
@@ -319,7 +330,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *               properties:
          *                 status:
          *                   type: string
-         *                   enum: [ready, not_ready]
+         *                   enum: [not_ready]
          *                 dependencies:
          *                   type: object
          *                   properties:
@@ -329,15 +340,34 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                     prometheus_server:
          *                       type: string
          *                       enum: [ready, not_ready]
+         *                     ippinger:
+         *                       type: string
+         *                       enum: [ready, not_ready]
          */
-        this.app.route("/ready").get((req: express.Request, res: express.Response) => {
+        this.app.route("/ready").get(async (req: express.Request, res: express.Response) => {
             const typedReq = req as express.Request & {
                 mqtt_connected: boolean;
                 prometheus_server_ready: boolean;
+                ippinger_reachable: boolean;
             };
             typedReq.mqtt_connected = this.networking.is_connected();
             typedReq.prometheus_server_ready = this.networking.prometheus_server_ready();
+            typedReq.ippinger_reachable = await probe_ippinger(this.ip_pinger_web_api, this.fetch_timeout_ms);
             general_controller.getReady(req, res);
         });
+    }
+}
+
+/**
+ * Probe the IP pinger service by hitting its /about endpoint.
+ * Returns true if the service responds with HTTP 200, false otherwise.
+ */
+async function probe_ippinger(base_url: string, timeout_ms: number): Promise<boolean> {
+    try {
+        const signal = AbortSignal.timeout(timeout_ms);
+        const response = await fetch(`${base_url}/about`, { signal });
+        return response.ok;
+    } catch {
+        return false;
     }
 }

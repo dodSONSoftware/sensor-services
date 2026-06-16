@@ -1,6 +1,6 @@
 {
   "name": "web-service",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "A RESTful web service connecting to the sensor net and the observability stack.",
   "author": "dodson labs",
   "license": "MIT",

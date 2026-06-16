@@ -151,7 +151,7 @@ try {
     const ip_pinger_web_api = config["ip-pinger-web-api"];
     const case_sensitive = config["case-sensitive"];
 
-    new generalRoutes.CreateGeneralRoutes(app, networking);
+    new generalRoutes.CreateGeneralRoutes(app, networking, ip_pinger_web_api, config["fetch-timeout-ms"] ?? 10_000);
     new sensorRoutes.CreateSensorRoutes(app, networking);
     new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000);
     new CreateRouteNotFound(app);
