@@ -143,6 +143,128 @@ describe("MqttCommandControl", () => {
     });
   });
 
+  describe("waitForCompletion", () => {
+    it("should resolve after the silence timeout fires", async () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+
+      const completion = mcc.waitForCompletion();
+      expect(mcc.is_timed_out).toBe(false);
+
+      jest.advanceTimersByTime(1000);
+      expect(mcc.is_timed_out).toBe(true);
+
+      await expect(completion).resolves.toBeUndefined();
+    });
+
+    it("should NOT resolve when restart_clock() is called", async () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+
+      const completion = mcc.waitForCompletion();
+      expect(mcc.is_timed_out).toBe(false);
+
+      // Simulate a response arriving at 500ms
+      jest.advanceTimersByTime(500);
+      mcc.restart_clock();
+      expect(mcc.is_timed_out).toBe(false);
+
+      // The promise should still be pending
+      await expect(
+        Promise.race([
+          completion,
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 100)
+          ),
+        ])
+      ).rejects.toThrow("timeout");
+    });
+
+    it("should NOT resolve after multiple restart_clock() calls before timeout", async () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+
+      const completion = mcc.waitForCompletion();
+      expect(mcc.is_timed_out).toBe(false);
+
+      // Simulate responses at 300ms, 600ms, 900ms
+      jest.advanceTimersByTime(300);
+      mcc.restart_clock();
+      expect(mcc.is_timed_out).toBe(false);
+
+      jest.advanceTimersByTime(300);
+      mcc.restart_clock();
+      expect(mcc.is_timed_out).toBe(false);
+
+      jest.advanceTimersByTime(300);
+      mcc.restart_clock();
+      expect(mcc.is_timed_out).toBe(false);
+
+      // After 900ms total, the promise should still be pending
+      await expect(
+        Promise.race([
+          completion,
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 100)
+          ),
+        ])
+      ).rejects.toThrow("timeout");
+
+      // Now advance past the last restart_clock timeout
+      jest.advanceTimersByTime(100);
+      expect(mcc.is_timed_out).toBe(true);
+      await expect(completion).resolves.toBeUndefined();
+    });
+
+    it("should resolve when deinitialize() is called", async () => {
+      const mcc = new MqttCommandControl(10000);
+      mcc.initialize();
+
+      const completion = mcc.waitForCompletion();
+      expect(mcc.is_timed_out).toBe(false);
+
+      mcc.deinitialize();
+      expect(mcc.is_timed_out).toBe(true);
+
+      await expect(completion).resolves.toBeUndefined();
+    });
+
+    it("should return the same promise on repeated calls", async () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+
+      const completion1 = mcc.waitForCompletion();
+      const completion2 = mcc.waitForCompletion();
+      expect(completion1).toBe(completion2);
+
+      jest.advanceTimersByTime(1000);
+      await expect(completion1).resolves.toBeUndefined();
+      await expect(completion2).resolves.toBeUndefined();
+    });
+
+    it("should return an already-resolved promise after deinitialize", async () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+      mcc.deinitialize();
+
+      const completion = mcc.waitForCompletion();
+      expect(mcc.is_timed_out).toBe(true);
+
+      await expect(completion).resolves.toBeUndefined();
+    });
+
+    it("should return an already-resolved promise after timeout", async () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+
+      jest.advanceTimersByTime(1000);
+      expect(mcc.is_timed_out).toBe(true);
+
+      const completion = mcc.waitForCompletion();
+      await expect(completion).resolves.toBeUndefined();
+    });
+  });
+
   describe("timeout behavior", () => {
     it("should set is_timed_out after timeout_duration_ms", () => {
       const mcc = new MqttCommandControl(5000);

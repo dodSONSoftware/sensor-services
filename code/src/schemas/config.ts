@@ -67,6 +67,11 @@ export const configSchema = z.object({
     }).int("fetch-timeout-ms must be an integer")
         .positive("fetch-timeout-ms must be greater than 0")
         .optional(),
+    "command-silence-timeout-ms": z.number({
+        error: "command-silence-timeout-ms must be a number",
+    }).int("command-silence-timeout-ms must be an integer")
+        .positive("command-silence-timeout-ms must be greater than 0")
+        .optional(),
 });
 
 /**

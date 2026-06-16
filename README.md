@@ -1,9 +1,9 @@
-# Typescript Sensor Web Services, v2.0
+# Typescript Sensor Web Services, v3.0.1
 
 ### dodson Software ( dodson labs )
 
-###### MIT License © 2025 dodson labs
+###### MIT License © 2026 dodson labs
 
 ---
 
-Version 2 of the dodson labs Typescript Sensor Web Services project.
+The dodson labs' Typescript Sensor Web Services project.

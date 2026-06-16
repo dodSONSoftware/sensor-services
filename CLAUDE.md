@@ -158,7 +158,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - Subscribes to `iot/telemetry` and `iot/v2/command-response` topics
 - Dispatches incoming messages by `message-type`: `telemetry`, `log`, `command-response`
 - Telemetry messages validated via `is_telemetry_valid()` before forwarding to `PrometheusWriter.publish_*` methods
-- Command responses tracked via `MqttCommandControl` state machines (1.5s timeout)
+- Command responses tracked via `MqttCommandControl` state machines (configurable `command-silence-timeout-ms`, default 1500ms)
 - Outbound command deduplication via `seen_command_ids` map (TTL-based eviction, max size cap)
 - Command latency tracking via `__command_publish_times` map + `mqtt_command_latency_seconds` histogram
 - Sensor log forwarding via `handle_mqtt_message_log()` — controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level) config keys
@@ -181,7 +181,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 **MqttCommandControl** (`dodsonlabs/MqttCommandControl.ts`) — Timeout-based state machine:
 - Tracks async MQTT command-response pairs
-- Default timeout: 1500ms
+- Default timeout: 1500ms (configurable via `command-silence-timeout-ms`)
 - Event-based completion via `waitForCompletion()` (replaces old 1-second polling loop)
 - 10-second hard safety cap via `AbortController` to prevent infinite hangs
 
@@ -341,11 +341,14 @@ case-sensitive: true
 # Optional: Rate limiting (applied to all routes)
 # rate-limit-window-ms: 900000    # 15 minutes in milliseconds
 # rate-limit-max: 100              # max requests per window
+
+# Optional: silence timeout for sensor command responses (default: 1500ms)
+# command-silence-timeout-ms: 5000
 ```
 
 **Required config keys:** `express-port` (positive int), `log-level` (error/info/debug/warn), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean).
 
-**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`.
+**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
 
 **Docker config mount:** `code/docker-compose.yml` mounts a host `config.yml` into the container at `/app/dist/config.yml`.
 

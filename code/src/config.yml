@@ -44,3 +44,6 @@ sensor-source-valid-chars-regex: "a-zA-Z0-9._-"
 # Optional: Rate limiting (applied to all routes)
 # rate-limit-window-ms: 900000    # 15 minutes in milliseconds
 # rate-limit-max: 100              # max requests per window
+
+# Optional: silence timeout for sensor command responses (default: 1500ms)
+command-silence-timeout-ms: 5000

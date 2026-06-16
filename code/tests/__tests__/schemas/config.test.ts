@@ -55,4 +55,42 @@ describe("configSchema", () => {
     const config = { ...baseConfig, "fetch-timeout-ms": "10000" };
     expect(() => validateConfig(config)).toThrow("fetch-timeout-ms must be a number");
   });
+
+  it("should accept config without command-silence-timeout-ms (optional)", () => {
+    const result = validateConfig(baseConfig);
+    expect(result).toBeDefined();
+    expect(result["command-silence-timeout-ms"]).toBeUndefined();
+  });
+
+  it("should accept config with command-silence-timeout-ms", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 5000 };
+    const result = validateConfig(config);
+    expect(result["command-silence-timeout-ms"]).toBe(5000);
+  });
+
+  it("should accept command-silence-timeout-ms of 1", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 1 };
+    const result = validateConfig(config);
+    expect(result["command-silence-timeout-ms"]).toBe(1);
+  });
+
+  it("should reject command-silence-timeout-ms of 0", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 0 };
+    expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be greater than 0");
+  });
+
+  it("should reject negative command-silence-timeout-ms", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": -100 };
+    expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be greater than 0");
+  });
+
+  it("should reject non-integer command-silence-timeout-ms", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 10.5 };
+    expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be an integer");
+  });
+
+  it("should reject string command-silence-timeout-ms", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": "5000" };
+    expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be a number");
+  });
 });
