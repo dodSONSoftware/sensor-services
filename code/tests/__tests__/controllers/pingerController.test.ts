@@ -580,7 +580,7 @@ describe("getPing IP validation", () => {
     );
   });
 
-  it("should reject loopback 127.0.0.1", async () => {
+  it("should accept private 127.0.0.1 and proxy the request", async () => {
     const res: any = {
       status: jest.fn().mockReturnThis(),
       contentType: jest.fn().mockReturnThis(),
@@ -595,13 +595,12 @@ describe("getPing IP validation", () => {
       10_000
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
-    );
+    // IP is now accepted (private IPs are valid targets for internal IoT networks)
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 
-  it("should reject AWS metadata 169.254.169.254", async () => {
+  it("should accept private 169.254.169.254 and proxy the request", async () => {
     const res: any = {
       status: jest.fn().mockReturnThis(),
       contentType: jest.fn().mockReturnThis(),
@@ -616,10 +615,9 @@ describe("getPing IP validation", () => {
       10_000
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
-    );
+    // IP is now accepted
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 
   it("should reject path traversal attempts", async () => {
@@ -664,7 +662,7 @@ describe("getPing IP validation", () => {
     );
   });
 
-  it("should reject private 10.x.x.x addresses", async () => {
+  it("should accept private 10.x.x.x addresses and proxy the request", async () => {
     const res: any = {
       status: jest.fn().mockReturnThis(),
       contentType: jest.fn().mockReturnThis(),
@@ -679,13 +677,12 @@ describe("getPing IP validation", () => {
       10_000
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
-    );
+    // IP is now accepted (private IPs are valid targets for internal IoT networks)
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 
-  it("should reject private 172.16-31.x.x addresses", async () => {
+  it("should accept private 172.16-31.x.x addresses and proxy the request", async () => {
     const res: any = {
       status: jest.fn().mockReturnThis(),
       contentType: jest.fn().mockReturnThis(),
@@ -700,13 +697,12 @@ describe("getPing IP validation", () => {
       10_000
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
-    );
+    // IP is now accepted
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 
-  it("should reject private 192.168.x.x addresses", async () => {
+  it("should accept private 192.168.x.x addresses and proxy the request", async () => {
     const res: any = {
       status: jest.fn().mockReturnThis(),
       contentType: jest.fn().mockReturnThis(),
@@ -721,13 +717,12 @@ describe("getPing IP validation", () => {
       10_000
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
-    );
+    // IP is now accepted
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 
-  it("should reject multicast 224.x.x.x addresses", async () => {
+  it("should accept multicast 224.x.x.x addresses and proxy the request", async () => {
     const res: any = {
       status: jest.fn().mockReturnThis(),
       contentType: jest.fn().mockReturnThis(),
@@ -742,9 +737,8 @@ describe("getPing IP validation", () => {
       10_000
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.stringContaining("private or reserved") })
-    );
+    // IP is now accepted
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 });

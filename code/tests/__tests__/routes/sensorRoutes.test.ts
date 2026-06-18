@@ -65,11 +65,11 @@ describe("Sensor Routes", () => {
     });
   });
 
-  describe("POST /sensors/reboot", () => {
+  describe("GET /sensors/reboot", () => {
     it("should return 200 and delegate to sensor controller", async () => {
       const app = createTestApp();
 
-      const res = await request(app).post("/sensors/reboot");
+      const res = await request(app).get("/sensors/reboot");
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
@@ -77,11 +77,11 @@ describe("Sensor Routes", () => {
     });
   });
 
-  describe("POST /sensors/reboot/:source", () => {
+  describe("GET /sensors/reboot/:source", () => {
     it("should return 200 and delegate to sensor controller with source param", async () => {
       const app = createTestApp();
 
-      const res = await request(app).post("/sensors/reboot/air-temp-1");
+      const res = await request(app).get("/sensors/reboot/air-temp-1");
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);

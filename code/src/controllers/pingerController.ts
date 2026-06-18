@@ -33,30 +33,6 @@ export interface AnalyzeResultBase {
 /** Strict IPv4 address regex — four octets, each 0-255. */
 const IPV4_REGEX = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 
-/** Check if an octet is in a private/reserved range. */
-function isPrivateOrReserved(ip: string): boolean {
-    const match = ip.match(IPV4_REGEX);
-    if (!match) return false;
-
-    const [, a, b] = match.map(Number);
-
-    // 10.0.0.0/8
-    if (a === 10) return true;
-    // 172.16.0.0/12
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    // 192.168.0.0/16
-    if (a === 192 && b === 168) return true;
-    // 127.0.0.0/8 (loopback)
-    if (a === 127) return true;
-    // 169.254.0.0/16 (link-local)
-    if (a === 169 && b === 254) return true;
-    // 0.0.0.0/8
-    if (a === 0) return true;
-    // 224.0.0.0/4 (multicast) and 240.0.0.0/4 (reserved)
-    if (a >= 224) return true;
-
-    return false;
-}
 
 /** Validate that `ip` is a well-formed IPv4 address and not private/reserved. */
 function validateIpAddress(ip: string): string | null {
@@ -80,10 +56,6 @@ function validateIpAddress(ip: string): string | null {
         if (octet < 0 || octet > 255) {
             return `target octet ${i} out of range (0-255)`;
         }
-    }
-
-    if (isPrivateOrReserved(ip)) {
-        return "target IP is in a private or reserved range";
     }
 
     return null; // valid

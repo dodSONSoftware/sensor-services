@@ -45,11 +45,11 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/sensors/reboot",
-            "description": "Posts a reboot command to all sensors via MQTT."
+            "description": "Sends a reboot command to all sensors via MQTT."
         },
         {
             "route": "/sensors/reboot/:source",
-            "description": "Posts a reboot command to the sensor identified by source via MQTT."
+            "description": "Sends a reboot command to the sensor identified by source via MQTT."
         },
         {
             "route": "/sensors/read-config",
@@ -233,7 +233,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         /**
          * @swagger
          * /sensors/reboot:
-         *   post:
+         *   get:
          *     summary: Instructs all sensors to reboot
          *     description: Sends a reboot command to all sensors via MQTT.
          *     responses:
@@ -260,13 +260,13 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/sensors/reboot").post((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
+        this.app.route("/sensors/reboot").get((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
 
         // REBOOT
         /**
          * @swagger
          * /sensors/reboot/{source}:
-         *   post:
+         *   get:
          *     summary: Instructs a specific sensor to reboot
          *     description: Sends a reboot command to the sensor identified by source via MQTT.
          *     parameters:
@@ -300,7 +300,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/sensors/reboot/:source").post((req: express.Request, res: express.Response) => sensor_controller.postRebootBySource(req, res, this.network, req.params.source));
+        this.app.route("/sensors/reboot/:source").get((req: express.Request, res: express.Response) => sensor_controller.postRebootBySource(req, res, this.network, req.params.source));
 
 
         // READ-CONFIG
