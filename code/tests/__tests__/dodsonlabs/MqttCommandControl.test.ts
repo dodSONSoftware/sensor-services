@@ -169,15 +169,21 @@ describe("MqttCommandControl", () => {
       mcc.restart_clock();
       expect(mcc.is_timed_out).toBe(false);
 
-      // The promise should still be pending
-      await expect(
-        Promise.race([
-          completion,
-          new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), 100)
-          ),
-        ])
-      ).rejects.toThrow("timeout");
+      // The promise should still be pending. Create a race with a setTimeout,
+      // then advance fake time so it fires and rejects — proving completion
+      // hasn't resolved yet.
+      const race = Promise.race([
+        completion,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 100)
+        ),
+      ]);
+      jest.advanceTimersByTime(100);
+      await expect(race).rejects.toThrow("timeout");
+
+      // Now advance past the restart timeout so completion resolves.
+      jest.advanceTimersByTime(1000);
+      await expect(completion).resolves.toBeUndefined();
     });
 
     it("should NOT resolve after multiple restart_clock() calls before timeout", async () => {
@@ -200,18 +206,20 @@ describe("MqttCommandControl", () => {
       mcc.restart_clock();
       expect(mcc.is_timed_out).toBe(false);
 
-      // After 900ms total, the promise should still be pending
-      await expect(
-        Promise.race([
-          completion,
-          new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), 100)
-          ),
-        ])
-      ).rejects.toThrow("timeout");
-
-      // Now advance past the last restart_clock timeout
+      // After 900ms total, the promise should still be pending. Create a race
+      // with a setTimeout, then advance fake time so it fires and rejects —
+      // proving completion hasn't resolved yet.
+      const race = Promise.race([
+        completion,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 100)
+        ),
+      ]);
       jest.advanceTimersByTime(100);
+      await expect(race).rejects.toThrow("timeout");
+
+      // Now advance past the last restart_clock timeout (900 + 1000 = 1900)
+      jest.advanceTimersByTime(2000);
       expect(mcc.is_timed_out).toBe(true);
       await expect(completion).resolves.toBeUndefined();
     });
