@@ -8,7 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 /home/worker/Documents/code/sensor-services/sensor-web-services/
 ├── README.md              -- Project identification (minimal)
 ├── LICENSE                -- MIT License with Patent Grant
-├── THIRD-PARTY-NOTICES.txt
 ├── .gitignore
 ├── .claude/               -- Claude Code config (skills, commands, memory, settings)
 │   ├── commands/
@@ -21,14 +20,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │       ├── git-commit-both/ -- Skill: commit dodsonlabs + main repo together
 │       └── run-sensor-web-services/ -- Skill: launch, smoke-test, and verify the API
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 2.0.0)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 3.0.3)
     ├── tsconfig.json      -- ES2016, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
     ├── Dockerfile         -- Two-stage build (Node 22), non-root user, healthcheck, exposes ports 32000 + 3301
-    ├── docker-compose.yml -- Docker Compose: build + run with config mount from /mnt/
+    ├── docker-compose.yml -- Docker Compose: build + run with config mount from /mnt/sensor-web-services/config.yml, restart: unless-stopped
     ├── nodemon.json       -- Dev watch config
     ├── eslint.config.mjs  -- ESLint 9.x flat config (@typescript-eslint v8), excludes tests/, dodsonlabs/, jest config files, coverage/
+    ├── .vscode/               -- VS Code workspace settings
+    │   ├── extensions.json    -- Recommended extensions (eslint)
+    │   └── settings.json      -- Workspace settings (ESLint validation, code actions on save)
+    ├── .dockerignore          -- Docker build exclusions (node_modules, tests, coverage, etc.)
+    ├── .editorconfig          -- Editor config (indentation, charset, line endings)
     ├── src/
     │   ├── index.ts       -- Entry point: config load, Zod validation, logger init, MQTT init, Swagger, middleware, API metrics, routes, listen, graceful shutdown (15s hard timeout)
     │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, rate limiting, YAML format)
@@ -62,6 +66,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── MqttNetworking.ts    -- MQTT client, telemetry handler, command-response tracker
     │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs
     │       └── PrometheusWriter.ts  -- Separate Express server on port 3301 with 10 Prometheus gauges
+    │       └── version.txt              -- Library version (1.2.8)
     ├── tests/
     │   ├── mocks/
     │   │   ├── express.ts   -- createMockRes(), createMockReq() helpers
@@ -108,11 +113,11 @@ npm run blt            # CI check: build + lint + test with coverage (runs `.cla
 ### Docker
 
 ```bash
-docker compose up --build   # Build image + run container (config.yml mounted from /mnt/)
+docker compose up --build   # Build image + run container (config.yml mounted from /mnt/sensor-web-services/config.yml)
 docker compose down         # Stop and remove container
 ```
 
-**docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/dist/config.yml`. The container exposes ports 32000 (API) and 3301 (Prometheus metrics). Healthcheck probes `/ready` every 30s.
+**docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/dist/config.yml`. The container exposes ports 32000 (API) and 3301 (Prometheus metrics). Healthcheck probes `/ready` every 30s (`timeout: 5s`, `retries: 3`, `start_period: 10s`). Container restarts automatically with `restart: unless-stopped`.
 
 ### Notes
 
@@ -216,14 +221,14 @@ HTTP GET /sensors/identify → sensorController → mqtt_command_get_messages()
 
 **IP Pinger Proxy (HTTP → External Service):**
 ```
-HTTP GET /ippinger/ping → pingerController.fetchIt() → fetch() → http://192.168.1.4:3300/ping → response
+HTTP GET /ippinger/ping → pingerController.fetchIt() → fetch() → http://10.10.10.64:3300/ping → response
 ```
 
 **IP Pinger Analysis (HTTP → MQTT + HTTP → Merge):**
 ```
 HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
   → mqtt_command_get_messages(network, "*", "identify")  [fetch live sensors via MQTT]
-  → fetchItOnly("http://192.168.1.4:3300/read-config")   [fetch pinger config via HTTP]
+  → fetchItOnly("http://10.10.10.64:3300/read-config")   [fetch pinger config via HTTP]
   → analyzeIt(sensors, ippinger_devices, case_sensitive)  [compare and classify]
   → Results: "OK", "IP Address Mismatch", "Name Mismatch", "Offline", "New"
   → Graceful degradation: if pinger unreachable, returns live sensors with warning
@@ -308,26 +313,26 @@ express-port: 32000
 log-level: debug
 
 # Optional: Loki structured logging
-# loki-url: "http://192.168.1.62:3100"
+# loki-url: "http://10.10.10.60:3100"
 # loki-enabled: true
 
 # Prometheus metrics server port
 prometheus-port: 3301
 
 # MQTT broker connection
-mqtt-broker-ip-address: "192.168.1.4"
+mqtt-broker-ip-address: "10.10.10.64"
 mqtt-topic-telemetry: "iot/telemetry"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
 
 # External services
-ip-pinger-web-api: "http://192.168.1.4:3300"
+ip-pinger-web-api: "http://10.10.10.64:3300"
 
 # Behavior
 case-sensitive: true
 
 # Optional: override auto-derived Swagger server URL
-# swagger-server-url: "http://192.168.1.214:32000/"
+# swagger-server-url: "http://10.10.10.217:32000/"
 
 # Optional: disable forwarding of sensor application logs to the app logger (default: true)
 # forward-sensor-logs: false
@@ -350,11 +355,11 @@ case-sensitive: true
 
 **Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
 
-**Docker config mount:** `code/docker-compose.yml` mounts a host `config.yml` into the container at `/app/dist/config.yml`.
+**Docker config mount:** `code/docker-compose.yml` mounts a host `config.yml` from `/mnt/sensor-web-services/config.yml` into the container at `/app/dist/config.yml`.
 
 ## Key Patterns and Caveats
 
-- **`dodsonlabs/` is a shared library** — cloned from `http://192.168.1.5:30008/sensor-services/dodson-labs-core.git` (main branch). Excluded from ESLint and test coverage (shared library). Clone via `code/src/git-dodsonlabs-from-cloud.sh` or manually: `git clone --branch main http://192.168.1.5:30008/sensor-services/dodson-labs-core.git && mv dodson-labs-core dodsonlabs`. See `code/src/README.txt` for instructions.
+- **`dodsonlabs/` is a shared library** — cloned from `http://10.10.10.7:30008/sensor-services/dodson-labs-core.git` (main branch). Excluded from ESLint and test coverage (shared library, not a git submodule). Clone via `code/src/git-dodsonlabs-from-cloud.sh` or manually: `git clone --branch main http://10.10.10.7:30008/sensor-services/dodson-labs-core.git && mv dodson-labs-core dodsonlabs`. See `code/src/README.txt` for instructions.
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, rate limiting, request ID propagation, and body validation.
 - **No CI/CD pipeline** — no GitHub Actions, GitLab CI, or other automation.
 - **All logging goes through Winston** — `error`/`warn`/`info`/`debug` levels, console transport always active, optional Loki transport. `handle_mqtt_message_log()` in MqttNetworking forwards sensor application logs at the appropriate level; controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level, default `debug`) config keys.
@@ -364,7 +369,7 @@ case-sensitive: true
 - **`swagger-server-url` is configurable** via `config.yml` (falls back to auto-derived from routable IP + port). `routableAddress()` skips loopback and Docker-internal addresses.
 - **`case-sensitive` is configurable** via `config.yml` (used by `analyzeIt()` in pingerController).
 - **`write-config` and `update-config` sensor routes are active** POST endpoints in `sensorRoutes.ts`.
-- **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`.
+- **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`. Uses `if (!res.headersSent)` guard to prevent double-sending when matched routes fall through without calling next().
 - **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod v4 schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).
 - **`sys_info` array in `aboutDude()` is now populated** with platform, arch, hostname, uptime, total/free memory.

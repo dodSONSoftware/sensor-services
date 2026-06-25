@@ -24,11 +24,13 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
 
     protected routeNotFound() {
         this.app.use((req: express.Request, res: express.Response) => {
-            res.status(NotFound).json({
-                message: "The requested resource was not found.",
-            });
+            if (!res.headersSent) {  // only fire for truly unmatched requests (matched routes send headers first)
+                res.status(NotFound).json({
+                    message: "The requested resource was not found.",
+                });
 
-            logger()?.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+                logger()?.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+            }
         });
     }
 }

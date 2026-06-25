@@ -7,26 +7,26 @@ express-port: 32000
 log-level: debug
 
 # Optional: Loki structured logging
-loki-url: "http://192.168.1.62:3100"
-loki-enabled: true
+loki-url: "http://10.10.10.60:3100"
+loki-enabled: false
 
 # Prometheus metrics server port
 prometheus-port: 3301
 
 # MQTT broker connection
-mqtt-broker-ip-address: "192.168.1.4"
+mqtt-broker-ip-address: "10.10.10.64"
 mqtt-topic-telemetry: "iot/telemetry"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
 
 # External services
-ip-pinger-web-api: "http://192.168.1.4:3300"
+ip-pinger-web-api: "http://10.10.10.64:3300"
 
 # Behavior
 case-sensitive: true
 
 # Optional: override auto-derived Swagger server URL
-# swagger-server-url: "http://192.168.1.214:32000/"
+# swagger-server-url: "http://10.10.10.217:32000/"
 
 # Optional: disable forwarding of sensor application logs to the app logger (default: true)
 # forward-sensor-logs: false

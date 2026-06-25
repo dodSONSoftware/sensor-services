@@ -7,6 +7,6 @@
 
 rm -rf ./dodsonlabs
 
-git clone --branch main http://192.168.1.5:30008//sensor-services/dodson-labs-core.git
+git clone --branch main http://10.10.10.7:30008//sensor-services/dodson-labs-core.git
 
 mv ./dodson-labs-core ./dodsonlabs
