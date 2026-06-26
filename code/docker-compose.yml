@@ -6,7 +6,7 @@ services:
       - "32000:32000"
       - "3301:3301"
     volumes:
-      - /mnt/sensor-web-services/config.yml:/app/dist/config.yml
+      - /mnt/sensor-web-services/:/app/configs/
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:32000/ready" ]

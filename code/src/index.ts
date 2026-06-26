@@ -12,6 +12,7 @@ import * as generalRoutes from "./routes/generalRoutes";
 import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
+import * as settingsRoutes from "./routes/settingsRoutes";
 import { aboutDude, createLogger, logger } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { InternalServerError } from "./dodsonlabs/HttpConstants";
@@ -27,6 +28,7 @@ import { ensureError, formatElapsedTime, read_file_yaml } from "./dodsonlabs/Sys
 import { validateConfig, type configSchema } from "./schemas/config";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
+import * as settingsStore from "./services/settingsStore";
 
 // **** route drift validation
 
@@ -59,9 +61,9 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
 // **** start up code
 
-// read the configuration file (try container path first, then CWD-relative)
+// read the configuration file (try container mount first, then CWD-relative)
 let configResult = read_file_yaml<z.infer<typeof configSchema>>(
-    "/app/dist/config.yml"
+    "/app/configs/config.yml"
 );
 if (configResult.data === null) {
     configResult = read_file_yaml<z.infer<typeof configSchema>>("./dist/config.yml");
@@ -102,6 +104,11 @@ const port = config["express-port"];
 const srcDir = resolve(__dirname, "..", "src");
 const swagger_server_url = config["swagger-server-url"] as string | undefined;
 setupSwagger(app, port, srcDir, swagger_server_url);
+
+// **** Settings initialization (file-backed YAML persistence, before routes)
+
+settingsStore.init();
+appLogger.write_info("index.ts", "Settings loaded from file-based storage.");
 
 try {
     // create middleware
@@ -154,12 +161,14 @@ try {
     new generalRoutes.CreateGeneralRoutes(app, networking, ip_pinger_web_api, config["fetch-timeout-ms"] ?? 10_000);
     new sensorRoutes.CreateSensorRoutes(app, networking);
     new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000);
+    new settingsRoutes.CreateSettingsRoutes(app);
     new CreateRouteNotFound(app);
 
     // Validate __routesHelp entries match __routes arrays
     validateRoutesHelp("generalRoutes", generalRoutes.__routes, generalRoutes.__routesHelp);
     validateRoutesHelp("sensorRoutes", sensorRoutes.__routes, sensorRoutes.__routesHelp);
     validateRoutesHelp("pingerRoutes", pingerRoutes.__routes, pingerRoutes.__routesHelp);
+    validateRoutesHelp("settingsRoutes", settingsRoutes.__routes, settingsRoutes.__routesHelp);
 } catch (err: unknown) {
     // log error
     appLogger.write_error("index.ts", ensureError(err).message);
@@ -203,7 +212,10 @@ async function shutdown(signal: string): Promise<void> {
         // 2. Close MQTT client with a timeout
         await networking.close(5000);
 
-        // 3. Shutdown complete — gauges are in-memory and always available via /metrics
+        // 3. Clean up persistence resources
+        await settingsStore.shutdown();
+
+        // 4. Shutdown complete — gauges are in-memory and always available via /metrics
         appLogger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
     } catch (err) {
         appLogger.write_error("index.ts", `Error during graceful shutdown: ${(err as Error).message}`);

@@ -11,6 +11,7 @@ import { Logger } from "../dodsonlabs/Logger";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
+import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
 
@@ -59,6 +60,7 @@ export function aboutDude(): IAbout {
         cmds.push({ "name": "General", "help": generalRoutesHelp });
         cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
         cmds.push({ "name": "IP Pinger", "help": pingerRoutesHelp });
+        cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
         //cmds.push({ "name": "", "help": routeNotFoundRoutesHelp })
 
         const sys_info: { key: string; value: string }[] = [

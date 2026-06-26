@@ -1,9 +1,0 @@
-{
-  "commands": [
-    {
-      "name": "git-commit",
-      "description": "Stage and commit both dodsonlabs and the main repo with auto-generated message and version bump",
-      "prompt": "Run the git-commit-both driver: `node .claude/skills/git-commit-both/driver.mjs`"
-    }
-  ]
-}
