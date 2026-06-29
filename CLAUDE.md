@@ -48,14 +48,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics/api, /ready (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
     │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable `fetch_timeout_ms`)
-    │   │   ├── settingsRoutes.ts  -- /settings, /settings/defaults, /settings/update (file-backed YAML persistence via settingsStore)
+    │   │   ├── settingsRoutes.ts  -- /settings, /settings/defaults, /settings/update (PostgreSQL persistence via settingsStore)
     │   │   └── routeNotFound.ts   -- 404 handler (wired into app)
     │   ├── schemas/
     │   │   ├── config.ts          -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn)
     │   │   ├── postBody.ts        -- Zod schemas for POST body validation
     │   │   └── settings.ts        -- Zod schemas + defaults + metadata for application settings (UI preferences + server connection details)
     │   ├── services/
-    │   │   └── settingsStore.ts  -- File-backed YAML persistence for application settings (init, getSettings, patchSettings)
+    │   │   └── settingsStore.ts  -- PostgreSQL-backed persistence for application settings (init, getSettings, patchSettings)
     │   ├── git-dodsonlabs-from-cloud.sh -- Clone + rename dodson-labs-core submodule
     │   ├── README.txt             -- Instructions for setting up dodsonlabs/
     │   └── dodsonlabs/            -- Shared library (git clone from dodson-labs-core)
@@ -154,7 +154,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 6. Setup Swagger at `/swagger` (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
 7. Create middleware (CORS, JSON parsing with configurable body limit, rate limiting, request ID propagation via AsyncLocalStorage, request logger, body validation)
 8. Register API metrics middleware (tracks request duration/status/errors using separate prom-client registry)
-9. Initialize settings persistence (`settingsStore.init()`) — loads defaults + merges existing settings.yml
+9. Initialize settings persistence (`settingsStore.init()`) — connects to PostgreSQL, creates DB/table if needed, seeds defaults
 10. Register route groups: `generalRoutes`, `sensorRoutes`, `pingerRoutes`, `settingsRoutes`, `routeNotFound`
 11. Validate `__routesHelp` entries match actual registered routes (drift detection)
 12. Listen on configured port
@@ -189,10 +189,10 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - Temperature range checks: air (-100 to 200 F), water (-50 to 212 F)
 - `telemetry_messages_total` counter tracks total messages processed
 
-**SettingsStore** (`services/settingsStore.ts`) — File-backed YAML persistence for application settings:
-- Loads defaults from Zod schema, merges existing `/app/configs/settings.yml` (Docker) or local `settings.yml` on startup
-- `getSettings()` returns deep clone; `patchSettings(updates)` merges partial updates and persists to YAML
-- Graceful degradation: file I/O failures don't crash the app — cache stays valid in memory
+**SettingsStore** (`services/settingsStore.ts`) — PostgreSQL-backed persistence for application settings:
+- Connects to PostgreSQL database, creates target DB/table if needed, seeds defaults on first run
+- `getSettings()` returns deep clone; `patchSettings(updates)` merges partial updates and persists to DB
+- Graceful degradation: DB unavailability falls back to in-memory defaults without crashing
 - Exposed via three routes: `GET /settings`, `GET /settings/defaults` (with schema metadata), `PATCH /settings/update`
 
 **MqttCommandControl** (`dodsonlabs/MqttCommandControl.ts`) — Timeout-based state machine:
@@ -256,13 +256,13 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 ## API Endpoints
 
-### Settings Routes (`/settings`) — File-backed YAML persistence
+### Settings Routes (`/settings`) — PostgreSQL persistence
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/settings` | All application settings (merged from defaults + existing `settings.yml`) |
+| GET | `/settings` | All application settings (merged from DB + defaults) |
 | GET | `/settings/defaults` | Current settings plus schema metadata for dynamic form generation |
-| PATCH | `/settings/update` | Partial update — only fields in body are changed; returns full merged result |
+| PATCH | `/settings/update` | Partial update — only fields in body are changed; persists to DB, returns merged result |
 
 ### General Routes (no prefix)
 
@@ -370,11 +370,11 @@ case-sensitive: true
 # command-silence-timeout-ms: 5000
 ```
 
-**Required config keys:** `express-port` (positive int), `log-level` (error/info/debug/warn), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean).
+**Required config keys:** `express-port` (positive int), `log-level` (error/info/debug/warn), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
 **Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
 
-**Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-web-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`, settings persistence writes to `/app/configs/settings.yml`.
+**Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-web-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`. Settings persistence stores to PostgreSQL database.
 
 ## Key Patterns and Caveats
 
