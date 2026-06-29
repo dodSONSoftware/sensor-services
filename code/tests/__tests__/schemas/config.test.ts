@@ -16,6 +16,11 @@ describe("configSchema", () => {
     "mqtt-topic-command-response": "iot/v2/command-response",
     "ip-pinger-web-api": "http://127.0.0.1:3300",
     "case-sensitive": true,
+    "db-host": "localhost",
+    "db-port": 5432,
+    "db-name": "sensor_web_services",
+    "db-user": "sensor_user",
+    "db-password": "secret",
   };
 
   it("should accept config without fetch-timeout-ms (optional)", () => {

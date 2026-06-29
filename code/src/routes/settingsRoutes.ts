@@ -59,8 +59,8 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *               type: object
          *               properties:
          *                 theme:
-         *                   type: string
-         *                   enum: [light, dark]
+         *                   type: boolean
+         *                   default: true
          *                 refresh_interval_ms:
          *                   type: integer
          *                 sensor_list_visible:
@@ -133,8 +133,8 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *             type: object
          *             properties:
          *               theme:
-         *                 type: string
-         *                 enum: [light, dark]
+         *                 type: boolean
+         *                 default: true
          *               refresh_interval_ms:
          *                 type: integer
          *               sensor_list_visible:
@@ -161,7 +161,7 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *             schema:
          *               type: object
          *       500:
-         *         description: File persistence failure
+         *         description: Database persistence failure
          *         content:
          *           application/json:
          *             schema:

@@ -72,6 +72,23 @@ export const configSchema = z.object({
     }).int("command-silence-timeout-ms must be an integer")
         .positive("command-silence-timeout-ms must be greater than 0")
         .optional(),
+    "db-host": z.string({
+        error: "db-host must be a string",
+    }).min(1, "db-host must not be empty"),
+    "db-port": z.number({
+        error: "db-port must be a number",
+    }).int("db-port must be an integer")
+        .positive("db-port must be greater than 0")
+        .lte(65535, "db-port must be a valid TCP port (1-65535)"),
+    "db-name": z.string({
+        error: "db-name must be a string",
+    }).min(1, "db-name must not be empty"),
+    "db-user": z.string({
+        error: "db-user must be a string",
+    }).min(1, "db-user must not be empty"),
+    "db-password": z.string({
+        error: "db-password must be a string",
+    }).min(1, "db-password must not be empty"),
 });
 
 /**

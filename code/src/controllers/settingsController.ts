@@ -7,7 +7,10 @@ import type express from "express";
 import { Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import { getSettings, patchSettings } from "../services/settingsStore";
-import { SETTINGS_SCHEMA } from "../schemas/settings";
+import { appSettingsUpdateSchema, SETTINGS_SCHEMA } from "../schemas/settings";
+
+// Use the update schema for validation of partial updates (no defaults applied)
+const SETTINGS_UPDATE_SCHEMA = appSettingsUpdateSchema;
 
 /**
  * GET /settings — Return all application settings (merged from DB + defaults).
@@ -41,12 +44,22 @@ export async function getSettingsDefaults(_req: express.Request, res: express.Re
  * Only the fields present in the request body are updated; missing keys retain their current values.
  */
 export async function updateSettings(req: express.Request, res: express.Response) {
-    const updates = req.body as Record<string, unknown>;
+    const updates = req.body;
+
+    // Validate updates against schema
+    const parsed = SETTINGS_UPDATE_SCHEMA.safeParse(updates);
+    if (!parsed.success) {
+        const errors = parsed.error.issues.map((issue: any) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+        const message = `Invalid settings update: ${errors}`;
+        logger()?.write_error("settingsController.ts/updateSettings", message);
+        res.status(400);
+        res.contentType(Json);
+        res.send({ error: message });
+        return;
+    }
 
     try {
-        const merged = await patchSettings(updates);
-
-        logger()?.write_debug("settingsController.ts/updateSettings", JSON.stringify(merged));
+        const merged = await patchSettings(parsed.data);
 
         res.status(OK);
         res.contentType(Json);

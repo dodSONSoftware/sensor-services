@@ -9,7 +9,7 @@ import { z } from "zod";
  * UI preferences for the Angular dashboard.
  */
 export const uiPreferencesSchema = z.object({
-    theme: z.enum(["light", "dark"]).default("light"),
+    theme: z.boolean().default(true),
     refresh_interval_ms: z.number().int().positive().min(1000).max(60000).default(5000),
     sensor_list_visible: z.boolean().default(true),
     dashboard_layout: z.enum(["grid", "list"]).default("grid"),
@@ -33,6 +33,28 @@ export const serverConfigSchema = z.object({
 });
 
 /**
+ * Schema for partial updates - no defaults, all fields optional.
+ * Used when receiving PATCH requests where only changed fields should be applied.
+ */
+export const appSettingsUpdateSchema = z.object({
+    theme: z.boolean().optional(),
+    refresh_interval_ms: z.number().int().positive().min(1000).max(60000).optional(),
+    sensor_list_visible: z.boolean().optional(),
+    dashboard_layout: z.enum(["grid", "list"]).optional(),
+    cards_per_row: z.number().int().min(1).max(6).optional(),
+    sound_enabled: z.boolean().optional(),
+    notification_level: z.enum(["none", "warn", "critical"]).optional(),
+    time_range_hours: z.number().int().positive().min(1).max(720).optional(),
+    decimal_places: z.number().int().min(0).max(4).optional(),
+    mqtt_broker_address: z.string().optional(),
+    mqtt_topic_telemetry: z.string().optional(),
+    mqtt_topic_command: z.string().optional(),
+    mqtt_topic_command_response: z.string().optional(),
+    prometheus_port: z.number().int().positive().optional(),
+    express_port: z.number().int().positive().optional(),
+});
+
+/**
  * Combined application settings schema with defaults for partial updates.
  */
 export const appSettingsSchema = uiPreferencesSchema.merge(serverConfigSchema);
@@ -45,7 +67,7 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
  * Default settings values — used to fill in missing keys during partial updates.
  */
 export const DEFAULT_SETTINGS: AppSettings = {
-    theme: "light",
+    theme: true,
     refresh_interval_ms: 5000,
     sensor_list_visible: true,
     dashboard_layout: "grid",
@@ -66,19 +88,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const SETTINGS_SCHEMA: Record<string, {
     label: string;
     description: string;
-    type: "string" | "number" | "boolean";
+    type: "string" | "number" | "boolean" | "enum";
     default: unknown;
     optional?: boolean;
-    enum?: string[];
+    options?: string[];
     min?: number;
     max?: number;
 }> = {
     theme: {
         label: "Theme",
-        description: "Dashboard color scheme.",
-        type: "string",
-        default: "light",
-        enum: ["light", "dark"],
+        description: "Dashboard color scheme (true = light, false = dark).",
+        type: "boolean",
+        default: true,
     },
     refresh_interval_ms: {
         label: "Refresh Interval (ms)",
@@ -97,9 +118,9 @@ export const SETTINGS_SCHEMA: Record<string, {
     dashboard_layout: {
         label: "Dashboard Layout",
         description: "How sensor cards are arranged on the dashboard.",
-        type: "string",
+        type: "enum",
         default: "grid",
-        enum: ["grid", "list"],
+        options: ["grid", "list"],
     },
     cards_per_row: {
         label: "Cards Per Row",
@@ -118,9 +139,9 @@ export const SETTINGS_SCHEMA: Record<string, {
     notification_level: {
         label: "Notification Level",
         description: "Minimum severity level that triggers alerts.",
-        type: "string",
+        type: "enum",
         default: "warn",
-        enum: ["none", "warn", "critical"],
+        options: ["none", "warn", "critical"],
     },
     time_range_hours: {
         label: "Time Range (hours)",

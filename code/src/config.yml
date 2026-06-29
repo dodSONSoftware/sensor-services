@@ -47,3 +47,10 @@ sensor-source-valid-chars-regex: "a-zA-Z0-9._-"
 
 # Optional: silence timeout for sensor command responses (default: 1500ms)
 command-silence-timeout-ms: 5000
+
+# PostgreSQL database for settings persistence
+db-host: "10.10.10.64"
+db-port: 5432
+db-name: "sensor_web_services"
+db-user: "appuser"
+db-password: "password"

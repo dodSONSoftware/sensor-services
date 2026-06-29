@@ -7,7 +7,41 @@ import type { Request, Response } from "express";
 import { getAllSettings, getSettingsDefaults, updateSettings } from "../../../src/controllers/settingsController";
 import { createMockRes, createMockReq } from "../../mocks/express";
 
+// Mock settingsStore so tests don't require a real DB connection.
+const baseMockCache = {
+    theme: true,
+    refresh_interval_ms: 5000,
+    sensor_list_visible: true,
+    dashboard_layout: "grid" as const,
+    cards_per_row: 3,
+    sound_enabled: false,
+    notification_level: "warn" as const,
+    time_range_hours: 24,
+    decimal_places: 2,
+    prometheus_port: 3301,
+    express_port: 32000,
+};
+
+jest.mock("../../../src/services/settingsStore", () => ({
+    init: jest.fn().mockResolvedValue(undefined),
+    shutdown: jest.fn().mockResolvedValue(undefined),
+    getSettings: jest.fn(() => structuredClone(currentMockCache)),
+    patchSettings: jest.fn(async (updates: Record<string, unknown>) => {
+        Object.assign(currentMockCache, updates);
+        return structuredClone(currentMockCache);
+    }),
+}));
+
+import * as settingsStore from "../../../src/services/settingsStore";
+
+let currentMockCache = { ...baseMockCache };
+
 describe("getSettingsDefaults", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
+    });
+
     it("should return 200 with OK status and JSON content type", async () => {
         const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
         const req = createMockReq() as Request;
@@ -95,9 +129,8 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
-        expect((schema["theme"] as Record<string, unknown>).enum).toEqual(["light", "dark"]);
-        expect((schema["dashboard_layout"] as Record<string, unknown>).enum).toEqual(["grid", "list"]);
-        expect((schema["notification_level"] as Record<string, unknown>).enum).toEqual(["none", "warn", "critical"]);
+        expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["grid", "list"]);
+        expect((schema["notification_level"] as Record<string, unknown>).options).toEqual(["none", "warn", "critical"]);
     });
 
     it("should include min/max for numeric settings that have ranges", async () => {
@@ -128,6 +161,11 @@ describe("getSettingsDefaults", () => {
 });
 
 describe("getAllSettings", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
+    });
+
     it("should return all settings with OK status and JSON content type", async () => {
         const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
         const req = createMockReq() as Request;
@@ -164,7 +202,7 @@ describe("getAllSettings", () => {
         await getAllSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
-        expect(body.theme).toBe("light");
+        expect(body.theme).toBe(true);
         expect(body.refresh_interval_ms).toBe(5000);
         expect(body.sensor_list_visible).toBe(true);
         expect(body.dashboard_layout).toBe("grid");
@@ -177,9 +215,14 @@ describe("getAllSettings", () => {
 });
 
 describe("updateSettings", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
+    });
+
     it("should return merged settings after partial update", async () => {
         const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+        const req = createMockReq({ body: { theme: false } }) as Request;
 
         await updateSettings(req, res as Response);
 
@@ -190,17 +233,17 @@ describe("updateSettings", () => {
 
     it("should persist the updated value and reflect on next get", async () => {
         const { res, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+        const req = createMockReq({ body: { theme: false } }) as Request;
 
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
-        expect(body.theme).toBe("dark");
+        expect(body.theme).toBe(false);
     });
 
     it("should preserve unchanged keys after partial update", async () => {
         const { res, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+        const req = createMockReq({ body: { theme: false } }) as Request;
 
         await updateSettings(req, res as Response);
 
@@ -211,12 +254,55 @@ describe("updateSettings", () => {
 
     it("should handle multiple field updates", async () => {
         const { res, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { theme: "dark", cards_per_row: 4 } }) as Request;
+        const req = createMockReq({ body: { theme: false, cards_per_row: 4 } }) as Request;
 
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
-        expect(body.theme).toBe("dark");
+        expect(body.theme).toBe(false);
         expect(body.cards_per_row).toBe(4);
+    });
+});
+
+/**
+ * Tests for partial update behavior - verifies that only explicitly provided
+ * fields are updated without applying defaults to missing fields.
+ */
+describe("updateSettings - Partial Update Behavior", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        // Start with dark mode (theme: false)
+        currentMockCache = {
+            ...baseMockCache,
+            theme: false
+        };
+    });
+
+    it("should not apply defaults when updating other fields", async () => {
+        const { res, sendCalls } = createMockRes();
+        // User changes MQTT broker while in dark mode
+        const req = createMockReq({ body: { mqtt_broker_address: "new-broker.com" } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        const body = sendCalls[0] as Record<string, unknown>;
+        // Theme should remain false (dark mode), NOT default to true
+        expect(body.theme).toBe(false);
+        // MQTT broker should be updated
+        expect(body.mqtt_broker_address).toBe("new-broker.com");
+    });
+
+    it("should preserve all unchanged settings during partial update", async () => {
+        const { res, sendCalls } = createMockRes();
+        const req = createMockReq({ body: { refresh_interval_ms: 10000 } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        const body = sendCalls[0] as Record<string, unknown>;
+        // All unchanged settings should retain their values
+        expect(body.theme).toBe(false);           // Was explicitly set to false
+        expect(body.refresh_interval_ms).toBe(10000);  // Was updated
+        expect(body.sensor_list_visible).toBe(true);     // Default preserved
+        expect(body.dashboard_layout).toBe("grid");      // Default preserved
     });
 });

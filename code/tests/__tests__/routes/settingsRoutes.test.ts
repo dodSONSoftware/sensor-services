@@ -5,12 +5,42 @@
 
 import express from "express";
 import request from "supertest";
+
+// Mock settingsStore so tests don't require a real DB connection.
+const baseMockCache = {
+    theme: true,
+    refresh_interval_ms: 5000,
+    sensor_list_visible: true,
+    dashboard_layout: "grid" as const,
+    cards_per_row: 3,
+    sound_enabled: false,
+    notification_level: "warn" as const,
+    time_range_hours: 24,
+    decimal_places: 2,
+    prometheus_port: 3301,
+    express_port: 32000,
+};
+
+jest.mock("../../../src/services/settingsStore", () => ({
+    init: jest.fn().mockResolvedValue(undefined),
+    shutdown: jest.fn().mockResolvedValue(undefined),
+    getSettings: jest.fn(() => structuredClone(currentMockCache)),
+    patchSettings: jest.fn(async (updates: Record<string, unknown>) => {
+        Object.assign(currentMockCache, updates);
+        return structuredClone(currentMockCache);
+    }),
+}));
+
 import { CreateSettingsRoutes } from "../../../src/routes/settingsRoutes";
+
+let currentMockCache = { ...baseMockCache };
 
 describe("settings routes", () => {
     let app: express.Application;
 
     beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
         app = express();
         // Apply minimal middleware so body parsing works
         app.use(express.json());
@@ -37,7 +67,7 @@ describe("settings routes", () => {
         it("should return default values when no settings exist", async () => {
             const res = await request(app).get("/settings");
 
-            expect(res.body.theme).toBe("light");
+            expect(res.body.theme).toBe(true);
             expect(res.body.refresh_interval_ms).toBe(5000);
             expect(res.body.sensor_list_visible).toBe(true);
         });
@@ -102,9 +132,8 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings/defaults");
 
             const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["theme"] as Record<string, unknown>).enum).toEqual(["light", "dark"]);
-            expect((schema["dashboard_layout"] as Record<string, unknown>).enum).toEqual(["grid", "list"]);
-            expect((schema["notification_level"] as Record<string, unknown>).enum).toEqual(["none", "warn", "critical"]);
+            expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["grid", "list"]);
+            expect((schema["notification_level"] as Record<string, unknown>).options).toEqual(["none", "warn", "critical"]);
         });
 
         it("should include min/max for numeric settings that have ranges", async () => {
@@ -130,17 +159,17 @@ describe("settings routes", () => {
         it("should return 200 with merged settings after partial update", async () => {
             const res = await request(app)
                 .patch("/settings/update")
-                .send({ theme: "dark" });
+                .send({ theme: false });
 
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
-            expect(res.body.theme).toBe("dark");
+            expect(res.body.theme).toBe(false);
         });
 
         it("should preserve unchanged keys after partial update", async () => {
             const res = await request(app)
                 .patch("/settings/update")
-                .send({ theme: "dark" });
+                .send({ theme: false });
 
             expect(res.body.refresh_interval_ms).toBe(5000);
             expect(res.body.sensor_list_visible).toBe(true);
@@ -149,10 +178,10 @@ describe("settings routes", () => {
         it("should handle multiple field updates", async () => {
             const res = await request(app)
                 .patch("/settings/update")
-                .send({ theme: "dark", cards_per_row: 4, sound_enabled: true });
+                .send({ theme: false, cards_per_row: 4, sound_enabled: true });
 
             expect(res.status).toBe(200);
-            expect(res.body.theme).toBe("dark");
+            expect(res.body.theme).toBe(false);
             expect(res.body.cards_per_row).toBe(4);
             expect(res.body.sound_enabled).toBe(true);
         });
@@ -160,11 +189,11 @@ describe("settings routes", () => {
         it("should reflect updated values on subsequent GET", async () => {
             await request(app)
                 .patch("/settings/update")
-                .send({ theme: "dark" });
+                .send({ theme: false });
 
             const res = await request(app).get("/settings");
 
-            expect(res.body.theme).toBe("dark");
+            expect(res.body.theme).toBe(false);
         });
     });
 });
