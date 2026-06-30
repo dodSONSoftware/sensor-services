@@ -18,6 +18,7 @@ export const uiPreferencesSchema = z.object({
     notification_level: z.enum(["none", "warn", "critical"]).default("warn"),
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
     decimal_places: z.number().int().min(0).max(4).default(2),
+    unit_system: z.enum(["metric", "imperial"]).default("imperial"),
 });
 
 /**
@@ -46,6 +47,7 @@ export const appSettingsUpdateSchema = z.object({
     notification_level: z.enum(["none", "warn", "critical"]).optional(),
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
     decimal_places: z.number().int().min(0).max(4).optional(),
+    unit_system: z.enum(["metric", "imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     notification_level: "warn",
     time_range_hours: 24,
     decimal_places: 2,
+    unit_system: "imperial",
     prometheus_port: 3301,
     express_port: 32000,
 } as const;
@@ -158,6 +161,13 @@ export const SETTINGS_SCHEMA: Record<string, {
         default: 2,
         min: 0,
         max: 4,
+    },
+    unit_system: {
+        label: "Unit System",
+        description: "Display units for measurements (Metric or Imperial).",
+        type: "enum",
+        default: "imperial",
+        options: ["metric", "imperial"],
     },
     mqtt_broker_address: {
         label: "MQTT Broker Address",
