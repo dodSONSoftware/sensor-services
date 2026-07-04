@@ -10,10 +10,8 @@ import { z } from "zod";
  */
 export const uiPreferencesSchema = z.object({
     theme: z.boolean().default(true),
-    refresh_interval_ms: z.number().int().positive().min(1000).max(60000).default(5000),
-    sensor_list_visible: z.boolean().default(true),
-    dashboard_layout: z.enum(["grid", "list"]).default("grid"),
-    cards_per_row: z.number().int().min(1).max(6).default(3),
+    refresh_interval_sec: z.number().int().positive().min(1).max(60).default(5),
+    dashboard_layout: z.enum(["cards", "list"]).default("cards"),
     sound_enabled: z.boolean().default(false),
     notification_level: z.enum(["none", "warn", "critical"]).default("warn"),
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
@@ -30,7 +28,6 @@ export const serverConfigSchema = z.object({
     mqtt_topic_command: z.string().optional(),
     mqtt_topic_command_response: z.string().optional(),
     prometheus_port: z.number().int().positive().default(3301),
-    express_port: z.number().int().positive().default(32000),
 });
 
 /**
@@ -39,10 +36,8 @@ export const serverConfigSchema = z.object({
  */
 export const appSettingsUpdateSchema = z.object({
     theme: z.boolean().optional(),
-    refresh_interval_ms: z.number().int().positive().min(1000).max(60000).optional(),
-    sensor_list_visible: z.boolean().optional(),
-    dashboard_layout: z.enum(["grid", "list"]).optional(),
-    cards_per_row: z.number().int().min(1).max(6).optional(),
+    refresh_interval_sec: z.number().int().positive().min(1).max(60).optional(),
+    dashboard_layout: z.enum(["cards", "list"]).optional(),
     sound_enabled: z.boolean().optional(),
     notification_level: z.enum(["none", "warn", "critical"]).optional(),
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
@@ -53,7 +48,6 @@ export const appSettingsUpdateSchema = z.object({
     mqtt_topic_command: z.string().optional(),
     mqtt_topic_command_response: z.string().optional(),
     prometheus_port: z.number().int().positive().optional(),
-    express_port: z.number().int().positive().optional(),
 });
 
 /**
@@ -70,17 +64,14 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
  */
 export const DEFAULT_SETTINGS: AppSettings = {
     theme: true,
-    refresh_interval_ms: 5000,
-    sensor_list_visible: true,
-    dashboard_layout: "grid",
-    cards_per_row: 3,
+    refresh_interval_sec: 5,
+    dashboard_layout: "cards",
     sound_enabled: false,
     notification_level: "warn",
     time_range_hours: 24,
     decimal_places: 2,
     unit_system: "imperial",
     prometheus_port: 3301,
-    express_port: 32000,
 } as const;
 
 /**
@@ -104,34 +95,20 @@ export const SETTINGS_SCHEMA: Record<string, {
         type: "boolean",
         default: true,
     },
-    refresh_interval_ms: {
-        label: "Refresh Interval (ms)",
-        description: "How often the dashboard polls for new sensor data. Minimum 1000ms.",
+    refresh_interval_sec: {
+        label: "Refresh Interval (sec)",
+        description: "How often the dashboard polls for new sensor data. Minimum 1 second.",
         type: "number",
-        default: 5000,
-        min: 1000,
-        max: 60000,
-    },
-    sensor_list_visible: {
-        label: "Sensor List Visible",
-        description: "Show or hide the sidebar list of sensors.",
-        type: "boolean",
-        default: true,
+        default: 5,
+        min: 1,
+        max: 60,
     },
     dashboard_layout: {
         label: "Dashboard Layout",
         description: "How sensor cards are arranged on the dashboard.",
         type: "enum",
-        default: "grid",
-        options: ["grid", "list"],
-    },
-    cards_per_row: {
-        label: "Cards Per Row",
-        description: "Number of sensor cards displayed across in grid layout. Minimum 1, maximum 6.",
-        type: "number",
-        default: 3,
-        min: 1,
-        max: 6,
+        default: "cards",
+        options: ["cards", "list"],
     },
     sound_enabled: {
         label: "Sound Enabled",
@@ -202,13 +179,6 @@ export const SETTINGS_SCHEMA: Record<string, {
         description: "Port for the Prometheus sensor metrics server.",
         type: "number",
         default: 3301,
-        min: 1,
-    },
-    express_port: {
-        label: "Express API Port",
-        description: "Port for the main REST API server.",
-        type: "number",
-        default: 32000,
         min: 1,
     },
 };

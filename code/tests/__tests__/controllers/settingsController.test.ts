@@ -10,16 +10,13 @@ import { createMockRes, createMockReq } from "../../mocks/express";
 // Mock settingsStore so tests don't require a real DB connection.
 const baseMockCache = {
     theme: true,
-    refresh_interval_ms: 5000,
-    sensor_list_visible: true,
+    refresh_interval_sec: 5,
     dashboard_layout: "grid" as const,
-    cards_per_row: 3,
     sound_enabled: false,
     notification_level: "warn" as const,
     time_range_hours: 24,
     decimal_places: 2,
     prometheus_port: 3301,
-    express_port: 32000,
 };
 
 jest.mock("../../../src/services/settingsStore", () => ({
@@ -72,10 +69,8 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body.settings).toHaveProperty("theme");
-        expect(body.settings).toHaveProperty("refresh_interval_ms");
-        expect(body.settings).toHaveProperty("sensor_list_visible");
+        expect(body.settings).toHaveProperty("refresh_interval_sec");
         expect(body.settings).toHaveProperty("dashboard_layout");
-        expect(body.settings).toHaveProperty("cards_per_row");
         expect(body.settings).toHaveProperty("sound_enabled");
         expect(body.settings).toHaveProperty("notification_level");
         expect(body.settings).toHaveProperty("time_range_hours");
@@ -91,10 +86,8 @@ describe("getSettingsDefaults", () => {
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
         expect(schema).toHaveProperty("theme");
-        expect(schema).toHaveProperty("refresh_interval_ms");
-        expect(schema).toHaveProperty("sensor_list_visible");
+        expect(schema).toHaveProperty("refresh_interval_sec");
         expect(schema).toHaveProperty("dashboard_layout");
-        expect(schema).toHaveProperty("cards_per_row");
         expect(schema).toHaveProperty("sound_enabled");
         expect(schema).toHaveProperty("notification_level");
         expect(schema).toHaveProperty("time_range_hours");
@@ -104,7 +97,6 @@ describe("getSettingsDefaults", () => {
         expect(schema).toHaveProperty("mqtt_topic_command");
         expect(schema).toHaveProperty("mqtt_topic_command_response");
         expect(schema).toHaveProperty("prometheus_port");
-        expect(schema).toHaveProperty("express_port");
     });
 
     it("should include label, description, type, and default in each schema entry", async () => {
@@ -129,7 +121,7 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
-        expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["grid", "list"]);
+        expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["cards", "list"]);
         expect((schema["notification_level"] as Record<string, unknown>).options).toEqual(["none", "warn", "critical"]);
     });
 
@@ -141,10 +133,8 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
-        expect((schema["refresh_interval_ms"] as Record<string, unknown>).min).toBe(1000);
-        expect((schema["refresh_interval_ms"] as Record<string, unknown>).max).toBe(60000);
-        expect((schema["cards_per_row"] as Record<string, unknown>).min).toBe(1);
-        expect((schema["cards_per_row"] as Record<string, unknown>).max).toBe(6);
+        expect((schema["refresh_interval_sec"] as Record<string, unknown>).min).toBe(1);
+        expect((schema["refresh_interval_sec"] as Record<string, unknown>).max).toBe(60);
     });
 
     it("should mark optional settings correctly", async () => {
@@ -156,7 +146,7 @@ describe("getSettingsDefaults", () => {
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
         expect((schema["mqtt_broker_address"] as Record<string, unknown>).optional).toBe(true);
-        expect((schema["refresh_interval_ms"] as Record<string, unknown>).optional).toBeFalsy();
+        expect((schema["refresh_interval_sec"] as Record<string, unknown>).optional).toBeFalsy();
     });
 });
 
@@ -185,10 +175,8 @@ describe("getAllSettings", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body).toHaveProperty("theme");
-        expect(body).toHaveProperty("refresh_interval_ms");
-        expect(body).toHaveProperty("sensor_list_visible");
+        expect(body).toHaveProperty("refresh_interval_sec");
         expect(body).toHaveProperty("dashboard_layout");
-        expect(body).toHaveProperty("cards_per_row");
         expect(body).toHaveProperty("sound_enabled");
         expect(body).toHaveProperty("notification_level");
         expect(body).toHaveProperty("time_range_hours");
@@ -203,10 +191,8 @@ describe("getAllSettings", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body.theme).toBe(true);
-        expect(body.refresh_interval_ms).toBe(5000);
-        expect(body.sensor_list_visible).toBe(true);
+        expect(body.refresh_interval_sec).toBe(5);
         expect(body.dashboard_layout).toBe("grid");
-        expect(body.cards_per_row).toBe(3);
         expect(body.sound_enabled).toBe(false);
         expect(body.notification_level).toBe("warn");
         expect(body.time_range_hours).toBe(24);
@@ -248,19 +234,17 @@ describe("updateSettings", () => {
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
-        expect(body.refresh_interval_ms).toBe(5000);
-        expect(body.sensor_list_visible).toBe(true);
+        expect(body.refresh_interval_sec).toBe(5);
     });
 
     it("should handle multiple field updates", async () => {
         const { res, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { theme: false, cards_per_row: 4 } }) as Request;
+        const req = createMockReq({ body: { theme: false } }) as Request;
 
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body.theme).toBe(false);
-        expect(body.cards_per_row).toBe(4);
     });
 });
 
@@ -294,15 +278,14 @@ describe("updateSettings - Partial Update Behavior", () => {
 
     it("should preserve all unchanged settings during partial update", async () => {
         const { res, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { refresh_interval_ms: 10000 } }) as Request;
+        const req = createMockReq({ body: { refresh_interval_sec: 10 } }) as Request;
 
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
         // All unchanged settings should retain their values
         expect(body.theme).toBe(false);           // Was explicitly set to false
-        expect(body.refresh_interval_ms).toBe(10000);  // Was updated
-        expect(body.sensor_list_visible).toBe(true);     // Default preserved
+        expect(body.refresh_interval_sec).toBe(10);  // Was updated
         expect(body.dashboard_layout).toBe("grid");      // Default preserved
     });
 });

@@ -61,15 +61,11 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *                 theme:
          *                   type: boolean
          *                   default: true
-         *                 refresh_interval_ms:
+         *                 refresh_interval_sec:
          *                   type: integer
-         *                 sensor_list_visible:
-         *                   type: boolean
          *                 dashboard_layout:
          *                   type: string
          *                   enum: [grid, list]
-         *                 cards_per_row:
-         *                   type: integer
          *                 sound_enabled:
          *                   type: boolean
          *                 notification_level:
@@ -88,8 +84,6 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *                 mqtt_topic_command_response:
          *                   type: string
          *                 prometheus_port:
-         *                   type: integer
-         *                 express_port:
          *                   type: integer
          */
         this.app.route("/settings").get((req: express.Request, res: express.Response) => settings_controller.getAllSettings(req, res));
@@ -135,15 +129,11 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *               theme:
          *                 type: boolean
          *                 default: true
-         *               refresh_interval_ms:
+         *               refresh_interval_sec:
          *                 type: integer
-         *               sensor_list_visible:
-         *                 type: boolean
          *               dashboard_layout:
          *                 type: string
          *                 enum: [grid, list]
-         *               cards_per_row:
-         *                 type: integer
          *               sound_enabled:
          *                 type: boolean
          *               notification_level:

@@ -9,16 +9,13 @@ import request from "supertest";
 // Mock settingsStore so tests don't require a real DB connection.
 const baseMockCache = {
     theme: true,
-    refresh_interval_ms: 5000,
-    sensor_list_visible: true,
+    refresh_interval_sec: 5,
     dashboard_layout: "grid" as const,
-    cards_per_row: 3,
     sound_enabled: false,
     notification_level: "warn" as const,
     time_range_hours: 24,
     decimal_places: 2,
     prometheus_port: 3301,
-    express_port: 32000,
 };
 
 jest.mock("../../../src/services/settingsStore", () => ({
@@ -54,10 +51,8 @@ describe("settings routes", () => {
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
             expect(res.body).toHaveProperty("theme");
-            expect(res.body).toHaveProperty("refresh_interval_ms");
-            expect(res.body).toHaveProperty("sensor_list_visible");
+            expect(res.body).toHaveProperty("refresh_interval_sec");
             expect(res.body).toHaveProperty("dashboard_layout");
-            expect(res.body).toHaveProperty("cards_per_row");
             expect(res.body).toHaveProperty("sound_enabled");
             expect(res.body).toHaveProperty("notification_level");
             expect(res.body).toHaveProperty("time_range_hours");
@@ -68,8 +63,7 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings");
 
             expect(res.body.theme).toBe(true);
-            expect(res.body.refresh_interval_ms).toBe(5000);
-            expect(res.body.sensor_list_visible).toBe(true);
+            expect(res.body.refresh_interval_sec).toBe(5);
         });
     });
 
@@ -87,10 +81,8 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings/defaults");
 
             expect(res.body.settings).toHaveProperty("theme");
-            expect(res.body.settings).toHaveProperty("refresh_interval_ms");
-            expect(res.body.settings).toHaveProperty("sensor_list_visible");
+            expect(res.body.settings).toHaveProperty("refresh_interval_sec");
             expect(res.body.settings).toHaveProperty("dashboard_layout");
-            expect(res.body.settings).toHaveProperty("cards_per_row");
             expect(res.body.settings).toHaveProperty("sound_enabled");
             expect(res.body.settings).toHaveProperty("notification_level");
             expect(res.body.settings).toHaveProperty("time_range_hours");
@@ -102,10 +94,8 @@ describe("settings routes", () => {
 
             const schema = res.body.schema as Record<string, unknown>;
             expect(schema).toHaveProperty("theme");
-            expect(schema).toHaveProperty("refresh_interval_ms");
-            expect(schema).toHaveProperty("sensor_list_visible");
+            expect(schema).toHaveProperty("refresh_interval_sec");
             expect(schema).toHaveProperty("dashboard_layout");
-            expect(schema).toHaveProperty("cards_per_row");
             expect(schema).toHaveProperty("sound_enabled");
             expect(schema).toHaveProperty("notification_level");
             expect(schema).toHaveProperty("time_range_hours");
@@ -115,7 +105,6 @@ describe("settings routes", () => {
             expect(schema).toHaveProperty("mqtt_topic_command");
             expect(schema).toHaveProperty("mqtt_topic_command_response");
             expect(schema).toHaveProperty("prometheus_port");
-            expect(schema).toHaveProperty("express_port");
         });
 
         it("should include label, description, type, and default in each schema entry", async () => {
@@ -132,7 +121,7 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings/defaults");
 
             const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["grid", "list"]);
+            expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["cards", "list"]);
             expect((schema["notification_level"] as Record<string, unknown>).options).toEqual(["none", "warn", "critical"]);
         });
 
@@ -140,10 +129,8 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings/defaults");
 
             const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["refresh_interval_ms"] as Record<string, unknown>).min).toBe(1000);
-            expect((schema["refresh_interval_ms"] as Record<string, unknown>).max).toBe(60000);
-            expect((schema["cards_per_row"] as Record<string, unknown>).min).toBe(1);
-            expect((schema["cards_per_row"] as Record<string, unknown>).max).toBe(6);
+            expect((schema["refresh_interval_sec"] as Record<string, unknown>).min).toBe(1);
+            expect((schema["refresh_interval_sec"] as Record<string, unknown>).max).toBe(60);
         });
 
         it("should mark optional settings correctly", async () => {
@@ -151,7 +138,7 @@ describe("settings routes", () => {
 
             const schema = res.body.schema as Record<string, unknown>;
             expect((schema["mqtt_broker_address"] as Record<string, unknown>).optional).toBe(true);
-            expect((schema["refresh_interval_ms"] as Record<string, unknown>).optional).toBeFalsy();
+            expect((schema["refresh_interval_sec"] as Record<string, unknown>).optional).toBeFalsy();
         });
     });
 
@@ -171,18 +158,16 @@ describe("settings routes", () => {
                 .patch("/settings/update")
                 .send({ theme: false });
 
-            expect(res.body.refresh_interval_ms).toBe(5000);
-            expect(res.body.sensor_list_visible).toBe(true);
+            expect(res.body.refresh_interval_sec).toBe(5);
         });
 
         it("should handle multiple field updates", async () => {
             const res = await request(app)
                 .patch("/settings/update")
-                .send({ theme: false, cards_per_row: 4, sound_enabled: true });
+                .send({ theme: false, sound_enabled: true });
 
             expect(res.status).toBe(200);
             expect(res.body.theme).toBe(false);
-            expect(res.body.cards_per_row).toBe(4);
             expect(res.body.sound_enabled).toBe(true);
         });
 

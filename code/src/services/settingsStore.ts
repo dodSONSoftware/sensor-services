@@ -122,7 +122,7 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 break;
             }
 
-            result[key as keyof AppSettings] = value as unknown;
+            result[key as keyof AppSettings] = value as AppSettings[keyof AppSettings];
         }
     }
 
