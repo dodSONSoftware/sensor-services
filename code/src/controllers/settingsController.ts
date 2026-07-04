@@ -8,6 +8,7 @@ import { Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import { getSettings, patchSettings } from "../services/settingsStore";
 import { appSettingsUpdateSchema, SETTINGS_SCHEMA } from "../schemas/settings";
+import type { ZodIssue } from "zod";
 
 // Use the update schema for validation of partial updates (no defaults applied)
 const SETTINGS_UPDATE_SCHEMA = appSettingsUpdateSchema;
@@ -49,7 +50,7 @@ export async function updateSettings(req: express.Request, res: express.Response
     // Validate updates against schema
     const parsed = SETTINGS_UPDATE_SCHEMA.safeParse(updates);
     if (!parsed.success) {
-        const errors = parsed.error.issues.map((issue: any) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+        const errors = parsed.error.issues.map((issue: ZodIssue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
         const message = `Invalid settings update: ${errors}`;
         logger()?.write_error("settingsController.ts/updateSettings", message);
         res.status(400);

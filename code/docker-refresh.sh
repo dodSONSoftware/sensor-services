@@ -21,4 +21,4 @@ docker ps
 
 # Output the logs
 echo
-docker logs sensor-web-services
+docker logs -f sensor-web-services
