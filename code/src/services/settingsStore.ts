@@ -80,9 +80,9 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 value = migrateThemeValue(value);
             }
 
-            // Type validation based on schema metadata
+            // Type validation and assignment based on schema metadata
             switch (meta.type) {
-            case "string":
+            case "string": {
                 if (typeof value !== "string") {
                     throw new Error(`Setting "${key}" must be a string, got ${typeof value}`);
                 }
@@ -90,8 +90,10 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 if (meta.options && !meta.options.includes(value as string)) {
                     throw new Error(`Setting "${key}" must be one of ${meta.options.join(", ")}, got "${value}"`);
                 }
+                (result as Record<string, string>)[key] = value;
                 break;
-            case "number":
+            }
+            case "number": {
                 if (typeof value !== "number") {
                     throw new Error(`Setting "${key}" must be a number, got ${typeof value}`);
                 }
@@ -102,13 +104,17 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 if (meta.max !== undefined && value > meta.max) {
                     throw new Error(`Setting "${key}" must be <= ${meta.max}, got ${value}`);
                 }
+                (result as Record<string, number>)[key] = value;
                 break;
-            case "boolean":
+            }
+            case "boolean": {
                 if (typeof value !== "boolean") {
                     throw new Error(`Setting "${key}" must be a boolean, got ${typeof value}`);
                 }
+                (result as Record<string, boolean>)[key] = value;
                 break;
-            case "enum":
+            }
+            case "enum": {
                 // Enum types are stored as strings
                 if (typeof value !== "string") {
                     throw new Error(`Setting "${key}" must be a string, got ${typeof value}`);
@@ -116,13 +122,16 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 if (meta.options && !meta.options.includes(value as string)) {
                     throw new Error(`Setting "${key}" must be one of ${meta.options.join(", ")}, got "${value}"`);
                 }
-                break;
-            default:
-                // Unknown type, skip validation
+                (result as Record<string, string>)[key] = value;
                 break;
             }
-
-            result[key as keyof AppSettings] = value as AppSettings[keyof AppSettings];
+            default:
+                // Unknown type, skip this entry
+                continue;
+            }
+        } else {
+            // Key not in parsed data, use default from DEFAULT_SETTINGS
+            (result as Record<string, unknown>)[key] = DEFAULT_SETTINGS[key as keyof AppSettings];
         }
     }
 
