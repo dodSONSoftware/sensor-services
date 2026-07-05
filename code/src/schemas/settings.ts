@@ -37,6 +37,7 @@ const telemetryItemSchema = z.object({
     value: z.string(),        // The raw key from sensor data (e.g., "temperature-c")
     visible: z.boolean(),     // Whether to display this value
     ui: z.string(),           // Label to show in the UI (e.g., "Temperature")
+    order: z.number().int().min(0).default(0),  // Order position for sorting (lower numbers appear first)
 });
 
 /**
@@ -46,25 +47,25 @@ const telemetryItemSchema = z.object({
 export const telemetrySettingsSchema = z.object({
     // Air sensor telemetry settings
     air_telemetry: z.array(telemetryItemSchema).default([
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
-        { value: "humidity-percent", visible: true, ui: "HUMIDITY %" },
-        { value: "dew-point", visible: true, ui: "DEW POINT" },
-        { value: "feels-like-c", visible: true, ui: "FEELS LIKE" },
-        { value: "pressure-pascal", visible: true, ui: "PRESSURE" },
-        { value: "altitude-meters", visible: true, ui: "ALTITUDE" },
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
+        { value: "humidity-percent", visible: true, ui: "HUMIDITY %", order: 1 },
+        { value: "dew-point", visible: true, ui: "DEW POINT", order: 2 },
+        { value: "feels-like-c", visible: true, ui: "FEELS LIKE", order: 3 },
+        { value: "pressure-pascal", visible: true, ui: "PRESSURE", order: 4 },
+        { value: "altitude-meters", visible: true, ui: "ALTITUDE", order: 5 },
     ]),
 
     // Water sensor telemetry settings
     water_telemetry: z.array(telemetryItemSchema).default([
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
     ]),
 
     // Light sensor telemetry settings
     light_telemetry: z.array(telemetryItemSchema).default([
-        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT" },
-        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT" },
-        { value: "lux", visible: true, ui: "LUX" },
-        { value: "uv-index", visible: true, ui: "UV INDEX" },
+        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT", order: 0 },
+        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT", order: 1 },
+        { value: "lux", visible: true, ui: "LUX", order: 2 },
+        { value: "uv-index", visible: true, ui: "UV INDEX", order: 3 },
     ]),
 });
 
@@ -122,23 +123,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
     // Telemetry settings
     air_telemetry: [
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
-        { value: "humidity-percent", visible: true, ui: "HUMIDITY %" },
-        { value: "dew-point", visible: true, ui: "DEW POINT" },
-        { value: "feels-like-c", visible: true, ui: "FEELS LIKE" },
-        { value: "pressure-pascal", visible: true, ui: "PRESSURE" },
-        { value: "altitude-meters", visible: true, ui: "ALTITUDE" },
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
+        { value: "humidity-percent", visible: true, ui: "HUMIDITY %", order: 1 },
+        { value: "dew-point", visible: true, ui: "DEW POINT", order: 2 },
+        { value: "feels-like-c", visible: true, ui: "FEELS LIKE", order: 3 },
+        { value: "pressure-pascal", visible: true, ui: "PRESSURE", order: 4 },
+        { value: "altitude-meters", visible: true, ui: "ALTITUDE", order: 5 },
     ],
 
     water_telemetry: [
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
     ],
 
     light_telemetry: [
-        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT" },
-        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT" },
-        { value: "lux", visible: true, ui: "LUX" },
-        { value: "uv-index", visible: true, ui: "UV INDEX" },
+        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT", order: 0 },
+        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT", order: 1 },
+        { value: "lux", visible: true, ui: "LUX", order: 2 },
+        { value: "uv-index", visible: true, ui: "UV INDEX", order: 3 },
     ],
 } as const;
 
