@@ -31,6 +31,42 @@ export const serverConfigSchema = z.object({
 });
 
 /**
+ * Telemetry item definition for display configuration.
+ */
+const telemetryItemSchema = z.object({
+    value: z.string(),        // The raw key from sensor data (e.g., "temperature-c")
+    visible: z.boolean(),     // Whether to display this value
+    ui: z.string(),           // Label to show in the UI (e.g., "Temperature")
+});
+
+/**
+ * Combined telemetry settings for each sensor type.
+ * Each setting defines which telemetry fields to show, their order, and UI labels.
+ */
+export const telemetrySettingsSchema = z.object({
+    // Air sensor telemetry settings
+    air_telemetry: z.array(telemetryItemSchema).default([
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
+        { value: "humidity-percent", visible: true, ui: "HUMIDITY %" },
+        { value: "dew-point", visible: true, ui: "DEW POINT" },
+        { value: "feels-like-c", visible: true, ui: "FEELS LIKE" },
+        { value: "pressure-pascal", visible: true, ui: "PRESSURE" },
+        { value: "altitude-meters", visible: true, ui: "ALTITUDE" },
+    ]),
+
+    // Water sensor telemetry settings
+    water_telemetry: z.array(telemetryItemSchema).default([
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
+    ]),
+
+    // Light sensor telemetry settings
+    light_telemetry: z.array(telemetryItemSchema).default([
+        { value: "lux", visible: true, ui: "LUX" },
+        { value: "uv-index", visible: true, ui: "UV INDEX" },
+    ]),
+});
+
+/**
  * Schema for partial updates - no defaults, all fields optional.
  * Used when receiving PATCH requests where only changed fields should be applied.
  */
@@ -48,15 +84,22 @@ export const appSettingsUpdateSchema = z.object({
     mqtt_topic_command: z.string().optional(),
     mqtt_topic_command_response: z.string().optional(),
     prometheus_port: z.number().int().positive().optional(),
+
+    // Telemetry settings
+    air_telemetry: z.array(telemetryItemSchema).optional(),
+    water_telemetry: z.array(telemetryItemSchema).optional(),
+    light_telemetry: z.array(telemetryItemSchema).optional(),
 });
 
 /**
  * Combined application settings schema with defaults for partial updates.
  */
-export const appSettingsSchema = uiPreferencesSchema.merge(serverConfigSchema);
+export const appSettingsSchema = uiPreferencesSchema.merge(serverConfigSchema).merge(telemetrySettingsSchema);
 
 export type UiPreferences = z.infer<typeof uiPreferencesSchema>;
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
+export type TelemetryItem = z.infer<typeof telemetryItemSchema>;
+export type TelemetrySettings = z.infer<typeof telemetrySettingsSchema>;
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 
 /**
@@ -71,7 +114,28 @@ export const DEFAULT_SETTINGS: AppSettings = {
     time_range_hours: 24,
     decimal_places: 2,
     unit_system: "imperial",
+
+    // Server config
     prometheus_port: 3301,
+
+    // Telemetry settings
+    air_telemetry: [
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
+        { value: "humidity-percent", visible: true, ui: "HUMIDITY %" },
+        { value: "dew-point", visible: true, ui: "DEW POINT" },
+        { value: "feels-like-c", visible: true, ui: "FEELS LIKE" },
+        { value: "pressure-pascal", visible: true, ui: "PRESSURE" },
+        { value: "altitude-meters", visible: true, ui: "ALTITUDE" },
+    ],
+
+    water_telemetry: [
+        { value: "temperature-c", visible: true, ui: "TEMPERATURE" },
+    ],
+
+    light_telemetry: [
+        { value: "lux", visible: true, ui: "LUX" },
+        { value: "uv-index", visible: true, ui: "UV INDEX" },
+    ],
 } as const;
 
 /**
@@ -82,7 +146,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const SETTINGS_SCHEMA: Record<string, {
     label: string;
     description: string;
-    type: "string" | "number" | "boolean" | "enum";
+    type: "string" | "number" | "boolean" | "enum" | "array";
     default: unknown;
     optional?: boolean;
     options?: string[];
@@ -180,5 +244,29 @@ export const SETTINGS_SCHEMA: Record<string, {
         type: "number",
         default: 3301,
         min: 1,
+    },
+
+    // Air telemetry settings
+    air_telemetry: {
+        label: "Air Telemetry Configuration",
+        description: "Configure which air sensor telemetry fields to display and their order.",
+        type: "array",
+        default: JSON.stringify(DEFAULT_SETTINGS.air_telemetry),
+    },
+
+    // Water telemetry settings
+    water_telemetry: {
+        label: "Water Telemetry Configuration",
+        description: "Configure which water sensor telemetry fields to display and their order.",
+        type: "array",
+        default: JSON.stringify(DEFAULT_SETTINGS.water_telemetry),
+    },
+
+    // Light telemetry settings
+    light_telemetry: {
+        label: "Light Telemetry Configuration",
+        description: "Configure which light sensor telemetry fields to display and their order.",
+        type: "array",
+        default: JSON.stringify(DEFAULT_SETTINGS.light_telemetry),
     },
 };

@@ -125,6 +125,14 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 (result as Record<string, string>)[key] = value;
                 break;
             }
+            case "array": {
+                // Array types (like telemetry settings) are stored as JSON
+                if (!Array.isArray(value)) {
+                    throw new Error(`Setting "${key}" must be an array, got ${typeof value}`);
+                }
+                (result as Record<string, unknown[]>)[key] = value;
+                break;
+            }
             default:
                 // Unknown type, skip this entry
                 continue;
