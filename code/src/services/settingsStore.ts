@@ -130,7 +130,23 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                 if (!Array.isArray(value)) {
                     throw new Error(`Setting "${key}" must be an array, got ${typeof value}`);
                 }
-                (result as Record<string, unknown[]>)[key] = value;
+
+                // Special handling for telemetry arrays: merge with defaults to include new items
+                if (key === "air_telemetry" || key === "water_telemetry" || key === "light_telemetry") {
+                    const defaultValue = DEFAULT_SETTINGS[key as keyof AppSettings] as Array<{ value: string }>;
+                    const dbValue = value as Array<{ value: string }>;
+
+                    // Start with DB values, then add any new items from defaults that aren't in DB
+                    const merged = [...dbValue];
+                    for (const defaultItem of defaultValue) {
+                        if (!merged.some(item => item.value === defaultItem.value)) {
+                            merged.push(defaultItem);
+                        }
+                    }
+                    (result as Record<string, unknown[]>)[key] = merged;
+                } else {
+                    (result as Record<string, unknown[]>)[key] = value;
+                }
                 break;
             }
             default:

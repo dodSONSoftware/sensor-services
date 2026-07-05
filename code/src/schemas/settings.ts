@@ -61,6 +61,8 @@ export const telemetrySettingsSchema = z.object({
 
     // Light sensor telemetry settings
     light_telemetry: z.array(telemetryItemSchema).default([
+        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT" },
+        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT" },
         { value: "lux", visible: true, ui: "LUX" },
         { value: "uv-index", visible: true, ui: "UV INDEX" },
     ]),
@@ -133,6 +135,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ],
 
     light_telemetry: [
+        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT" },
+        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT" },
         { value: "lux", visible: true, ui: "LUX" },
         { value: "uv-index", visible: true, ui: "UV INDEX" },
     ],
