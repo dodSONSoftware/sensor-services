@@ -16,8 +16,8 @@ export const uiPreferencesSchema = z.object({
     notification_level: z.enum(["none", "warn", "critical"]).default("warn"),
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
     decimal_places: z.number().int().min(0).max(4).default(2),
-    unit_system: z.enum(["metric", "imperial"]).default("imperial"),
     ping_attempts: z.number().int().min(3).max(10).default(3),
+    unit_system: z.enum(["metric", "imperial"]).default("imperial"),
 });
 
 /**
@@ -82,8 +82,8 @@ export const appSettingsUpdateSchema = z.object({
     notification_level: z.enum(["none", "warn", "critical"]).optional(),
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
     decimal_places: z.number().int().min(0).max(4).optional(),
-    unit_system: z.enum(["metric", "imperial"]).optional(),
     ping_attempts: z.number().int().min(3).max(10).optional(),
+    unit_system: z.enum(["metric", "imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
@@ -118,8 +118,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     notification_level: "warn",
     time_range_hours: 24,
     decimal_places: 2,
-    unit_system: "imperial",
     ping_attempts: 3,
+    unit_system: "imperial",
 
     // Server config
     prometheus_port: 3301,
