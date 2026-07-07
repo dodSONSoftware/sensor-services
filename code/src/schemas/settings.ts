@@ -17,6 +17,7 @@ export const uiPreferencesSchema = z.object({
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
     decimal_places: z.number().int().min(0).max(4).default(2),
     unit_system: z.enum(["metric", "imperial"]).default("imperial"),
+    ping_attempts: z.number().int().min(3).max(10).default(3),
 });
 
 /**
@@ -82,6 +83,7 @@ export const appSettingsUpdateSchema = z.object({
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
     decimal_places: z.number().int().min(0).max(4).optional(),
     unit_system: z.enum(["metric", "imperial"]).optional(),
+    ping_attempts: z.number().int().min(3).max(10).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
@@ -117,6 +119,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     time_range_hours: 24,
     decimal_places: 2,
     unit_system: "imperial",
+    ping_attempts: 3,
 
     // Server config
     prometheus_port: 3301,
@@ -207,6 +210,14 @@ export const SETTINGS_SCHEMA: Record<string, {
         default: 2,
         min: 0,
         max: 4,
+    },
+    ping_attempts: {
+        label: "Ping Attempts",
+        description: "Number of ping attempts when testing sensor connectivity. Minimum 3, maximum 10.",
+        type: "number",
+        default: 3,
+        min: 3,
+        max: 10,
     },
     unit_system: {
         label: "Unit System",
