@@ -17,6 +17,7 @@ export const uiPreferencesSchema = z.object({
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
     decimal_places: z.number().int().min(0).max(4).default(2),
     ping_attempts: z.number().int().min(3).max(10).default(3),
+    ping_delay_ms: z.number().int().min(100).max(5000).default(500),
     unit_system: z.enum(["metric", "imperial"]).default("imperial"),
 });
 
@@ -83,6 +84,7 @@ export const appSettingsUpdateSchema = z.object({
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
     decimal_places: z.number().int().min(0).max(4).optional(),
     ping_attempts: z.number().int().min(3).max(10).optional(),
+    ping_delay_ms: z.number().int().min(100).max(5000).optional(),
     unit_system: z.enum(["metric", "imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
@@ -119,6 +121,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     time_range_hours: 24,
     decimal_places: 2,
     ping_attempts: 3,
+    ping_delay_ms: 500,
     unit_system: "imperial",
 
     // Server config
@@ -160,6 +163,7 @@ export const SETTINGS_SCHEMA: Record<string, {
     options?: string[];
     min?: number;
     max?: number;
+    step?: number;
 }> = {
     theme: {
         label: "Theme",
@@ -218,6 +222,15 @@ export const SETTINGS_SCHEMA: Record<string, {
         default: 3,
         min: 3,
         max: 10,
+    },
+    ping_delay_ms: {
+        label: "Ping Delay (ms)",
+        description: "Delay between ping attempts in milliseconds. Minimum 100ms, maximum 5000ms.",
+        type: "number",
+        default: 500,
+        min: 100,
+        max: 5000,
+        step: 100,
     },
     unit_system: {
         label: "Unit System",
