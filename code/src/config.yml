@@ -20,7 +20,7 @@ mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
 
 # External services
-ip-pinger-web-api: "http://10.10.10.64:3300"
+ip-pinger-web-api: "http://10.10.10.50:3300"
 
 # Behavior
 case-sensitive: true
