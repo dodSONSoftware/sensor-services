@@ -10,7 +10,6 @@ import { createMockRes, createMockReq } from "../../mocks/express";
 // Mock settingsStore so tests don't require a real DB connection.
 const baseMockCache = {
     theme: true,
-    refresh_interval_sec: 5,
     dashboard_layout: "grid" as const,
     notification_level: "warn" as const,
     time_range_hours: 24,
@@ -67,7 +66,6 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body.settings).toHaveProperty("theme");
-        expect(body.settings).toHaveProperty("refresh_interval_sec");
         expect(body.settings).toHaveProperty("dashboard_layout");
         expect(body.settings).toHaveProperty("notification_level");
         expect(body.settings).toHaveProperty("time_range_hours");
@@ -83,7 +81,6 @@ describe("getSettingsDefaults", () => {
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
         expect(schema).toHaveProperty("theme");
-        expect(schema).toHaveProperty("refresh_interval_sec");
         expect(schema).toHaveProperty("dashboard_layout");
         expect(schema).toHaveProperty("notification_level");
         expect(schema).toHaveProperty("time_range_hours");
@@ -128,8 +125,8 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
-        expect((schema["refresh_interval_sec"] as Record<string, unknown>).min).toBe(1);
-        expect((schema["refresh_interval_sec"] as Record<string, unknown>).max).toBe(60);
+        expect((schema["ping_delay_ms"] as Record<string, unknown>).min).toBe(100);
+        expect((schema["ping_delay_ms"] as Record<string, unknown>).max).toBe(5000);
     });
 
     it("should mark optional settings correctly", async () => {
@@ -141,7 +138,6 @@ describe("getSettingsDefaults", () => {
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
         expect((schema["mqtt_broker_address"] as Record<string, unknown>).optional).toBe(true);
-        expect((schema["refresh_interval_sec"] as Record<string, unknown>).optional).toBeFalsy();
     });
 });
 
@@ -170,7 +166,6 @@ describe("getAllSettings", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body).toHaveProperty("theme");
-        expect(body).toHaveProperty("refresh_interval_sec");
         expect(body).toHaveProperty("dashboard_layout");
         expect(body).toHaveProperty("notification_level");
         expect(body).toHaveProperty("time_range_hours");
@@ -185,7 +180,6 @@ describe("getAllSettings", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         expect(body.theme).toBe(true);
-        expect(body.refresh_interval_sec).toBe(5);
         expect(body.dashboard_layout).toBe("grid");
         expect(body.notification_level).toBe("warn");
         expect(body.time_range_hours).toBe(24);
@@ -227,7 +221,7 @@ describe("updateSettings", () => {
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
-        expect(body.refresh_interval_sec).toBe(5);
+        expect(body.dashboard_layout).toBe("grid");
     });
 
     it("should handle multiple field updates", async () => {
@@ -271,14 +265,14 @@ describe("updateSettings - Partial Update Behavior", () => {
 
     it("should preserve all unchanged settings during partial update", async () => {
         const { res, sendCalls } = createMockRes();
-        const req = createMockReq({ body: { refresh_interval_sec: 10 } }) as Request;
+        const req = createMockReq({ body: { ping_delay_ms: 1000 } }) as Request;
 
         await updateSettings(req, res as Response);
 
         const body = sendCalls[0] as Record<string, unknown>;
         // All unchanged settings should retain their values
         expect(body.theme).toBe(false);           // Was explicitly set to false
-        expect(body.refresh_interval_sec).toBe(10);  // Was updated
+        expect(body.ping_delay_ms).toBe(1000);  // Was updated
         expect(body.dashboard_layout).toBe("grid");      // Default preserved
     });
 });

@@ -49,7 +49,7 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          * /settings:
          *   get:
          *     summary: Retrieve all application settings
-         *     description: Returns the full set of application settings including UI preferences (theme, refresh interval, layout) and server connection details (MQTT broker address). Missing keys are filled with defaults.
+         *     description: Returns the full set of application settings including UI preferences (theme, layout) and server connection details (MQTT broker address). Missing keys are filled with defaults.
          *     responses:
          *       200:
          *         description: Application settings
@@ -61,8 +61,6 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *                 theme:
          *                   type: boolean
          *                   default: true
-         *                 refresh_interval_sec:
-         *                   type: integer
          *                 dashboard_layout:
          *                   type: string
          *                   enum: [grid, list]
@@ -125,8 +123,6 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *               theme:
          *                 type: boolean
          *                 default: true
-         *               refresh_interval_sec:
-         *                 type: integer
          *               dashboard_layout:
          *                 type: string
          *                 enum: [grid, list]

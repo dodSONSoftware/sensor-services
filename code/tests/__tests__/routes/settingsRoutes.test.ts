@@ -9,7 +9,6 @@ import request from "supertest";
 // Mock settingsStore so tests don't require a real DB connection.
 const baseMockCache = {
     theme: true,
-    refresh_interval_sec: 5,
     dashboard_layout: "grid" as const,
     notification_level: "warn" as const,
     time_range_hours: 24,
@@ -49,7 +48,6 @@ describe("settings routes", () => {
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
             expect(res.body).toHaveProperty("theme");
-            expect(res.body).toHaveProperty("refresh_interval_sec");
             expect(res.body).toHaveProperty("dashboard_layout");
             expect(res.body).toHaveProperty("notification_level");
             expect(res.body).toHaveProperty("time_range_hours");
@@ -60,7 +58,6 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings");
 
             expect(res.body.theme).toBe(true);
-            expect(res.body.refresh_interval_sec).toBe(5);
         });
     });
 
@@ -78,7 +75,6 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings/defaults");
 
             expect(res.body.settings).toHaveProperty("theme");
-            expect(res.body.settings).toHaveProperty("refresh_interval_sec");
             expect(res.body.settings).toHaveProperty("dashboard_layout");
             expect(res.body.settings).toHaveProperty("notification_level");
             expect(res.body.settings).toHaveProperty("time_range_hours");
@@ -90,7 +86,6 @@ describe("settings routes", () => {
 
             const schema = res.body.schema as Record<string, unknown>;
             expect(schema).toHaveProperty("theme");
-            expect(schema).toHaveProperty("refresh_interval_sec");
             expect(schema).toHaveProperty("dashboard_layout");
             expect(schema).toHaveProperty("notification_level");
             expect(schema).toHaveProperty("time_range_hours");
@@ -123,8 +118,8 @@ describe("settings routes", () => {
             const res = await request(app).get("/settings/defaults");
 
             const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["refresh_interval_sec"] as Record<string, unknown>).min).toBe(1);
-            expect((schema["refresh_interval_sec"] as Record<string, unknown>).max).toBe(60);
+            expect((schema["ping_delay_ms"] as Record<string, unknown>).min).toBe(100);
+            expect((schema["ping_delay_ms"] as Record<string, unknown>).max).toBe(5000);
         });
 
         it("should mark optional settings correctly", async () => {
@@ -132,7 +127,6 @@ describe("settings routes", () => {
 
             const schema = res.body.schema as Record<string, unknown>;
             expect((schema["mqtt_broker_address"] as Record<string, unknown>).optional).toBe(true);
-            expect((schema["refresh_interval_sec"] as Record<string, unknown>).optional).toBeFalsy();
         });
     });
 
@@ -152,7 +146,7 @@ describe("settings routes", () => {
                 .patch("/settings/update")
                 .send({ theme: false });
 
-            expect(res.body.refresh_interval_sec).toBe(5);
+            expect(res.body.dashboard_layout).toBe("grid");
         });
 
         it("should handle multiple field updates", async () => {

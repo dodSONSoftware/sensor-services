@@ -10,7 +10,6 @@ import { z } from "zod";
  */
 export const uiPreferencesSchema = z.object({
     theme: z.boolean().default(true),
-    refresh_interval_sec: z.number().int().positive().min(1).max(60).default(5),
     dashboard_layout: z.enum(["cards", "list"]).default("cards"),
     notification_level: z.enum(["none", "warn", "critical"]).default("warn"),
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
@@ -18,7 +17,7 @@ export const uiPreferencesSchema = z.object({
     ping_attempts: z.number().int().min(3).max(10).default(3),
     ping_delay_ms: z.number().int().min(100).max(5000).default(500),
     recent_ips_max: z.number().int().min(5).max(20).default(10),
-    unit_system: z.enum(["metric", "imperial"]).default("imperial"),
+    unit_system: z.enum(["Metric", "Imperial"]).default("Imperial"),
 });
 
 /**
@@ -76,7 +75,6 @@ export const telemetrySettingsSchema = z.object({
  */
 export const appSettingsUpdateSchema = z.object({
     theme: z.boolean().optional(),
-    refresh_interval_sec: z.number().int().positive().min(1).max(60).optional(),
     dashboard_layout: z.enum(["cards", "list"]).optional(),
     notification_level: z.enum(["none", "warn", "critical"]).optional(),
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
@@ -84,7 +82,7 @@ export const appSettingsUpdateSchema = z.object({
     ping_attempts: z.number().int().min(3).max(10).optional(),
     ping_delay_ms: z.number().int().min(100).max(5000).optional(),
     recent_ips_max: z.number().int().min(5).max(20).optional(),
-    unit_system: z.enum(["metric", "imperial"]).optional(),
+    unit_system: z.enum(["Metric", "Imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
@@ -112,7 +110,6 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
  */
 export const DEFAULT_SETTINGS: AppSettings = {
     theme: true,
-    refresh_interval_sec: 5,
     dashboard_layout: "cards",
     notification_level: "warn",
     time_range_hours: 24,
@@ -120,7 +117,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ping_attempts: 3,
     ping_delay_ms: 500,
     recent_ips_max: 10,
-    unit_system: "imperial",
+    unit_system: "Imperial",
 
     // Telemetry settings
     air_telemetry: [
@@ -165,14 +162,6 @@ export const SETTINGS_SCHEMA: Record<string, {
         description: "Dashboard color scheme (true = light, false = dark).",
         type: "boolean",
         default: true,
-    },
-    refresh_interval_sec: {
-        label: "Refresh Interval (sec)",
-        description: "How often the dashboard polls for new sensor data. Minimum 1 second.",
-        type: "number",
-        default: 5,
-        min: 1,
-        max: 60,
     },
     dashboard_layout: {
         label: "Dashboard Layout",
@@ -233,8 +222,8 @@ export const SETTINGS_SCHEMA: Record<string, {
         label: "Unit System",
         description: "Display units for measurements (Metric or Imperial).",
         type: "enum",
-        default: "imperial",
-        options: ["metric", "imperial"],
+        default: "Imperial",
+        options: ["Metric", "Imperial"],
     },
     mqtt_broker_address: {
         label: "MQTT Broker Address",
