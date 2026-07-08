@@ -18,7 +18,7 @@ export const uiPreferencesSchema = z.object({
     ping_attempts: z.number().int().min(3).max(10).default(3),
     ping_delay_ms: z.number().int().min(100).max(5000).default(500),
     recent_ips_max: z.number().int().min(5).max(20).default(10),
-    unit_system: z.enum(["Metric", "Imperial"]).default("Imperial"),
+    unit_system: z.enum(["metric", "imperial"]).default("imperial"),
 });
 
 /**
@@ -84,7 +84,7 @@ export const appSettingsUpdateSchema = z.object({
     ping_attempts: z.number().int().min(3).max(10).optional(),
     ping_delay_ms: z.number().int().min(100).max(5000).optional(),
     recent_ips_max: z.number().int().min(5).max(20).optional(),
-    unit_system: z.enum(["Metric", "Imperial"]).optional(),
+    unit_system: z.enum(["metric", "imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
@@ -120,7 +120,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ping_attempts: 3,
     ping_delay_ms: 500,
     recent_ips_max: 10,
-    unit_system: "Imperial",
+    unit_system: "imperial",
 
     // Telemetry settings
     air_telemetry: [
@@ -233,8 +233,8 @@ export const SETTINGS_SCHEMA: Record<string, {
         label: "Unit System",
         description: "Display units for measurements (Metric or Imperial).",
         type: "enum",
-        default: "Imperial",
-        options: ["Metric", "Imperial"],
+        default: "imperial",
+        options: ["metric", "imperial"],
     },
     mqtt_broker_address: {
         label: "MQTT Broker Address",
