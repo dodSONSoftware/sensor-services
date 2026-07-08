@@ -18,6 +18,7 @@ export const uiPreferencesSchema = z.object({
     decimal_places: z.number().int().min(0).max(4).default(2),
     ping_attempts: z.number().int().min(3).max(10).default(3),
     ping_delay_ms: z.number().int().min(100).max(5000).default(500),
+    recent_ips_max: z.number().int().min(5).max(20).default(10),
     unit_system: z.enum(["metric", "imperial"]).default("imperial"),
 });
 
@@ -85,6 +86,7 @@ export const appSettingsUpdateSchema = z.object({
     decimal_places: z.number().int().min(0).max(4).optional(),
     ping_attempts: z.number().int().min(3).max(10).optional(),
     ping_delay_ms: z.number().int().min(100).max(5000).optional(),
+    recent_ips_max: z.number().int().min(5).max(20).optional(),
     unit_system: z.enum(["metric", "imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
@@ -122,6 +124,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     decimal_places: 2,
     ping_attempts: 3,
     ping_delay_ms: 500,
+    recent_ips_max: 10,
     unit_system: "imperial",
 
     // Server config
@@ -231,6 +234,14 @@ export const SETTINGS_SCHEMA: Record<string, {
         min: 100,
         max: 5000,
         step: 100,
+    },
+    recent_ips_max: {
+        label: "Recent IPs Max",
+        description: "Maximum number of recently pinged IP addresses to remember. Minimum 5, maximum 20.",
+        type: "number",
+        default: 10,
+        min: 5,
+        max: 20,
     },
     unit_system: {
         label: "Unit System",
