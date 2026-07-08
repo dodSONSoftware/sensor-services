@@ -11,11 +11,9 @@ const baseMockCache = {
     theme: true,
     refresh_interval_sec: 5,
     dashboard_layout: "grid" as const,
-    sound_enabled: false,
     notification_level: "warn" as const,
     time_range_hours: 24,
     decimal_places: 2,
-    prometheus_port: 3301,
 };
 
 jest.mock("../../../src/services/settingsStore", () => ({
@@ -53,7 +51,6 @@ describe("settings routes", () => {
             expect(res.body).toHaveProperty("theme");
             expect(res.body).toHaveProperty("refresh_interval_sec");
             expect(res.body).toHaveProperty("dashboard_layout");
-            expect(res.body).toHaveProperty("sound_enabled");
             expect(res.body).toHaveProperty("notification_level");
             expect(res.body).toHaveProperty("time_range_hours");
             expect(res.body).toHaveProperty("decimal_places");
@@ -83,7 +80,6 @@ describe("settings routes", () => {
             expect(res.body.settings).toHaveProperty("theme");
             expect(res.body.settings).toHaveProperty("refresh_interval_sec");
             expect(res.body.settings).toHaveProperty("dashboard_layout");
-            expect(res.body.settings).toHaveProperty("sound_enabled");
             expect(res.body.settings).toHaveProperty("notification_level");
             expect(res.body.settings).toHaveProperty("time_range_hours");
             expect(res.body.settings).toHaveProperty("decimal_places");
@@ -96,7 +92,6 @@ describe("settings routes", () => {
             expect(schema).toHaveProperty("theme");
             expect(schema).toHaveProperty("refresh_interval_sec");
             expect(schema).toHaveProperty("dashboard_layout");
-            expect(schema).toHaveProperty("sound_enabled");
             expect(schema).toHaveProperty("notification_level");
             expect(schema).toHaveProperty("time_range_hours");
             expect(schema).toHaveProperty("decimal_places");
@@ -104,7 +99,6 @@ describe("settings routes", () => {
             expect(schema).toHaveProperty("mqtt_topic_telemetry");
             expect(schema).toHaveProperty("mqtt_topic_command");
             expect(schema).toHaveProperty("mqtt_topic_command_response");
-            expect(schema).toHaveProperty("prometheus_port");
         });
 
         it("should include label, description, type, and default in each schema entry", async () => {
@@ -164,11 +158,11 @@ describe("settings routes", () => {
         it("should handle multiple field updates", async () => {
             const res = await request(app)
                 .patch("/settings/update")
-                .send({ theme: false, sound_enabled: true });
+                .send({ theme: false, notification_level: "critical" });
 
             expect(res.status).toBe(200);
             expect(res.body.theme).toBe(false);
-            expect(res.body.sound_enabled).toBe(true);
+            expect(res.body.notification_level).toBe("critical");
         });
 
         it("should reflect updated values on subsequent GET", async () => {

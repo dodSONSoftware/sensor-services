@@ -12,14 +12,13 @@ export const uiPreferencesSchema = z.object({
     theme: z.boolean().default(true),
     refresh_interval_sec: z.number().int().positive().min(1).max(60).default(5),
     dashboard_layout: z.enum(["cards", "list"]).default("cards"),
-    sound_enabled: z.boolean().default(false),
     notification_level: z.enum(["none", "warn", "critical"]).default("warn"),
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
     decimal_places: z.number().int().min(0).max(4).default(2),
     ping_attempts: z.number().int().min(3).max(10).default(3),
     ping_delay_ms: z.number().int().min(100).max(5000).default(500),
     recent_ips_max: z.number().int().min(5).max(20).default(10),
-    unit_system: z.enum(["metric", "imperial"]).default("imperial"),
+    unit_system: z.enum(["Metric", "Imperial"]).default("Imperial"),
 });
 
 /**
@@ -30,7 +29,6 @@ export const serverConfigSchema = z.object({
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
     mqtt_topic_command_response: z.string().optional(),
-    prometheus_port: z.number().int().positive().default(3301),
 });
 
 /**
@@ -80,19 +78,17 @@ export const appSettingsUpdateSchema = z.object({
     theme: z.boolean().optional(),
     refresh_interval_sec: z.number().int().positive().min(1).max(60).optional(),
     dashboard_layout: z.enum(["cards", "list"]).optional(),
-    sound_enabled: z.boolean().optional(),
     notification_level: z.enum(["none", "warn", "critical"]).optional(),
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
     decimal_places: z.number().int().min(0).max(4).optional(),
     ping_attempts: z.number().int().min(3).max(10).optional(),
     ping_delay_ms: z.number().int().min(100).max(5000).optional(),
     recent_ips_max: z.number().int().min(5).max(20).optional(),
-    unit_system: z.enum(["metric", "imperial"]).optional(),
+    unit_system: z.enum(["Metric", "Imperial"]).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
     mqtt_topic_command_response: z.string().optional(),
-    prometheus_port: z.number().int().positive().optional(),
 
     // Telemetry settings
     air_telemetry: z.array(telemetryItemSchema).optional(),
@@ -118,17 +114,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     theme: true,
     refresh_interval_sec: 5,
     dashboard_layout: "cards",
-    sound_enabled: false,
     notification_level: "warn",
     time_range_hours: 24,
     decimal_places: 2,
     ping_attempts: 3,
     ping_delay_ms: 500,
     recent_ips_max: 10,
-    unit_system: "imperial",
-
-    // Server config
-    prometheus_port: 3301,
+    unit_system: "Imperial",
 
     // Telemetry settings
     air_telemetry: [
@@ -189,12 +181,6 @@ export const SETTINGS_SCHEMA: Record<string, {
         default: "cards",
         options: ["cards", "list"],
     },
-    sound_enabled: {
-        label: "Sound Enabled",
-        description: "Play alert sounds when thresholds are breached.",
-        type: "boolean",
-        default: false,
-    },
     notification_level: {
         label: "Notification Level",
         description: "Minimum severity level that triggers alerts.",
@@ -247,8 +233,8 @@ export const SETTINGS_SCHEMA: Record<string, {
         label: "Unit System",
         description: "Display units for measurements (Metric or Imperial).",
         type: "enum",
-        default: "imperial",
-        options: ["metric", "imperial"],
+        default: "Imperial",
+        options: ["Metric", "Imperial"],
     },
     mqtt_broker_address: {
         label: "MQTT Broker Address",
@@ -277,13 +263,6 @@ export const SETTINGS_SCHEMA: Record<string, {
         type: "string",
         default: "",
         optional: true,
-    },
-    prometheus_port: {
-        label: "Prometheus Port",
-        description: "Port for the Prometheus sensor metrics server.",
-        type: "number",
-        default: 3301,
-        min: 1,
     },
 
     // Air telemetry settings

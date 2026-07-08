@@ -16,7 +16,7 @@ export const __routes: string[] = [
 ];
 
 export const __routesHelp: Record<string, unknown> = {
-    "description": "Application settings for the Angular dashboard (UI preferences + server connection details).",
+    "description": "Application settings for the Angular dashboard (UI preferences + MQTT connection details).",
     "commands": [
         {
             "route": "/settings",
@@ -49,7 +49,7 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          * /settings:
          *   get:
          *     summary: Retrieve all application settings
-         *     description: Returns the full set of application settings including UI preferences (theme, refresh interval, layout) and server connection details (MQTT broker address, Prometheus port). Missing keys are filled with defaults.
+         *     description: Returns the full set of application settings including UI preferences (theme, refresh interval, layout) and server connection details (MQTT broker address). Missing keys are filled with defaults.
          *     responses:
          *       200:
          *         description: Application settings
@@ -66,8 +66,6 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *                 dashboard_layout:
          *                   type: string
          *                   enum: [grid, list]
-         *                 sound_enabled:
-         *                   type: boolean
          *                 notification_level:
          *                   type: string
          *                   enum: [none, warn, critical]
@@ -83,8 +81,6 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *                   type: string
          *                 mqtt_topic_command_response:
          *                   type: string
-         *                 prometheus_port:
-         *                   type: integer
          */
         this.app.route("/settings").get((req: express.Request, res: express.Response) => settings_controller.getAllSettings(req, res));
 
@@ -134,8 +130,6 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *               dashboard_layout:
          *                 type: string
          *                 enum: [grid, list]
-         *               sound_enabled:
-         *                 type: boolean
          *               notification_level:
          *                 type: string
          *                 enum: [none, warn, critical]

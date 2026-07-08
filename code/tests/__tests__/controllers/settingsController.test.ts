@@ -12,11 +12,9 @@ const baseMockCache = {
     theme: true,
     refresh_interval_sec: 5,
     dashboard_layout: "grid" as const,
-    sound_enabled: false,
     notification_level: "warn" as const,
     time_range_hours: 24,
     decimal_places: 2,
-    prometheus_port: 3301,
 };
 
 jest.mock("../../../src/services/settingsStore", () => ({
@@ -71,7 +69,6 @@ describe("getSettingsDefaults", () => {
         expect(body.settings).toHaveProperty("theme");
         expect(body.settings).toHaveProperty("refresh_interval_sec");
         expect(body.settings).toHaveProperty("dashboard_layout");
-        expect(body.settings).toHaveProperty("sound_enabled");
         expect(body.settings).toHaveProperty("notification_level");
         expect(body.settings).toHaveProperty("time_range_hours");
         expect(body.settings).toHaveProperty("decimal_places");
@@ -88,7 +85,6 @@ describe("getSettingsDefaults", () => {
         expect(schema).toHaveProperty("theme");
         expect(schema).toHaveProperty("refresh_interval_sec");
         expect(schema).toHaveProperty("dashboard_layout");
-        expect(schema).toHaveProperty("sound_enabled");
         expect(schema).toHaveProperty("notification_level");
         expect(schema).toHaveProperty("time_range_hours");
         expect(schema).toHaveProperty("decimal_places");
@@ -96,7 +92,6 @@ describe("getSettingsDefaults", () => {
         expect(schema).toHaveProperty("mqtt_topic_telemetry");
         expect(schema).toHaveProperty("mqtt_topic_command");
         expect(schema).toHaveProperty("mqtt_topic_command_response");
-        expect(schema).toHaveProperty("prometheus_port");
     });
 
     it("should include label, description, type, and default in each schema entry", async () => {
@@ -177,7 +172,6 @@ describe("getAllSettings", () => {
         expect(body).toHaveProperty("theme");
         expect(body).toHaveProperty("refresh_interval_sec");
         expect(body).toHaveProperty("dashboard_layout");
-        expect(body).toHaveProperty("sound_enabled");
         expect(body).toHaveProperty("notification_level");
         expect(body).toHaveProperty("time_range_hours");
         expect(body).toHaveProperty("decimal_places");
@@ -193,7 +187,6 @@ describe("getAllSettings", () => {
         expect(body.theme).toBe(true);
         expect(body.refresh_interval_sec).toBe(5);
         expect(body.dashboard_layout).toBe("grid");
-        expect(body.sound_enabled).toBe(false);
         expect(body.notification_level).toBe("warn");
         expect(body.time_range_hours).toBe(24);
         expect(body.decimal_places).toBe(2);
