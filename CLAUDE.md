@@ -13,26 +13,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── commands/
 │   │   ├── blt.md         -- /build-lint-test quality gate definition
 │   │   └── git-commit.md  -- /git-commit semantic versioning workflow
-│   ├── skills/
+│   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 3.1.0)
-    ├── tsconfig.json      -- ES2016, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.3.1)
+    ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
-    ├── Dockerfile         -- Two-stage build (Node 22), non-root user, healthcheck, exposes ports 32000 + 3301
+    ├── Dockerfile         -- Two-stage build (Node 22), non-root user, healthcheck, exposes port 32000
     ├── docker-compose.yml -- Docker Compose: build + run with configs dir mount (/app/configs/), restart: unless-stopped
     ├── nodemon.json       -- Dev watch config
     ├── eslint.config.mjs  -- ESLint 9.x flat config (@typescript-eslint v8), excludes tests/, dodsonlabs/, jest config files, coverage/
-    ├── .vscode/               -- VS Code workspace settings
+    ├── .vscode/           -- VS Code workspace settings
     │   ├── extensions.json    -- Recommended extensions (eslint)
     │   └── settings.json      -- Workspace settings (ESLint validation, code actions on save)
-    ├── .dockerignore          -- Docker build exclusions (node_modules, tests, coverage, etc.)
-    ├── .editorconfig          -- Editor config (indentation, charset, line endings)
+    ├── .dockerignore      -- Docker build exclusions (node_modules, tests, coverage, etc.)
+    ├── .editorconfig      -- Editor config (indentation, charset, line endings)
     ├── src/
     │   ├── index.ts       -- Entry point: config load, Zod validation, logger init, MQTT init, Swagger, middleware, API metrics, routes, listen, graceful shutdown (15s hard timeout)
     │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, rate limiting, YAML format)
-    │   ├── swagger.ts     -- Swagger UI setup at /swagger (auto-derived from routable IP + port, overridable via config `swagger-server-url`, `routableAddress()` uses `os.networkInterfaces()`)
+    │   ├── swagger.ts     -- Swagger UI setup at /swagger (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
     │   ├── common/
     │   │   ├── global.ts  -- Global logger singleton, AsyncLocalStorage request ID propagation, aboutDude() metadata (system_info now populated)
     │   │   ├── metrics.ts -- API Prometheus metrics: http_requests_total (Counter), http_request_duration_seconds (Histogram), http_errors_total (Counter) — separate registry from sensor gauges
@@ -40,25 +40,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   ├── controllers/
     │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load), /ready (readiness probe)
     │   │   ├── sensorController.ts   -- MQTT-based sensor command handlers (event-based completion via waitForCompletion + AbortController, 10s hard cap)
-    │   │   ├── pingerController.ts   -- IP Pinger proxy + analyze logic (async/await, graceful degradation, `validateIpAddress()` rejects private/reserved IPs, `fetchWithTimeout()` via `AbortSignal.timeout()`)
-    │   │   └── settingsController.ts  -- GET /settings, GET /settings/defaults, PATCH /settings/update
+    │   │   ├── pingerController.ts   -- IP Pinger proxy + analyze logic (async/await, graceful degradation, validateIpAddress() rejects private/reserved IPs, fetchWithTimeout() via AbortSignal.timeout())
+    │   │   └── settingsController.ts -- GET /settings, GET /settings/defaults, PATCH /settings/update
     │   ├── middleware/
-    │   │   └── middleware.ts  -- CORS, JSON parser (configurable body limit), rate limiting (default 100 req/15min), request ID (X-Request-ID + AsyncLocalStorage), request logger, body validation (Zod)
+    │   │   └── middleware.ts -- CORS, JSON parser (configurable body limit), rate limiting (default 100 req/15min), request ID (X-Request-ID + AsyncLocalStorage), request logger, body validation (Zod)
     │   ├── routes/
     │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics/api, /ready (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
-    │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable `fetch_timeout_ms`)
+    │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable fetch_timeout_ms)
     │   │   ├── settingsRoutes.ts  -- /settings, /settings/defaults, /settings/update (PostgreSQL persistence via settingsStore)
     │   │   └── routeNotFound.ts   -- 404 handler (wired into app)
     │   ├── schemas/
-    │   │   ├── config.ts          -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn)
-    │   │   ├── postBody.ts        -- Zod schemas for POST body validation
-    │   │   └── settings.ts        -- Zod schemas + defaults + metadata for application settings (UI preferences + server connection details)
+    │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn)
+    │   │   ├── postBody.ts      -- Zod schemas for POST body validation
+    │   │   └── settings.ts      -- Zod schemas + defaults + metadata for application settings (UI preferences + server connection details)
     │   ├── services/
-    │   │   └── settingsStore.ts  -- PostgreSQL-backed persistence for application settings (init, getSettings, patchSettings)
+    │   │   └── settingsStore.ts -- PostgreSQL-backed persistence for application settings (init, getSettings, patchSettings)
     │   ├── git-dodsonlabs-from-cloud.sh -- Clone + rename dodson-labs-core submodule
     │   ├── README.txt             -- Instructions for setting up dodsonlabs/
-    │   └── dodsonlabs/            -- Shared library (git clone from dodson-labs-core)
+    │   └── dodsonlabs/          -- Shared library (git clone from dodson-labs-core)
     │       ├── CreatorBase.ts       -- Abstract RoutesCreatorBase for route creators
     │       ├── Interfaces.ts        -- IAbout, ILogger, IMqttCommandControl, IMqttNetworking, LogLevel
     │       ├── HttpConstants.ts     -- HTTP status codes and MIME types
@@ -67,7 +67,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── MqttNetworking.ts    -- MQTT client, telemetry handler, command-response tracker
     │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs
     │       └── PrometheusWriter.ts  -- Separate Express server on port 3301 with 10 Prometheus gauges
-    │       └── version.txt              -- Library version (1.2.8)
+    │       └── version.txt          -- Library version (1.2.8)
     ├── tests/
     │   ├── mocks/
     │   │   ├── express.ts   -- createMockRes(), createMockReq() helpers
@@ -79,7 +79,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
     │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running, hard timeout
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchIt/postIt/fetchItOnly non-OK responses
-    │       │   └── settingsController.test.ts  -- getAllSettings, getSettingsDefaults, updateSettings
+    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsDefaults, updateSettings
     │       ├── routes/
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
     │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify, get-details, reboot, read-config, write-config, update-config)
@@ -121,7 +121,7 @@ docker compose up --build   # Build image + run container (config.yml mounted fr
 docker compose down         # Stop and remove container
 ```
 
-**docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/dist/config.yml`. The container exposes ports 32000 (API) and 3301 (Prometheus metrics). Healthcheck probes `/ready` every 30s (`timeout: 5s`, `retries: 3`, `start_period: 10s`). Container restarts automatically with `restart: unless-stopped`.
+**docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/configs/config.yml`. The container exposes port 32000 (API). Healthcheck probes `/ready` every 30s (`timeout: 5s`, `retries: 3`, `start_period: 10s`). Container restarts automatically with `restart: unless-stopped`.
 
 ### Notes
 
@@ -131,13 +131,13 @@ docker compose down         # Stop and remove container
 - Uses Volta to pin Node 22.22.0 / npm 10.9.4.
 - `dodsonlabs/` is excluded from ESLint and test coverage (shared library, not a git submodule).
 - `tsconfig.json` uses `module: "NodeNext"`, `noUnusedLocals: true`, `noUnusedParameters: true`. Excludes `coverage/` to prevent leaked test artifacts from blocking builds.
-- Dockerfile runs as non-root user (`appuser`), includes HEALTHCHECK on `/health`.
+- Dockerfile runs as non-root user (`appuser`), includes HEALTHCHECK on `/ready`.
 
 ## Architecture
 
 ### Overview
 
-This is an Express 4 REST API that bridges IoT weather sensors to HTTP clients and Prometheus. It runs **two HTTP servers**:
+This is an Express REST API that bridges IoT weather sensors to HTTP clients and Prometheus. It runs **two HTTP servers**:
 
 1. **Main Express app** on port 32000 (configurable via `express-port` in config) — serves REST API + Swagger UI + API metrics at `/metrics/api`
 2. **Prometheus metrics server** on port 3301 (configurable via `prometheus-port` in config) — exposes `/metrics` with 10 sensor gauges
@@ -146,8 +146,8 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 ### Startup Flow (`src/index.ts`)
 
-1. Read config from `/app/dist/config.yml` (falls back to `./dist/config.yml`) via `read_file_yaml()` returning typed `ReadFileResult`
-2. Validate config with Zod v4: required keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `express-port`, `prometheus-port`, `case-sensitive`, `log-level`), MQTT topic strings must be non-empty, ports must be positive integers, `case-sensitive` must be boolean, `log-level` must be one of `error`/`info`/`debug`/`warn`. Optional keys: `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length`, `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`
+1. Read config from `/app/configs/config.yml` (falls back to `./dist/config.yml`) via `read_file_yaml()` returning typed `ReadFileResult`
+2. Validate config with Zod v4: required keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `express-port`, `prometheus-port`, `case-sensitive`, `log-level`), MQTT topic strings must be non-empty, ports must be positive integers, `case-sensitive` must be boolean, `log-level` must be one of `error`/`warn`/`info`/`debug`. Optional keys: `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length`, `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`
 3. Create global `Logger` instance via `createLogger(config)` — Winston-backed with `error`/`warn`/`info`/`debug` levels, optional Loki transport
 4. Create `MqttNetworking` instance (connects to MQTT broker, starts PrometheusWriter)
 5. Get port from config `express-port`
@@ -232,14 +232,14 @@ HTTP GET /sensors/identify → sensorController → mqtt_command_get_messages()
 
 **IP Pinger Proxy (HTTP → External Service):**
 ```
-HTTP GET /ippinger/ping → pingerController.fetchIt() → fetch() → http://10.10.10.64:3300/ping → response
+HTTP GET /ippinger/ping → pingerController.fetchIt() → fetch() → http://<ip>:<port>/ping → response
 ```
 
 **IP Pinger Analysis (HTTP → MQTT + HTTP → Merge):**
 ```
 HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
   → mqtt_command_get_messages(network, "*", "identify")  [fetch live sensors via MQTT]
-  → fetchItOnly("http://10.10.10.64:3300/read-config")   [fetch pinger config via HTTP]
+  → fetchItOnly("http://<ip>:<port>/read-config")       [fetch pinger config via HTTP]
   → analyzeIt(sensors, ippinger_devices, case_sensitive)  [compare and classify]
   → Results: "OK", "IP Address Mismatch", "Name Mismatch", "Offline", "New"
   → Graceful degradation: if pinger unreachable, returns live sensors with warning
@@ -370,7 +370,7 @@ case-sensitive: true
 # command-silence-timeout-ms: 5000
 ```
 
-**Required config keys:** `express-port` (positive int), `log-level` (error/info/debug/warn), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
+**Required config keys:** `express-port` (positive int), `log-level` (error/warn/info/debug), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
 **Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
 
@@ -392,7 +392,7 @@ case-sensitive: true
 - **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod v4 schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).
 - **`sys_info` array in `aboutDude()` is now populated** with platform, arch, hostname, uptime, total/free memory.
-- **Docker container** (via `code/docker-compose.yml`) mounts `config.yml` into the container at `/app/dist/config.yml`. Runs as non-root user (`appuser`). Healthcheck probes `/ready` every 30s.
+- **Docker container** (via `code/docker-compose.yml`) mounts `config.yml` into the container at `/app/configs/config.yml`. Runs as non-root user (`appuser`). Healthcheck probes `/ready` every 30s.
 - **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list; `validateRoutesHelp()` in `index.ts` checks for drift at startup between `__routesHelp` entries and actual registered routes.
 - **`createAnalyzeResult` spreads its `origin` argument** (no longer mutates in-place).
 - **`pingerController.ts` uses `async/await`** consistently — `fetchIt()`/`postIt()`/`fetchItOnly()` all use async/await. `getAnalyzeIpPinger()` gracefully degrades when the pinger service is unreachable (returns live sensors with a warning).
@@ -413,37 +413,3 @@ case-sensitive: true
 - **Zod v4** — upgraded from Zod v3. Schema uses `z.enum()` with `error` option for custom error messages.
 - **ESLint flat config** — `eslint.config.mjs` uses `@typescript-eslint` v8. Rules: `noUnusedLocals`/`noUnusedParameters` via tsconfig, `@typescript-eslint/no-explicit-any: warn`, `@typescript-eslint/no-non-null-assertion: warn`, `@typescript-eslint/consistent-type-imports: warn`.
 - **tsconfig.json** — `module: "NodeNext"`, `noUnusedLocals: true`, `noUnusedParameters: true`, `isolatedModules: true`. Excludes `tests/`, `eslint.config.mjs`, `jest.config.ts`, `jest.setup.ts`, `src/dodsonlabs/`.
-
-## Resolved Issues (from `to-fix.md`, deleted)
-
-The following issues from the old `to-fix.md` have been resolved:
-
-- **Blocking `sleep()` in MQTT reconnect** — removed; mqtt library's `reconnectPeriod: 5000` handles reconnection.
-- **`routeNotFound.ts` never wired** — now instantiated via `new CreateRouteNotFound(app)` in `index.ts`.
-- **`case_sensitive` hardcoded to `true`** — moved to `config.yml` as `case-sensitive`.
-- **`swagger-server-url` hardcoded** — now configurable via `config.yml` (`swagger-server-url`).
-- **`write-config`/`update-config` commented out** — now active POST endpoints.
-- **No test framework** — Jest + ts-jest configured with 70% coverage threshold.
-- **No linting** — ESLint 9.x with flat config and `@typescript-eslint` v8.
-- **`formatElapsedTime` unused** — now used in graceful shutdown uptime logging.
-- **`node-fetch` unused** — removed from dependencies; native `fetch` used throughout.
-- **`SensorCreatorBase.ts` duplicate** — removed (consolidated into `CreatorBase.ts`).
-- **`swagger-server-url` hardcoded to `192.168.1.214`** — now auto-derived or configurable.
-- **Config file format** — migrated from `config.json` to `config.yml` with Zod validation schemas.
-- **ESLint ignores not reflected in config** — `tests/` and `src/dodsonlabs/` now properly excluded in `eslint.config.mjs`.
-- **Route drift detection** — `validateRoutesHelp()` in `index.ts` compares `__routesHelp` against actual registered routes at startup.
-- **`logger()` non-null assertion removed** — replaced with explicit type assertion (`as Logger`) backed by `createLogger()` call guarantee.
-- **Duplicate imports merged** — `./schemas/config` imports consolidated into single statement in `index.ts`.
-- **Sensor command polling loop replaced** — event-based `waitForCompletion()` with `AbortController` hard cap replaces 1-second `sleep` loop.
-- **`sys_info` always empty** — now populated with OS platform, arch, hostname, uptime, memory.
-- **`createAnalyzeResult` mutates `origin` in-place** — now uses spread operator (`{ ...origin }`).
-- **`pingerController.ts` mixed promise chains and async/await** — refactored to use `async/await` consistently.
-- **IP pinger unreachable crashes analysis** — graceful degradation: returns live sensors with warning.
-- **No readiness probe** — `/ready` endpoint added (200 when all subsystems connected, 503 otherwise).
-- **No API-level observability** — separate Prometheus registry with request counters, duration histogram, error counters at `/metrics/api`.
-- **No request ID tracing** — `X-Request-ID` middleware with `AsyncLocalStorage` propagation.
-- **No rate limiting** — `express-rate-limit` applied to all routes (default 100/15min).
-- **No body validation** — Zod-based POST body validation returns 400 on invalid input.
-- **Docker runs as root** — now runs as non-root `appuser` with `HEALTHCHECK`.
-- **`log-level` missing `warn`** — enum expanded to include `warn`.
-- **Zod v3 → v4** — upgraded to Zod v4 with updated schema syntax.
