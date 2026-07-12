@@ -92,16 +92,14 @@ export function getHealth(req: express.Request, res: express.Response) {
 
 export function getReady(req: express.Request, res: express.Response) {
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
-    const ippinger_reachable = (req as express.Request & { ippinger_reachable: boolean }).ippinger_reachable;
 
-    // MQTT is required for command sending. The IP pinger is non-critical.
-    const status = is_connected ? (ippinger_reachable ? "ready" : "diminished") : "not_ready";
+    // MQTT is required for command sending.
+    const status = is_connected ? "ready" : "not_ready";
 
     const body = {
         status,
         dependencies: {
             mqtt: is_connected ? "connected" : "disconnected",
-            ippinger: ippinger_reachable ? "ready" : "not_ready",
         },
     };
 

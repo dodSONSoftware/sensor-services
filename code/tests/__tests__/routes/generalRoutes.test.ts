@@ -38,7 +38,7 @@ function createTestApp(mqttConnected: boolean = true): express.Application {
   const networking = createMockMqttNetworking({
     is_connected: jest.fn().mockReturnValue(mqttConnected),
   });
-  new CreateGeneralRoutes(app, networking, "http://192.168.1.4:3300", 10000);
+  new CreateGeneralRoutes(app, networking);
   return app;
 }
 
@@ -146,7 +146,7 @@ describe("General Routes", () => {
   });
 
   describe("GET /ready", () => {
-    it("should return 200 when all subsystems are ready", async () => {
+    it("should return 200 when MQTT is connected", async () => {
       const app = createTestApp();
 
       const res = await request(app).get("/ready");
@@ -155,8 +155,6 @@ describe("General Routes", () => {
       expect(res.headers["content-type"]).toMatch(/application\/json/);
       expect(res.body.status).toBe("ready");
       expect(res.body.dependencies.mqtt).toBe("connected");
-      
-      expect(res.body.dependencies.ippinger).toBe("ready");
     });
 
     it("should return 503 when MQTT is disconnected", async () => {
@@ -167,36 +165,6 @@ describe("General Routes", () => {
       expect(res.status).toBe(503);
       expect(res.body.status).toBe("not_ready");
       expect(res.body.dependencies.mqtt).toBe("disconnected");
-    });
-
-    it("should return 200 with status diminished when IP pinger is unreachable", async () => {
-      (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 502,
-        json: jest.fn().mockResolvedValue({}),
-        text: jest.fn().mockResolvedValue(""),
-        headers: new Headers(),
-        redirected: false,
-        statusText: "Bad Gateway",
-        url: "",
-        clone: jest.fn(),
-        body: null,
-        bodyUsed: false,
-        arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-        blob: jest.fn().mockResolvedValue(new Blob()),
-        formData: jest.fn().mockResolvedValue(new FormData()),
-        bytes: jest.fn().mockResolvedValue(new Uint8Array()),
-      } as Response);
-
-      const app = createTestApp();
-
-      const res = await request(app).get("/ready");
-
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe("diminished");
-      expect(res.body.dependencies.mqtt).toBe("connected");
-      
-      expect(res.body.dependencies.ippinger).toBe("not_ready");
     });
   });
 

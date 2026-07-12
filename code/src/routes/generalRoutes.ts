@@ -63,16 +63,12 @@ export const __routesHelp: Record<string, unknown> = {
 
 export class CreateGeneralRoutes extends RoutesCreatorBase {
     private readonly networking: MqttNetworking;
-    private readonly ip_pinger_web_api: string;
-    private readonly fetch_timeout_ms: number;
 
     // **** ctor
 
-    constructor(app: express.Application, networking: MqttNetworking, ip_pinger_web_api: string, fetch_timeout_ms: number) {
+    constructor(app: express.Application, networking: MqttNetworking) {
         super(app);
         this.networking = networking;
-        this.ip_pinger_web_api = ip_pinger_web_api;
-        this.fetch_timeout_ms = fetch_timeout_ms;
     }
 
     // **** protected functions
@@ -283,7 +279,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /ready:
          *   get:
          *     summary: Readiness probe for Kubernetes or orchestration tools
-         *     description: Returns 200 when MQTT is connected. Returns 503 when MQTT is not connected. Returns 200 with status "diminished" when only the IP pinger is unreachable.
+         *     description: Returns 200 when MQTT is connected. Returns 503 when MQTT is not connected.
          *     responses:
          *       200:
          *         description: Service is ready
@@ -294,16 +290,13 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *               properties:
          *                 status:
          *                   type: string
-         *                   enum: [ready, diminished]
+         *                   enum: [ready]
          *                 dependencies:
          *                   type: object
          *                   properties:
          *                     mqtt:
          *                       type: string
          *                       enum: [connected, disconnected]
-         *                     ippinger:
-         *                       type: string
-         *                       enum: [ready, not_ready]
          *       503:
          *         description: MQTT is not connected
          *         content:
@@ -320,32 +313,13 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                     mqtt:
          *                       type: string
          *                       enum: [connected, disconnected]
-         *                     ippinger:
-         *                       type: string
-         *                       enum: [ready, not_ready]
          */
         this.app.route("/ready").get(async (req: express.Request, res: express.Response) => {
             const typedReq = req as express.Request & {
                 mqtt_connected: boolean;
-                ippinger_reachable: boolean;
             };
             typedReq.mqtt_connected = this.networking.is_connected();
-            typedReq.ippinger_reachable = await probe_ippinger(this.ip_pinger_web_api, this.fetch_timeout_ms);
             general_controller.getReady(req, res);
         });
-    }
-}
-
-/**
- * Probe the IP pinger service by hitting its /about endpoint.
- * Returns true if the service responds with HTTP 200, false otherwise.
- */
-async function probe_ippinger(base_url: string, timeout_ms: number): Promise<boolean> {
-    try {
-        const signal = AbortSignal.timeout(timeout_ms);
-        const response = await fetch(`${base_url}/about`, { signal });
-        return response.ok;
-    } catch {
-        return false;
     }
 }

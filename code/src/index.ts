@@ -165,9 +165,17 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         const ip_pinger_web_api = config["ip-pinger-web-api"];
         const case_sensitive = config["case-sensitive"];
 
-        new generalRoutes.CreateGeneralRoutes(app, networking, ip_pinger_web_api, config["fetch-timeout-ms"] ?? 10_000);
+        new generalRoutes.CreateGeneralRoutes(app, networking);
         new sensorRoutes.CreateSensorRoutes(app, networking);
         new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000);
+
+        // Also register analyze endpoint under /sensors namespace
+        app.route("/sensors/ippinger-analyze").get((req: express.Request, res: express.Response) =>
+            pingerRoutes.pinger_controller.getAnalyzeIpPinger(
+                req, res, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000
+            )
+        );
+
         new settingsRoutes.CreateSettingsRoutes(app);
         new CreateRouteNotFound(app);
 
