@@ -43,7 +43,6 @@ export function getDateCurrent(_req: express.Request, res: express.Response) {
 export function getHealth(req: express.Request, res: express.Response) {
     const dude = aboutDude();
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
-    const prom_ready = (req as express.Request & { prometheus_server_ready: boolean }).prometheus_server_ready;
 
     const mem = process.memoryUsage();
     const loadavg = os.loadavg();
@@ -53,7 +52,6 @@ export function getHealth(req: express.Request, res: express.Response) {
         service: string;
         version: string;
         mqtt: "connected" | "disconnected";
-        prometheus_server: "ready" | "not_ready";
         uptime_seconds: number;
         timestamp: string;
         memory: {
@@ -67,11 +65,10 @@ export function getHealth(req: express.Request, res: express.Response) {
             load_15min: number;
         };
     } = {
-        status: is_connected && prom_ready ? "ok" : "degraded",
+        status: is_connected ? "ok" : "degraded",
         service: dude.about.name,
         version: dude.about.version,
         mqtt: is_connected ? "connected" : "disconnected",
-        prometheus_server: prom_ready ? "ready" : "not_ready",
         uptime_seconds: Math.floor(process.uptime()),
         timestamp: new Date().toISOString(),
         memory: {
@@ -95,19 +92,15 @@ export function getHealth(req: express.Request, res: express.Response) {
 
 export function getReady(req: express.Request, res: express.Response) {
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
-    const prom_ready = (req as express.Request & { prometheus_server_ready: boolean }).prometheus_server_ready;
     const ippinger_reachable = (req as express.Request & { ippinger_reachable: boolean }).ippinger_reachable;
 
-    // MQTT and Prometheus are critical — if either is down, the service is not ready.
-    // The IP pinger is non-critical — if only it is down, the service is diminished.
-    const critical_ok = is_connected && prom_ready;
-    const status = !critical_ok ? "not_ready" : ippinger_reachable ? "ready" : "diminished";
+    // MQTT is required for command sending. The IP pinger is non-critical.
+    const status = is_connected ? (ippinger_reachable ? "ready" : "diminished") : "not_ready";
 
     const body = {
         status,
         dependencies: {
             mqtt: is_connected ? "connected" : "disconnected",
-            prometheus_server: prom_ready ? "ready" : "not_ready",
             ippinger: ippinger_reachable ? "ready" : "not_ready",
         },
     };

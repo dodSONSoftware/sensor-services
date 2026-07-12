@@ -18,10 +18,8 @@ export const configSchema = z.object({
         error: "express-port must be a number",
     }).int("express-port must be an integer")
         .positive("express-port must be greater than 0"),
-    "prometheus-port": z.number({
-        error: "prometheus-port must be a number",
-    }).int("prometheus-port must be an integer")
-        .positive("prometheus-port must be greater than 0"),
+    // prometheus-port is no longer used by sensor-web-services (moved to sensor-telemetry-service)
+    "prometheus-port": z.number().optional(),
     "mqtt-broker-ip-address": z.string({
         error: "mqtt-broker-ip-address must be a string",
     }).min(1, "mqtt-broker-ip-address must not be empty"),

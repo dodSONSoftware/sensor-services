@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-import os from "os";
 import { AsyncLocalStorage } from "async_hooks";
 import { createRequire } from "module";
 import type { IAbout } from "../dodsonlabs/Interfaces";
@@ -63,25 +62,15 @@ export function aboutDude(): IAbout {
         cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
         //cmds.push({ "name": "", "help": routeNotFoundRoutesHelp })
 
-        const sys_info: { key: string; value: string }[] = [
-            { key: "platform", value: os.platform() },
-            { key: "arch", value: os.arch() },
-            { key: "hostname", value: os.hostname() },
-            { key: "uptime_seconds", value: String(Math.floor(os.uptime())) },
-            { key: "total_memory", value: `${Math.round(os.totalmem() / 1024 / 1024 / 1024)} GB` },
-            { key: "free_memory", value: `${Math.round(os.freemem() / 1024 / 1024 / 1024)} GB` },
-        ];
-
         _aboutDudeInfo = {
             about: {
                 name: "Sensor Web Services",
                 version,
                 author: "Randy Dodson (dodsonsoftware@gmail.com)",
                 description: "Provides sensor-related web services.",
-                copyright: "Copyright (c) 2025-2026 dodson Software ( dodson labs )",
-                license: "Licensed under the MIT License with Patent Grant and NOTICE preservation."
+                copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
+                license: "MIT"
             },
-            system_info: sys_info,
             commands: cmds
         };
     }

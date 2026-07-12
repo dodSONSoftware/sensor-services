@@ -121,7 +121,6 @@ describe("General Routes", () => {
       expect(res.body).toHaveProperty("service");
       expect(res.body).toHaveProperty("version");
       expect(res.body).toHaveProperty("mqtt");
-      expect(res.body).toHaveProperty("prometheus_server");
       expect(res.body).toHaveProperty("uptime_seconds");
       expect(typeof res.body.uptime_seconds).toBe("number");
       expect(res.body).toHaveProperty("timestamp");
@@ -156,7 +155,7 @@ describe("General Routes", () => {
       expect(res.headers["content-type"]).toMatch(/application\/json/);
       expect(res.body.status).toBe("ready");
       expect(res.body.dependencies.mqtt).toBe("connected");
-      expect(res.body.dependencies.prometheus_server).toBe("ready");
+      
       expect(res.body.dependencies.ippinger).toBe("ready");
     });
 
@@ -196,7 +195,7 @@ describe("General Routes", () => {
       expect(res.status).toBe(200);
       expect(res.body.status).toBe("diminished");
       expect(res.body.dependencies.mqtt).toBe("connected");
-      expect(res.body.dependencies.prometheus_server).toBe("ready");
+      
       expect(res.body.dependencies.ippinger).toBe("not_ready");
     });
   });

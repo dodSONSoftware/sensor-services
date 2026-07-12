@@ -91,7 +91,7 @@ describe("settings routes", () => {
             expect(schema).toHaveProperty("time_range_hours");
             expect(schema).toHaveProperty("decimal_places");
             expect(schema).toHaveProperty("mqtt_broker_address");
-            expect(schema).toHaveProperty("mqtt_topic_telemetry");
+            
             expect(schema).toHaveProperty("mqtt_topic_command");
             expect(schema).toHaveProperty("mqtt_topic_command_response");
         });

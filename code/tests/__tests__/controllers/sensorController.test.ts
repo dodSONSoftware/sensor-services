@@ -84,7 +84,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
     };
 
     return {
-      mqtt_topic_telemetry: "test/telemetry",
+      
       mqtt_topic_command: "test/command",
       mqtt_topic_command_response: "test/command-response",
       is_connected: jest.fn().mockReturnValue(true),
@@ -140,7 +140,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
       };
 
       const network = {
-        mqtt_topic_telemetry: "test/telemetry",
+        
         mqtt_topic_command: "test/command",
         mqtt_topic_command_response: "test/command-response",
         is_connected: jest.fn().mockReturnValue(true),
@@ -171,7 +171,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
       };
 
       const network = {
-        mqtt_topic_telemetry: "test/telemetry",
+        
         mqtt_topic_command: "test/command",
         mqtt_topic_command_response: "test/command-response",
         is_connected: jest.fn().mockReturnValue(true),
@@ -228,7 +228,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
       };
 
       const network: MqttNetworking = {
-        mqtt_topic_telemetry: "test/telemetry",
+        
         mqtt_topic_command: "test/command",
         mqtt_topic_command_response: "test/command-response",
         is_connected: jest.fn().mockReturnValue(true),

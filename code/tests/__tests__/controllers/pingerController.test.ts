@@ -167,7 +167,7 @@ describe("analyzeIt", () => {
 
 function createMockNetwork(liveResults: unknown[]): MqttNetworking {
   return {
-    mqtt_topic_telemetry: "iot/telemetry",
+    
     mqtt_topic_command: "iot/v2/command",
     mqtt_topic_command_response: "iot/v2/command-response",
     is_connected: jest.fn().mockReturnValue(true),

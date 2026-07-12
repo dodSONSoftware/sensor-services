@@ -4,7 +4,6 @@ services:
     container_name: sensor-web-services
     ports:
       - "32000:32000"
-      - "3301:3301"
     volumes:
       - /mnt/sensor-web-services/:/app/configs/
     restart: unless-stopped

@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { register } from "prom-client";
 import { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
 import { LogLevel } from "../../../src/dodsonlabs/Interfaces";
 
@@ -28,111 +27,29 @@ function createTestLogger(): TestLogger {
     };
 }
 
-function findFreePort(): Promise<number> {
-    return new Promise((resolve) => {
-        const server = require("net").createServer((socket: any) => socket.end());
-        server.listen(0, () => {
-            const port = (server.address() as any).port;
-            server.close(() => resolve(port));
-        });
-    });
-}
-
-describe("MqttNetworking command latency histogram", () => {
-    let port: number;
+describe("MqttNetworking", () => {
     let networking: MqttNetworking;
     let logger: TestLogger;
 
-    beforeAll(async () => {
-        port = await findFreePort();
+    beforeEach(() => {
         logger = createTestLogger();
 
-        // Build a minimal config with a random port so PrometheusWriter doesn't conflict
+        // Build a minimal config
         const config = {
             "mqtt-broker-ip-address": "127.0.0.1",
-            "mqtt-topic-telemetry": "iot/telemetry",
             "mqtt-topic-command": "iot/v2/command",
             "mqtt-topic-command-response": "iot/v2/command-response",
-            "prometheus-port": port,
             "ip-pinger-web-api": "http://127.0.0.1:3300",
             "case-sensitive": true,
         } as any;
 
-        // MqttNetworking will try to connect to MQTT; that's fine — we only test the histogram.
+        // MqttNetworking will try to connect to MQTT; that's fine — we only test the non-networking parts.
         networking = new MqttNetworking(config, logger);
-    }, 10000);
+    });
 
-    afterAll(() => {
+    afterEach(() => {
         // Best-effort cleanup — won't succeed without a real broker, but avoids leaks.
         networking.close(1000).catch(() => {});
-    });
-
-    it("should create the mqtt_command_latency_seconds histogram in the prom-client registry", async () => {
-        const metrics = await register.metrics();
-        expect(metrics).toContain("mqtt_command_latency_seconds");
-    });
-
-    it("should record latency when a command is published and a response is received", () => {
-        // Access the private map via `any` cast for testing
-        const anyNetworking = networking as any;
-        const publishTimes = anyNetworking.__command_publish_times;
-
-        // Simulate publishing a command
-        networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
-            "command-id": "test-latency-1",
-            "command": "identify",
-        });
-
-        expect(publishTimes.has("test-latency-1")).toBe(true);
-
-        // Simulate the response arriving 50ms later
-        jest.useFakeTimers();
-        jest.advanceTimersByTime(50);
-
-        // Access the private handler via `any` cast
-        (networking as any).handle_mqtt_message_command_response({
-            "type": "identify",
-            "source": "sensor-1",
-            "command-id": "test-latency-1",
-            "payload": {},
-        });
-
-        expect(publishTimes.has("test-latency-1")).toBe(false); // evicted after recording
-
-        jest.useRealTimers();
-    });
-
-    it("should label latency observations by command type", async () => {
-        const anyNetworking = networking as any;
-
-        // Publish a "reboot" command
-        networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
-            "command-id": "test-label-2",
-            "command": "reboot",
-        });
-
-        // Simulate response after 200ms
-        jest.useFakeTimers();
-        jest.advanceTimersByTime(200);
-
-        (networking as any).handle_mqtt_message_command_response({
-            "type": "reboot",
-            "source": "sensor-2",
-            "command-id": "test-label-2",
-            "payload": {},
-        });
-
-        jest.useRealTimers();
-
-        // Verify the histogram exists and the metric output contains the reboot label
-        const histogram = anyNetworking.prometheus_command_latency_histogram;
-        expect(histogram).toBeDefined();
-
-        const metrics = await register.metrics();
-        expect(metrics).toContain("mqtt_command_latency_seconds");
-        expect(metrics).toContain('command="reboot"');
     });
 
     // ---- outbound command deduplication
@@ -223,35 +140,6 @@ describe("MqttNetworking command latency histogram", () => {
         expect(seenIds.size).toBe(maxCapacity);
         expect(seenIds.has("cap-dedup-new")).toBe(true);
         expect(seenIds.has("cap-dedup-0")).toBe(false);
-    });
-
-    it("should evict oldest entry when latency map reaches capacity", () => {
-        const anyNetworking = networking as any;
-        const publishTimes = anyNetworking.__command_publish_times;
-        const maxCapacity = anyNetworking.__latency_max_size;
-
-        // Clear pre-existing entries
-        publishTimes.clear();
-
-        // Fill to capacity
-        for (let i = 0; i < maxCapacity; i++) {
-            networking.publish_mqtt_message("iot/v2/command", {
-                "message-type": "command",
-                "command-id": `cap-latency-${i}`,
-                "command": "identify",
-            });
-        }
-        expect(publishTimes.size).toBe(maxCapacity);
-
-        // Next insert evicts oldest, size stays at cap
-        networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
-            "command-id": "cap-latency-new",
-            "command": "identify",
-        });
-        expect(publishTimes.size).toBe(maxCapacity);
-        expect(publishTimes.has("cap-latency-new")).toBe(true);
-        expect(publishTimes.has("cap-latency-0")).toBe(false);
     });
 
     // ---- unknown command type rejection (M1: cr_dude_dict never evicts)

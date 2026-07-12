@@ -4,7 +4,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Directory Organization
 
-```
 /home/worker/Documents/code/sensor-services/sensor-web-services/
 ├── README.md              -- Project identification (minimal)
 ├── LICENSE                -- MIT License with Patent Grant
@@ -64,9 +63,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── HttpConstants.ts     -- HTTP status codes and MIME types
     │       ├── Logger.ts            -- Console logger with Error/Warn/Info/Debug levels, requestId in output
     │       ├── SystemFunctions.ts   -- File I/O, sleep, timestamps, bash exec, error helpers
-    │       ├── MqttNetworking.ts    -- MQTT client, telemetry handler, command-response tracker
+    │       ├── MqttNetworking.ts    -- MQTT client, command-response tracker (telemetry handling moved to sensor-telemetry-service)
     │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs
-    │       └── PrometheusWriter.ts  -- Separate Express server on port 3301 with 10 Prometheus gauges
     │       └── version.txt          -- Library version (1.2.8)
     ├── tests/
     │   ├── mocks/
@@ -96,7 +94,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)
     │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters
     └── dist/              -- Compiled output (tsc)
-```
 
 ## Commands
 
@@ -112,14 +109,12 @@ npm test               # Jest test runner
 npm run test:watch     # Jest watch mode
 npm run test:coverage  # Jest with coverage report
 npm run blt            # CI check: build + lint + test with coverage (runs `.claude/commands/ci.sh`, exit 1 if any step fails or coverage < 70%)
-```
 
 ### Docker
 
 ```bash
 docker compose up --build   # Build image + run container (config.yml mounted from /mnt/sensor-web-services/config.yml)
 docker compose down         # Stop and remove container
-```
 
 **docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/configs/config.yml`. The container exposes port 32000 (API). Healthcheck probes `/ready` every 30s (`timeout: 5s`, `retries: 3`, `start_period: 10s`). Container restarts automatically with `restart: unless-stopped`.
 
@@ -137,7 +132,7 @@ docker compose down         # Stop and remove container
 
 ### Overview
 
-This is an Express REST API that bridges IoT weather sensors to HTTP clients and Prometheus. It runs **two HTTP servers**:
+This is an Express REST API that bridges IoT weather sensors to HTTP clients and Prometheus. It runs a single HTTP server:
 
 1. **Main Express app** on port 32000 (configurable via `express-port` in config) — serves REST API + Swagger UI + API metrics at `/metrics/api`
 2. **Prometheus metrics server** on port 3301 (configurable via `prometheus-port` in config) — exposes `/metrics` with 10 sensor gauges
@@ -149,7 +144,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 1. Read config from `/app/configs/config.yml` (falls back to `./dist/config.yml`) via `read_file_yaml()` returning typed `ReadFileResult`
 2. Validate config with Zod v4: required keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `express-port`, `prometheus-port`, `case-sensitive`, `log-level`), MQTT topic strings must be non-empty, ports must be positive integers, `case-sensitive` must be boolean, `log-level` must be one of `error`/`warn`/`info`/`debug`. Optional keys: `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length`, `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`
 3. Create global `Logger` instance via `createLogger(config)` — Winston-backed with `error`/`warn`/`info`/`debug` levels, optional Loki transport
-4. Create `MqttNetworking` instance (connects to MQTT broker, starts PrometheusWriter)
+4. Create `MqttNetworking` instance (connects to MQTT broker, subscribes to command-response topic)
 5. Get port from config `express-port`
 6. Setup Swagger at `/swagger` (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
 7. Create middleware (CORS, JSON parsing with configurable body limit, rate limiting, request ID propagation via AsyncLocalStorage, request logger, body validation)
@@ -165,29 +160,12 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 **MqttNetworking** (`dodsonlabs/MqttNetworking.ts`) — The central sensor networking class:
 - Connects to MQTT broker with auto-reconnect (5s reconnectPeriod, 10s connectTimeout)
-- Subscribes to `iot/telemetry` and `iot/v2/command-response` topics
-- Dispatches incoming messages by `message-type`: `telemetry`, `log`, `command-response`
-- Telemetry messages validated via `is_telemetry_valid()` before forwarding to `PrometheusWriter.publish_*` methods
+- Subscribes to `iot/v2/command-response` topic only (telemetry handled by sensor-telemetry-service)
 - Command responses tracked via `MqttCommandControl` state machines (configurable `command-silence-timeout-ms`, default 1500ms)
 - Outbound command deduplication via `seen_command_ids` map (TTL-based eviction, max size cap)
-- Command latency tracking via `__command_publish_times` map + `mqtt_command_latency_seconds` histogram
 - Sensor log forwarding via `handle_mqtt_message_log()` — controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level) config keys
 - Exposes `publish_mqtt_message()` for sending commands to sensors — throws on failure (caller must handle)
 - Exposes `register_command_id()` for deduplication
-
-**PrometheusWriter** (`dodsonlabs/PrometheusWriter.ts`) — Sensor metrics server:
-- Runs a separate Express server on configurable port (default 3301)
-- Exposes 10 Gauge metrics labeled by `source`:
-  - `Air_Temperature` (F), `Air_Humidity` (%), `Air_Pressure` (in/Hg)
-  - `Light_UV_Index`, `Light_LUX`
-  - `Rain_In_H2O` (inches)
-  - `Wind_Speed` (mph), `Wind_Gusts` (mph)
-  - `Water_Temperature` (F)
-  - `Lightning` (count)
-- Performs unit conversions: Celsius to Fahrenheit, cm/sec to mph, pascals to in/Hg
-- `sanitizeSource()` truncates labels to `sensor-source-max-length` (default 30) and strips invalid characters per `sensor-source-valid-chars-regex` (default `a-zA-Z0-9._-`) to prevent label cardinality explosion
-- Temperature range checks: air (-100 to 200 F), water (-50 to 212 F)
-- `telemetry_messages_total` counter tracks total messages processed
 
 **SettingsStore** (`services/settingsStore.ts`) — PostgreSQL-backed persistence for application settings:
 - Connects to PostgreSQL database, creates target DB/table if needed, seeds defaults on first run
@@ -211,14 +189,10 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - `http_errors_total` (Counter) — labeled by method, route (counts 5xx)
 - Exposed at `/metrics/api` on the main Express app (port 32000)
 
-### Data Flows
 
-**Telemetry (MQTT → Prometheus):**
-```
-Sensor → MQTT broker (iot/telemetry) → MqttNetworking.handle_mqtt_message_telemetry()
-  → PrometheusWriter.publish_air/light/rain/wind/water/lightning()
-  → Gauge.set({ source }, value) → /metrics endpoint (port 3301)
-```
+
+
+
 
 **Sensor Commands (HTTP → MQTT → Response):**
 ```
@@ -254,6 +228,8 @@ HTTP request → middleware (request ID, rate limit, body validation)
   → GET /metrics/api → apiMetricsRegistry.metrics()
 ```
 
+  → GET /metrics/api → apiMetricsRegistry.metrics()
+
 ## API Endpoints
 
 ### Settings Routes (`/settings`) — PostgreSQL persistence
@@ -271,8 +247,8 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | GET | `/about` | API metadata, version, commands list, system info |
 | GET | `/date_local`, `/date-local` | Current local date/time (`yyyy-mm-ddThh:mm:ss`) |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time (`yyyy-mm-ddThh:mm:ssZ`) |
-| GET | `/health` | Health status with MQTT, Prometheus, memory, CPU, uptime |
-| GET | `/ready` | Readiness probe — 200 when MQTT + Prometheus connected, 503 otherwise |
+| GET | `/health` | Health status with MQTT, memory, CPU, uptime |
+| GET | `/ready` | Readiness probe — 200 when MQTT is connected, 503 otherwise |
 | GET | `/metrics/api` | Prometheus scrape endpoint for API metrics (requests, duration, errors) |
 
 ### Sensor Routes (`/sensors`) — MQTT-based
@@ -368,7 +344,6 @@ case-sensitive: true
 
 # Optional: silence timeout for sensor command responses (default: 1500ms)
 # command-silence-timeout-ms: 5000
-```
 
 **Required config keys:** `express-port` (positive int), `log-level` (error/warn/info/debug), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
@@ -400,8 +375,6 @@ case-sensitive: true
 - **`fetchWithTimeout()`** in pingerController wraps native `fetch()` with `AbortSignal.timeout()`.
 - **Command deduplication** — `MqttNetworking` tracks outbound command IDs in `seen_command_ids` map with TTL-based eviction and max size cap to prevent duplicates on reconnect.
 - **Command latency tracking** — `MqttNetworking` records publish timestamps in `__command_publish_times` and observes `mqtt_command_latency_seconds` histogram on response.
-- **Telemetry validation** — `is_telemetry_valid()` in MqttNetworking validates required fields exist before forwarding to PrometheusWriter.
-- **Source sanitization** — `PrometheusWriter.sanitizeSource()` truncates labels and strips invalid characters to prevent Prometheus label cardinality explosion.
 - **`uncaughtException`/`unhandledRejection`** — top-level handlers in `index.ts` call `shutdown()` to trigger graceful shutdown on fatal errors.
 - **Config migrated from JSON to YAML** — `config.yml` is loaded via `read_file_yaml()` and validated with Zod v4 schemas in `src/schemas/config.ts`. The old `config.json` was replaced.
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.

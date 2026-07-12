@@ -18,8 +18,6 @@ describe("aboutDude", () => {
     expect(about.about).toHaveProperty("description");
     expect(about).toHaveProperty("commands");
     expect(Array.isArray(about.commands)).toBe(true);
-    expect(about).toHaveProperty("system_info");
-    expect(Array.isArray(about.system_info)).toBe(true);
   });
 
   it("should return the same cached object on subsequent calls", () => {
