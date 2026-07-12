@@ -3,9 +3,6 @@
 # Apple macOS .DS_Store - file that stores custom attributes of its containing folder, such as position of icons or choice of a background image
 **/.DS_Store
 
-# dodson labs core
-code/src/dodsonlabs/**
-
 # **** ********************************
 # **** .gitignore Settings for NodeJS
 # **** ********************************
