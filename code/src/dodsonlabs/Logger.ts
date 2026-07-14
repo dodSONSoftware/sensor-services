@@ -61,7 +61,7 @@ export class Logger implements ILogger {
             transports.push(
         new LokiTransport({
             host: lokiUrl,
-            labels: { app: "sensor-web-services", env: "production" },
+            labels: { app: "sensor-services", env: "production" },
             format: winston.format.combine(
                 winston.format.timestamp(),
                 winston.format.json()

@@ -47,8 +47,8 @@ export class PrometheusWriter {
      */
     constructor(config: z.infer<typeof configSchema>, logger: ILogger) {
         // read configuration items
-        // Note: prometheus-port is no longer required; defaults to 3301 if present
-        this.prometheus_port = config["prometheus-port"] ?? 3301;
+        // Note: prometheus-port was moved to sensor-telemetry-service; this is unused here
+        this.prometheus_port = 3301;
         this.MAX_SOURCE_LENGTH = config["sensor-source-max-length"] ?? 30;
         const validChars = config["sensor-source-valid-chars-regex"] ?? "a-zA-Z0-9._-";
         this.VALID_CHARS = new RegExp(`[^${validChars}]+`);

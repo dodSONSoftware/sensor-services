@@ -119,9 +119,9 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/about` | API metadata, version, commands list, system info |
 | GET | `/date_local`, `/date-local` | Current local date/time |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time |
+| GET | `/endpoints` | Detailed information about each API endpoint |
 | GET | `/health` | Health status with MQTT, memory, CPU, uptime |
-| GET | `/ready` | Readiness probe (200 when MQTT connected) |
-| GET | `/metrics/api` | Prometheus scrape endpoint for API metrics |
+| GET | `/metrics` | Prometheus scrape endpoint for API metrics |
 
 ### Sensor Routes (`/sensors/*`)
 

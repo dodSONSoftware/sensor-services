@@ -9,7 +9,7 @@ import { Registry, Counter, Histogram } from "prom-client";
  * Dedicated Prometheus registry for API-specific metrics.
  *
  * Separated from the global register used by PrometheusWriter (sensor gauges)
- * so API metrics can be scraped independently at /metrics/api on the main
+ * so API metrics can be scraped independently at /metrics on the main
  * Express app (port 32000) versus sensor metrics at /metrics on port 3301.
  */
 export const apiMetricsRegistry: Registry = new Registry();

@@ -10,18 +10,6 @@ export interface CommandHelp {
   help: Record<string, unknown>;
 }
 
-export interface IAbout {
-  about: {
-    name: string;
-    version: string;
-    author: string;
-    copyright: string;
-    license: string;
-    description: string;
-  }
-  commands: CommandHelp[];
-}
-
 // **** Logger
 
 export const enum LogLevel {

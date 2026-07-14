@@ -10,9 +10,6 @@ log-level: debug
 loki-url: "http://10.10.10.60:3100"
 loki-enabled: false
 
-# Prometheus metrics server port
-prometheus-port: 3301
-
 # MQTT broker connection
 mqtt-broker-ip-address: "10.10.10.64"
 mqtt-topic-telemetry: "iot/telemetry"

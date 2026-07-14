@@ -1,14 +1,14 @@
 services:
-  sensor-web-services:
+  sensor-services:
     build: .
-    container_name: sensor-web-services
+    container_name: sensor-services
     ports:
       - "32000:32000"
     volumes:
-      - /mnt/sensor-web-services/:/app/configs/
+      - /mnt/sensor-services/:/app/configs/
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:32000/ready" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:32000/health" ]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -121,7 +121,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         // create middleware
         new middleware.CreateMiddleware(app, config);
 
-        // **** API Prometheus metrics (separate registry, exposed at /metrics/api)
+        // **** API Prometheus metrics (separate registry, exposed at /metrics)
         // Registry and metrics are imported from common/metrics.ts so they can
         // also be used by route handlers (e.g. generalRoutes.ts).
 

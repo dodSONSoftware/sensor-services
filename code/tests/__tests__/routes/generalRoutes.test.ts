@@ -168,11 +168,11 @@ describe("General Routes", () => {
     });
   });
 
-  describe("GET /metrics/api", () => {
+  describe("GET /metrics", () => {
     it("should return Prometheus-formatted API metrics", async () => {
       const app = createTestApp();
 
-      const res = await request(app).get("/metrics/api");
+      const res = await request(app).get("/metrics");
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/text\/plain/);
@@ -184,7 +184,7 @@ describe("General Routes", () => {
     it("should return HELP and TYPE lines for all API metrics", async () => {
       const app = createTestApp();
 
-      const res = await request(app).get("/metrics/api");
+      const res = await request(app).get("/metrics");
 
       expect(res.status).toBe(200);
       expect(res.text).toContain("# HELP http_requests_total Total number of HTTP requests.");

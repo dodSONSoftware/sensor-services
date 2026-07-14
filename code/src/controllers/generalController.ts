@@ -6,20 +6,47 @@
 import type * as express from "express";
 import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
 import { aboutDude, logger } from "../common/global";
-import os from "os";
+import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
+import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
+import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
+import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 
 // **** public functions
 
-export function getAbout(_req: express.Request, res: express.Response) {
+const startTime = Date.now();
+
+export function getAbout(req: express.Request, res: express.Response) {
+    const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
     const dude = aboutDude();
 
-    // log it
-    logger()?.write_debug("generalController.ts/getAbout", JSON.stringify(dude));
+    const cmds = [];
+    cmds.push({ "name": "General", "help": generalRoutesHelp });
+    cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
+    cmds.push({ "name": "IP Pinger", "help": pingerRoutesHelp });
+    cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
 
-    // publish it
+    const about = {
+        about: {
+            name: dude.about.name,
+            version: dude.about.version,
+            author: dude.about.author,
+            description: dude.about.description,
+            copyright: dude.about.copyright,
+            license: dude.about.license
+        },
+        system: {
+            status: is_connected ? "healthy" : "unhealthy",
+            mqtt: is_connected ? "connected" : "disconnected",
+            bootdate: new Date(startTime).toISOString()
+        },
+        routes: cmds
+    };
+
+    logger()?.write_debug("generalController.ts/getAbout", JSON.stringify(about));
+
     res.status(OK);
     res.contentType(Json);
-    res.send(dude);
+    res.send(about);
 }
 
 export function getDateCurrent(_req: express.Request, res: express.Response) {
@@ -41,46 +68,12 @@ export function getDateCurrent(_req: express.Request, res: express.Response) {
 }
 
 export function getHealth(req: express.Request, res: express.Response) {
-    const dude = aboutDude();
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
 
-    const mem = process.memoryUsage();
-    const loadavg = os.loadavg();
-
-    const health: {
-        status: "ok" | "degraded";
-        service: string;
-        version: string;
-        mqtt: "connected" | "disconnected";
-        uptime_seconds: number;
-        timestamp: string;
-        memory: {
-            rss: number;
-            heap_used: number;
-            heap_total: number;
-        };
-        cpu: {
-            load_1min: number;
-            load_5min: number;
-            load_15min: number;
-        };
-    } = {
-        status: is_connected ? "ok" : "degraded",
-        service: dude.about.name,
-        version: dude.about.version,
+    const health = {
+        status: is_connected ? "healthy" : "unhealthy",
         mqtt: is_connected ? "connected" : "disconnected",
-        uptime_seconds: Math.floor(process.uptime()),
         timestamp: new Date().toISOString(),
-        memory: {
-            rss: mem.rss,
-            heap_used: mem.heapUsed,
-            heap_total: mem.heapTotal,
-        },
-        cpu: {
-            load_1min: loadavg[0],
-            load_5min: loadavg[1],
-            load_15min: loadavg[2],
-        },
     };
 
     logger()?.write_debug("generalController.ts/getHealth", JSON.stringify(health));
@@ -90,24 +83,209 @@ export function getHealth(req: express.Request, res: express.Response) {
     res.send(health);
 }
 
-export function getReady(req: express.Request, res: express.Response) {
-    const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
-
-    // MQTT is required for command sending.
-    const status = is_connected ? "ready" : "not_ready";
-
-    const body = {
-        status,
-        dependencies: {
-            mqtt: is_connected ? "connected" : "disconnected",
+export function getEndpoints(_req: express.Request, res: express.Response) {
+    const endpoints = [
+        {
+            name: "About",
+            route: "/about",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Service information including about, system, and commands sections",
+            description: "Returns service information and available API commands."
         },
-    };
+        {
+            name: "Endpoints",
+            route: "/endpoints",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Object containing an array of endpoint details",
+            description: "Returns detailed information about each API endpoint."
+        },
+        {
+            name: "Health",
+            route: "/health",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "{ status: \"healthy\", mqtt: \"connected|disconnected\", timestamp: \"ISO-date-string\" }",
+            description: "Health check endpoint for container orchestration."
+        },
+        {
+            name: "Metrics",
+            route: "/metrics",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Prometheus metrics in text format",
+            description: "Returns Prometheus metrics for API-specific HTTP requests, duration, and errors."
+        },
+        {
+            name: "Settings Get",
+            route: "/settings",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "All application settings merged from database and defaults",
+            description: "Retrieves all application settings."
+        },
+        {
+            name: "Settings Defaults",
+            route: "/settings/defaults",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Current settings plus schema metadata for dynamic form generation",
+            description: "Returns settings with schema metadata for dynamic forms."
+        },
+        {
+            name: "Settings Update",
+            route: "/settings/update",
+            verb: "PATCH",
+            requestBody: "Partial JSON object with settings fields to update",
+            responseBody: "Merged settings object with updates applied",
+            description: "Partially updates settings in the database."
+        },
+        {
+            name: "Sensor Identify All",
+            route: "/sensors/identify",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Array of sensor identification responses",
+            description: "Identifies all sensors on the network."
+        },
+        {
+            name: "Sensor Identify Single",
+            route: "/sensors/identify/:source",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Sensor identification response for specified source",
+            description: "Identifies a specific sensor by source ID."
+        },
+        {
+            name: "Sensor Get Details",
+            route: "/sensors/get-details",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Array of sensor detail responses",
+            description: "Gets details for all sensors."
+        },
+        {
+            name: "Sensor Get Details Single",
+            route: "/sensors/get-details/:source",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Sensor detail response for specified source",
+            description: "Gets details for a specific sensor by source ID."
+        },
+        {
+            name: "Sensor Reboot All",
+            route: "/sensors/reboot",
+            verb: "POST",
+            requestBody: "None",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Reboots all sensors."
+        },
+        {
+            name: "Sensor Reboot Single",
+            route: "/sensors/reboot/:source",
+            verb: "POST",
+            requestBody: "None",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Reboots a specific sensor by source ID."
+        },
+        {
+            name: "Sensor Read Config",
+            route: "/sensors/read-config",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Array of sensor configuration responses",
+            description: "Reads configuration from all sensors."
+        },
+        {
+            name: "Sensor Read Config Single",
+            route: "/sensors/read-config/:source",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Sensor configuration response for specified source",
+            description: "Reads configuration from a specific sensor by source ID."
+        },
+        {
+            name: "Sensor Write Config",
+            route: "/sensors/write-config/:source",
+            verb: "POST",
+            requestBody: "JSON object with sensor configuration values",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Writes configuration to a specific sensor."
+        },
+        {
+            name: "Sensor Update Config",
+            route: "/sensors/update-config/:source",
+            verb: "POST",
+            requestBody: "JSON object with partial sensor configuration values",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Updates configuration on a specific sensor."
+        },
+        {
+            name: "IP Pinger Analyze",
+            route: "/sensors/ippinger-analyze",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Analysis results comparing pinger config vs live sensors",
+            description: "Compares IP pinger configuration against live sensor discovery."
+        },
+        {
+            name: "IP Pinger About",
+            route: "/ippinger/about",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "IP pinger service information",
+            description: "Proxy to IP pinger service /about endpoint."
+        },
+        {
+            name: "IP Pinger Read Config",
+            route: "/ippinger/read-config",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "IP pinger configuration",
+            description: "Proxy to IP pinger service /read-config endpoint."
+        },
+        {
+            name: "IP Pinger Write Config",
+            route: "/ippinger/write-config",
+            verb: "POST",
+            requestBody: "JSON object with IP pinger configuration",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Proxy to IP pinger service /write-config endpoint."
+        },
+        {
+            name: "IP Pinger Restart",
+            route: "/ippinger/restart",
+            verb: "POST",
+            requestBody: "None",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Proxy to IP pinger service /restart endpoint."
+        },
+        {
+            name: "IP Pinger Ping All",
+            route: "/ippinger/ping",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Array of ping results for all configured devices",
+            description: "Proxy to IP pinger service /ping endpoint."
+        },
+        {
+            name: "IP Pinger Ping Target",
+            route: "/ippinger/ping/:target",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Ping result for the specified IP address",
+            description: "Proxy to IP pinger service /ping/{ip} endpoint."
+        }
+    ];
 
-    logger()?.write_debug("generalController.ts/getReady", JSON.stringify(body));
+    const response = { endpoints };
 
-    res.status(status === "not_ready" ? 503 : OK);
+    logger()?.write_debug("generalController.ts/getEndpoints", JSON.stringify(response));
+
+    res.status(OK);
     res.contentType(Json);
-    res.send(body);
+    res.send(response);
 }
 
 export function getDateUTC(_req: express.Request, res: express.Response) {

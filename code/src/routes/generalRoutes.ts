@@ -18,9 +18,9 @@ export const __routes: string[] = [
     "/date_utc",
     "/date-local",
     "/date-utc",
+    "/endpoints",
     "/health",
-    "/metrics/api",
-    "/ready",
+    "/metrics",
 ];
 
 export const __routesHelp: Record<string, unknown> = {
@@ -51,12 +51,12 @@ export const __routesHelp: Record<string, unknown> = {
             "description": "Returns the health status of the API including MQTT broker, memory, and CPU."
         },
         {
-            "route": "/metrics/api",
-            "description": "Prometheus scrape endpoint for API-specific metrics (HTTP requests, duration, errors)."
+            "route": "/endpoints",
+            "description": "Returns detailed information about each API endpoint."
         },
         {
-            "route": "/ready",
-            "description": "Readiness probe — returns 200 when MQTT is connected, 503 otherwise."
+            "route": "/metrics",
+            "description": "Prometheus scrape endpoint for API-specific metrics (HTTP requests, duration, errors)."
         }
     ]
 };
@@ -114,7 +114,48 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                       help:
          *                         type: object
          */
-        this.app.route("/about").get((req: express.Request, res: express.Response) => general_controller.getAbout(req, res));
+        this.app.route("/about").get((req: express.Request, res: express.Response) => {
+            const typedReq = req as express.Request & {
+                mqtt_connected: boolean;
+            };
+            typedReq.mqtt_connected = this.networking.is_connected();
+            general_controller.getAbout(req, res);
+        });
+
+        // ENDPOINTS
+        /**
+         * @swagger
+         * /endpoints:
+         *   get:
+         *     summary: List all API endpoints
+         *     description: Returns detailed information about each API endpoint including name, route, verb, request/response body, and description.
+         *     responses:
+         *       200:
+         *         description: Array of endpoint details
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 endpoints:
+         *                   type: array
+         *                   items:
+         *                     type: object
+         *                     properties:
+         *                       name:
+         *                         type: string
+         *                       route:
+         *                         type: string
+         *                       verb:
+         *                         type: string
+         *                       requestBody:
+         *                         type: string
+         *                       responseBody:
+         *                         type: string
+         *                       description:
+         *                         type: string
+         */
+        this.app.route("/endpoints").get(general_controller.getEndpoints);
 
         // CURRENT DATETIME
         /**
@@ -256,7 +297,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
         // API METRICS
         /**
          * @swagger
-         * /metrics/api:
+         * /metrics:
          *   get:
          *     summary: Prometheus scrape endpoint for API metrics
          *     description: Returns Prometheus-formatted metrics for HTTP requests, request duration, and 5xx errors. This endpoint serves API-specific metrics separately from the sensor metrics exposed by PrometheusWriter on port 3301.
@@ -268,58 +309,9 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *             schema:
          *               type: string
          */
-        this.app.route("/metrics/api").get(async (_req: express.Request, res: express.Response) => {
+        this.app.route("/metrics").get(async (_req: express.Request, res: express.Response) => {
             res.set("Content-Type", apiMetricsRegistry.contentType);
             res.end(await apiMetricsRegistry.metrics());
-        });
-
-        // READINESS PROBE
-        /**
-         * @swagger
-         * /ready:
-         *   get:
-         *     summary: Readiness probe for Kubernetes or orchestration tools
-         *     description: Returns 200 when MQTT is connected. Returns 503 when MQTT is not connected.
-         *     responses:
-         *       200:
-         *         description: Service is ready
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: object
-         *               properties:
-         *                 status:
-         *                   type: string
-         *                   enum: [ready]
-         *                 dependencies:
-         *                   type: object
-         *                   properties:
-         *                     mqtt:
-         *                       type: string
-         *                       enum: [connected, disconnected]
-         *       503:
-         *         description: MQTT is not connected
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: object
-         *               properties:
-         *                 status:
-         *                   type: string
-         *                   enum: [not_ready]
-         *                 dependencies:
-         *                   type: object
-         *                   properties:
-         *                     mqtt:
-         *                       type: string
-         *                       enum: [connected, disconnected]
-         */
-        this.app.route("/ready").get(async (req: express.Request, res: express.Response) => {
-            const typedReq = req as express.Request & {
-                mqtt_connected: boolean;
-            };
-            typedReq.mqtt_connected = this.networking.is_connected();
-            general_controller.getReady(req, res);
         });
     }
 }

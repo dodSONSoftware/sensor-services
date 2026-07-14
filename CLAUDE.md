@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Directory Organization
 
-/home/worker/Documents/code/sensor-services/sensor-web-services/
+/home/worker/Documents/code/sensor-services/sensor-services/
 ├── README.md              -- Project identification (minimal)
 ├── LICENSE                -- MIT License with Patent Grant
 ├── .gitignore
@@ -37,14 +37,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── metrics.ts -- API Prometheus metrics: http_requests_total (Counter), http_request_duration_seconds (Histogram), http_errors_total (Counter) — separate registry from sensor gauges
     │   │   └── app-request.d.ts -- Express Request augmentation with optional id field
     │   ├── controllers/
-    │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load), /ready (readiness probe)
+    │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load)
     │   │   ├── sensorController.ts   -- MQTT-based sensor command handlers (event-based completion via waitForCompletion + AbortController, 10s hard cap)
     │   │   ├── pingerController.ts   -- IP Pinger proxy + analyze logic (async/await, graceful degradation, validateIpAddress() rejects private/reserved IPs, fetchWithTimeout() via AbortSignal.timeout())
     │   │   └── settingsController.ts -- GET /settings, GET /settings/defaults, PATCH /settings/update
     │   ├── middleware/
     │   │   └── middleware.ts -- CORS, JSON parser (configurable body limit), rate limiting (default 100 req/15min), request ID (X-Request-ID + AsyncLocalStorage), request logger, body validation (Zod)
     │   ├── routes/
-    │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics/api, /ready (dash-variant aliases for date routes)
+    │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
     │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable fetch_timeout_ms)
     │   │   ├── settingsRoutes.ts  -- /settings, /settings/defaults, /settings/update (PostgreSQL persistence via settingsStore)
@@ -113,7 +113,7 @@ npm run blt            # CI check: build + lint + test with coverage (runs `.cla
 ### Docker
 
 ```bash
-docker compose up --build   # Build image + run container (config.yml mounted from /mnt/sensor-web-services/config.yml)
+docker compose up --build   # Build image + run container (config.yml mounted from /mnt/sensor-services/config.yml)
 docker compose down         # Stop and remove container
 
 **docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/configs/config.yml`. The container exposes port 32000 (API). Healthcheck probes `/ready` every 30s (`timeout: 5s`, `retries: 3`, `start_period: 10s`). Container restarts automatically with `restart: unless-stopped`.
@@ -134,7 +134,7 @@ docker compose down         # Stop and remove container
 
 This is an Express REST API that bridges IoT weather sensors to HTTP clients and Prometheus. It runs a single HTTP server:
 
-1. **Main Express app** on port 32000 (configurable via `express-port` in config) — serves REST API + Swagger UI + API metrics at `/metrics/api`
+1. **Main Express app** on port 32000 (configurable via `express-port` in config) — serves REST API + Swagger UI + API metrics at `/metrics`
 2. **Prometheus metrics server** on port 3301 (configurable via `prometheus-port` in config) — exposes `/metrics` with 10 sensor gauges
 
 The app connects to an MQTT broker for real-time sensor telemetry ingestion and command-response communication.
@@ -187,7 +187,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - `http_requests_total` (Counter) — labeled by method, route, status code
 - `http_request_duration_seconds` (Histogram) — labeled by method, route, buckets: 0.01–10s
 - `http_errors_total` (Counter) — labeled by method, route (counts 5xx)
-- Exposed at `/metrics/api` on the main Express app (port 32000)
+- Exposed at `/metrics` on the main Express app (port 32000)
 
 
 
@@ -219,16 +219,16 @@ HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
   → Graceful degradation: if pinger unreachable, returns live sensors with warning
 ```
 
-**API Metrics (middleware → /metrics/api):**
+**API Metrics (middleware → /metrics):**
 ```
 HTTP request → middleware (request ID, rate limit, body validation)
   → API metrics middleware (wraps res.end, captures status/duration)
   → route handler
   → http_requests_total.inc(), httpRequestDuration.observe(), httpErrorsTotal.inc()
-  → GET /metrics/api → apiMetricsRegistry.metrics()
+  → GET /metrics → apiMetricsRegistry.metrics()
 ```
 
-  → GET /metrics/api → apiMetricsRegistry.metrics()
+  → GET /metrics → apiMetricsRegistry.metrics()
 
 ## API Endpoints
 
@@ -247,9 +247,9 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | GET | `/about` | API metadata, version, commands list, system info |
 | GET | `/date_local`, `/date-local` | Current local date/time (`yyyy-mm-ddThh:mm:ss`) |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time (`yyyy-mm-ddThh:mm:ssZ`) |
+| GET | `/endpoints` | Detailed information about each API endpoint |
 | GET | `/health` | Health status with MQTT, memory, CPU, uptime |
-| GET | `/ready` | Readiness probe — 200 when MQTT is connected, 503 otherwise |
-| GET | `/metrics/api` | Prometheus scrape endpoint for API metrics (requests, duration, errors) |
+| GET | `/metrics` | Prometheus scrape endpoint for API metrics (requests, duration, errors) |
 
 ### Sensor Routes (`/sensors`) — MQTT-based
 
@@ -288,7 +288,7 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/metrics/api` | Prometheus scrape endpoint (API request counters, duration histogram, error counters) |
+| GET | `/metrics` | Prometheus scrape endpoint (API request counters, duration histogram, error counters) |
 
 ### Swagger
 
@@ -349,7 +349,7 @@ case-sensitive: true
 
 **Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
 
-**Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-web-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`. Settings persistence stores to PostgreSQL database.
+**Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`. Settings persistence stores to PostgreSQL database.
 
 ## Key Patterns and Caveats
 
@@ -380,7 +380,7 @@ case-sensitive: true
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
 - **Body validation** — all POST bodies validated with Zod (`validatePostBody()`). Returns 400 if body is missing or not a JSON object. Replaces `req.body` with the validated object.
-- **API metrics middleware** — wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics/api`.
+- **API metrics middleware** — wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`.
 - **Graceful shutdown** — 15-second hard timeout safety net. Steps: stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → exit (gauges are in-memory, no flush needed).
 - **`log-level` enum includes `warn`** — valid values are `error`, `warn`, `info`, `debug`.
 - **Zod v4** — upgraded from Zod v3. Schema uses `z.enum()` with `error` option for custom error messages.

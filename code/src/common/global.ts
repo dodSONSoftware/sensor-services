@@ -5,12 +5,7 @@
 
 import { AsyncLocalStorage } from "async_hooks";
 import { createRequire } from "module";
-import type { IAbout } from "../dodsonlabs/Interfaces";
 import { Logger } from "../dodsonlabs/Logger";
-import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
-import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
-import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
-import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
 
@@ -51,29 +46,19 @@ export const reqId = () => _reqIdStore.getStore() ?? "none";
 
 // --------------------------------
 
-let _aboutDudeInfo: IAbout | null = null;
-
-export function aboutDude(): IAbout {
-    if (_aboutDudeInfo === null) {
-        const cmds = [];
-        cmds.push({ "name": "General", "help": generalRoutesHelp });
-        cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
-        cmds.push({ "name": "IP Pinger", "help": pingerRoutesHelp });
-        cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
-        //cmds.push({ "name": "", "help": routeNotFoundRoutesHelp })
-
-        _aboutDudeInfo = {
-            about: {
-                name: "Sensor Web Services",
-                version,
-                author: "Randy Dodson (dodsonsoftware@gmail.com)",
-                description: "Provides sensor-related web services.",
-                copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
-                license: "MIT"
-            },
-            commands: cmds
-        };
+// Static about info - cached at module load time
+const _staticAboutInfo = {
+    about: {
+        name: "Sensor Web Services",
+        version,
+        author: "Randy Dodson (dodsonsoftware@gmail.com)",
+        description: "Provides sensor-related web services.",
+        copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
+        license: "MIT"
     }
+};
 
-    return _aboutDudeInfo;
+export function aboutDude() {
+    return _staticAboutInfo;
 }
+

@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Sync local config.yml to the Docker mount point (source of truth)
-sudo cp "$(dirname "$0")/src/config.yml" /mnt/sensor-web-services/config.yml
+sudo cp "$(dirname "$0")/src/config.yml" /mnt/sensor-services/config.yml
 
 # Stop and remove the running container
 docker compose down
 
 # Remove the existing image so a fresh build is forced
-docker rmi code-sensor-web-services:latest
+docker rmi code-sensor-services:latest
 
 # Rebuild and start the container in detached mode
 docker compose up -d
@@ -21,4 +21,4 @@ docker ps
 
 # Output the logs
 echo
-docker logs -f sensor-web-services
+docker logs -f sensor-services
