@@ -7,6 +7,59 @@ import { create_mqtt_command_message, getIdentify } from "../../../src/controlle
 import type { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
 import type { IMqttCommandControl } from "../../../src/dodsonlabs/Interfaces";
 
+describe("enrichResultsWithMetadata", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-14T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("should add command_metadata to each result", () => {
+    const results = [
+      { source: "Air-Light-1", payload: {} },
+      { source: "Wind-Sensor-1", payload: {} },
+    ];
+    const commandId = "test-command-id-123";
+
+    const enriched = require("../../../src/controllers/sensorController")
+      .enrichResultsWithMetadata(results, commandId);
+
+    expect(enriched).toHaveLength(2);
+    expect(enriched[0]).toEqual({
+      source: "Air-Light-1",
+      payload: {},
+      command_metadata: {
+        command_id: commandId,
+        command_sent_at: "2026-07-14T12:00:00.000Z",
+        expected_delay_seconds: 3,
+      },
+    });
+    expect(enriched[1]).toEqual({
+      source: "Wind-Sensor-1",
+      payload: {},
+      command_metadata: {
+        command_id: commandId,
+        command_sent_at: "2026-07-14T12:00:00.000Z",
+        expected_delay_seconds: 3,
+      },
+    });
+  });
+
+  it("should use custom expectedDelaySeconds when provided", () => {
+    const results = [{ source: "test-sensor", payload: {} }];
+    const commandId = "custom-delay-test";
+    const customDelay = 5;
+
+    const enriched = require("../../../src/controllers/sensorController")
+      .enrichResultsWithMetadata(results, commandId, customDelay);
+
+    expect(enriched[0].command_metadata.expected_delay_seconds).toBe(customDelay);
+  });
+});
+
 describe("create_mqtt_command_message", () => {
   it("should create a command message with default empty payload and a command-id", () => {
     const msg = create_mqtt_command_message("sensor-1", "identify");

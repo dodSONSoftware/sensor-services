@@ -74,6 +74,15 @@ describe("Sensor Routes", () => {
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
       expect(Array.isArray(res.body)).toBe(true);
+      // Verify enhanced response format with command_metadata
+      expect(res.body[0]).toHaveProperty("source");
+      expect(res.body[0]).toHaveProperty("payload");
+      expect(res.body[0]).toHaveProperty("command_metadata");
+      expect(res.body[0].command_metadata).toMatchObject({
+        command_id: expect.any(String),
+        command_sent_at: expect.any(String),
+        expected_delay_seconds: 3,
+      });
     });
   });
 
@@ -86,6 +95,15 @@ describe("Sensor Routes", () => {
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
       expect(Array.isArray(res.body)).toBe(true);
+      // Verify enhanced response format with command_metadata
+      expect(res.body[0]).toHaveProperty("source");
+      expect(res.body[0]).toHaveProperty("payload");
+      expect(res.body[0]).toHaveProperty("command_metadata");
+      expect(res.body[0].command_metadata).toMatchObject({
+        command_id: expect.any(String),
+        command_sent_at: expect.any(String),
+        expected_delay_seconds: 3,
+      });
     });
   });
 

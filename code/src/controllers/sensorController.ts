@@ -61,6 +61,26 @@ function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<stri
 // the wait must eventually exit to avoid hanging the caller forever.
 const __max_wait_ms = 10_000;
 
+/**
+ * Enriches command results with metadata about the command execution.
+ * Adds command_id, command_sent_at, and expected_delay_seconds to each result.
+ */
+export function enrichResultsWithMetadata(
+    results: IMqttCommandControl["results"],
+    commandId: string,
+    expectedDelaySeconds?: number
+): Record<string, unknown>[] {
+    const now = new Date().toISOString();
+    return results.map((result) => ({
+        ...result,
+        command_metadata: {
+            command_id: commandId,
+            command_sent_at: now,
+            expected_delay_seconds: expectedDelaySeconds ?? _reboot_command_delay_seconds,
+        },
+    }));
+}
+
 async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl) {
     // Event-based wait: resolves when no more responses arrive within the timeout window,
     // or when deinitialize() is called. Eliminates the 1-second polling loop.
@@ -87,10 +107,10 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     dude.deinitialize();
 }
 
-export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, parameters: string = ""): Promise<IMqttCommandControl | null> {
+export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, parameters: string = "", commandId?: string): Promise<IMqttCommandControl | null> {
     // get-it
     const start_date = new Date();
-    const commandId = randomUUID();
+    const cmdId = commandId ?? randomUUID();
     const dude = network.get_cr_dude(command);
     if (dude === null) {
         _log().write_error("sensorController.ts/mqtt_command_get_messages", `Unknown command type '${command}', rejecting`);
@@ -107,7 +127,7 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
 
     } else {
         // create mqtt request
-        const mqtt_request = create_mqtt_command_message(target, `${command} ${parameters}`, null, commandId);
+        const mqtt_request = create_mqtt_command_message(target, `${command} ${parameters}`, null, cmdId);
 
         // start-it
         mqtt_command_start(dude, mqtt_request, network);
@@ -126,10 +146,10 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     return dude;
 }
 
-async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "") {
+async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "", commandId?: string) {
     try {
         // log-it
-        const dude = await mqtt_command_get_messages(network, target, command, parameters);
+        const dude = await mqtt_command_get_messages(network, target, command, parameters, commandId);
         if (dude === null) {
             return; // error already sent by mqtt_command_get_messages
         }
@@ -137,7 +157,13 @@ async function get_it(_req: express.Request, res: express.Response, network: Mqt
         // send response
         res.status(OK);
         res.contentType(Json);
-        res.send(dude.results);
+
+        // Enrich results with metadata if commandId is provided
+        if (commandId && command === "reboot") {
+            res.send(enrichResultsWithMetadata(dude.results, commandId));
+        } else {
+            res.send(dude.results);
+        }
         dude.clear_results();
 
     } catch (err) {
@@ -230,12 +256,16 @@ export async function getDetailsBySource(req: express.Request, res: express.Resp
 // the delay parameter is passed as an MQTT command argument, not a request body.
 
 export async function postReboot(req: express.Request, res: express.Response, network: MqttNetworking) {
-    // get-it
-    await get_it(req, res, network, "*", "reboot", `${_reboot_command_delay_seconds}`);
+    // Generate commandId upfront so we can include it in enriched results
+    const commandId = randomUUID();
+    // get-it with commandId for enrichment
+    await get_it(req, res, network, "*", "reboot", `${_reboot_command_delay_seconds}`, commandId);
 }
 export async function postRebootBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
-    // get-it
-    await get_it(req, res, network, source, "reboot", `${_reboot_command_delay_seconds}`);
+    // Generate commandId upfront so we can include it in enriched results
+    const commandId = randomUUID();
+    // get-it with commandId for enrichment
+    await get_it(req, res, network, source, "reboot", `${_reboot_command_delay_seconds}`, commandId);
 }
 
 

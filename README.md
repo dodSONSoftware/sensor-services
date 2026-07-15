@@ -21,7 +21,7 @@ The Typescript Sensor Web Services project provides an Express-based REST API fo
 
 ## Version
 
-**Current:** v4.4.1
+**Current:** v4.7.0
 
 See git history for release notes.
 
@@ -131,8 +131,8 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/sensors/identify/:source` | Identify a specific sensor |
 | GET | `/sensors/get-details` | Get details for all sensors |
 | GET | `/sensors/get-details/:source` | Get details for a specific sensor |
-| POST | `/sensors/reboot` | Reboot all sensors |
-| POST | `/sensors/reboot/:source` | Reboot a specific sensor |
+| POST | `/sensors/reboot` | Reboot all sensors (returns command metadata) |
+| POST | `/sensors/reboot/:source` | Reboot a specific sensor (returns command metadata) |
 | GET | `/sensors/read-config` | Read config from all sensors |
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
 | POST | `/sensors/write-config/:source` | Write config to a specific sensor |
