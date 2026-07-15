@@ -117,15 +117,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
     unit_system: "Imperial",
     telemetry: {
         air: [
-            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+            { ui: "TEMPERATURE", order: 0, value: "temperature-f", visible: true },
             { ui: "HUMIDITY %", order: 1, value: "humidity-percent", visible: true },
             { ui: "DEW POINT", order: 2, value: "dew-point", visible: true },
-            { ui: "FEELS LIKE", order: 3, value: "feels-like-c", visible: true },
+            { ui: "FEELS LIKE", order: 3, value: "feels-like-f", visible: true },
             { ui: "PRESSURE", order: 4, value: "pressure-pascal", visible: true },
-            { ui: "ALTITUDE", order: 5, value: "altitude-meters", visible: true },
+            { ui: "ALTITUDE", order: 5, value: "altitude-feet", visible: true },
         ],
         water: [
-            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+            { ui: "TEMPERATURE", order: 0, value: "temperature-f", visible: true },
         ],
         light: [
             { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw-ambient-light", visible: false },
