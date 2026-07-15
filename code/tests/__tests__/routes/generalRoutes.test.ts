@@ -56,8 +56,14 @@ describe("General Routes", () => {
       expect(res.body.about).toHaveProperty("version");
       expect(res.body.about).toHaveProperty("author");
       expect(res.body.about).toHaveProperty("license");
-      expect(res.body).toHaveProperty("commands");
-      expect(Array.isArray(res.body.commands)).toBe(true);
+      expect(res.body).toHaveProperty("system");
+      expect(res.body.system).toHaveProperty("status");
+      expect(res.body.system).toHaveProperty("mqtt");
+      expect(res.body.system).toHaveProperty("ipPinger");
+      expect(res.body.system).toHaveProperty("sensorTelemetry");
+      expect(res.body.system).toHaveProperty("bootdate");
+      expect(res.body).toHaveProperty("routes");
+      expect(Array.isArray(res.body.routes)).toBe(true);
     });
   });
 
@@ -110,7 +116,7 @@ describe("General Routes", () => {
   });
 
   describe("GET /health", () => {
-    it("should return health object with all dependency checks", async () => {
+    it("should return health object with MQTT check", async () => {
       const app = createTestApp();
 
       const res = await request(app).get("/health");
@@ -118,53 +124,22 @@ describe("General Routes", () => {
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
       expect(res.body).toHaveProperty("status");
-      expect(res.body).toHaveProperty("service");
-      expect(res.body).toHaveProperty("version");
+      expect(res.body.status).toBe("healthy");
       expect(res.body).toHaveProperty("mqtt");
-      expect(res.body).toHaveProperty("uptime_seconds");
-      expect(typeof res.body.uptime_seconds).toBe("number");
+      expect(res.body.mqtt).toBe("connected");
       expect(res.body).toHaveProperty("timestamp");
-      expect(res.body).toHaveProperty("memory");
-      expect(res.body.memory).toHaveProperty("rss");
-      expect(res.body.memory).toHaveProperty("heap_used");
-      expect(res.body.memory).toHaveProperty("heap_total");
-      expect(res.body).toHaveProperty("cpu");
-      expect(res.body.cpu).toHaveProperty("load_1min");
-      expect(res.body.cpu).toHaveProperty("load_5min");
-      expect(res.body.cpu).toHaveProperty("load_15min");
     });
 
-    it("should report degraded when mqtt is disconnected", async () => {
+    it("should report unhealthy status when mqtt is not connected", async () => {
       const app = createTestApp(false);
 
       const res = await request(app).get("/health");
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe("degraded");
+      expect(res.body.status).toBe("unhealthy");
       expect(res.body.mqtt).toBe("disconnected");
-    });
-  });
-
-  describe("GET /ready", () => {
-    it("should return 200 when MQTT is connected", async () => {
-      const app = createTestApp();
-
-      const res = await request(app).get("/ready");
-
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/application\/json/);
-      expect(res.body.status).toBe("ready");
-      expect(res.body.dependencies.mqtt).toBe("connected");
-    });
-
-    it("should return 503 when MQTT is disconnected", async () => {
-      const app = createTestApp(false);
-
-      const res = await request(app).get("/ready");
-
-      expect(res.status).toBe(503);
-      expect(res.body.status).toBe("not_ready");
-      expect(res.body.dependencies.mqtt).toBe("disconnected");
+      expect(res.body.ipPinger).toBe("healthy");
+      expect(res.body.sensorTelemetry).toBe("healthy");
     });
   });
 

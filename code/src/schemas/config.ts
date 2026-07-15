@@ -33,6 +33,7 @@ export const configSchema = z.object({
     "ip-pinger-web-api": z.string({
         error: "ip-pinger-web-api must be a string",
     }).min(1, "ip-pinger-web-api must not be empty"),
+    "sensor-telemetry-api": z.string().optional(),
     "case-sensitive": z.boolean({
         error: "case-sensitive must be a boolean",
     }),

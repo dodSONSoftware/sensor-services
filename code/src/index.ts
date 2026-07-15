@@ -13,7 +13,8 @@ import * as sensorRoutes from "./routes/sensorRoutes";
 import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import * as settingsRoutes from "./routes/settingsRoutes";
-import { aboutDude, createLogger, logger } from "./common/global";
+import * as configRoutes from "./routes/configRoutes";
+import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { InternalServerError } from "./dodsonlabs/HttpConstants";
 import {
@@ -77,6 +78,9 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
     // validate and type the config with Zod
     const config = validate_config(configResult.data);
+
+    // Store config in global storage for hot-reload support
+    setConfig(config);
 
     // create logger
     createLogger(config);
@@ -177,6 +181,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         );
 
         new settingsRoutes.CreateSettingsRoutes(app);
+        new configRoutes.CreateConfigRoutes(app);
         new CreateRouteNotFound(app);
 
         // Validate __routesHelp entries match __routes arrays
@@ -184,6 +189,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         validateRoutesHelp("sensorRoutes", sensorRoutes.__routes, sensorRoutes.__routesHelp);
         validateRoutesHelp("pingerRoutes", pingerRoutes.__routes, pingerRoutes.__routesHelp);
         validateRoutesHelp("settingsRoutes", settingsRoutes.__routes, settingsRoutes.__routesHelp);
+        validateRoutesHelp("configRoutes", configRoutes.__routes, configRoutes.__routesHelp);
     } catch (err: unknown) {
         // log error
         appLogger.write_error("index.ts", ensureError(err).message);

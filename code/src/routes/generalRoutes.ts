@@ -48,7 +48,7 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/health",
-            "description": "Returns the health status of the API including MQTT broker, memory, and CPU."
+            "description": "Returns the health status of the API including MQTT broker, IP Pinger, and Sensor Telemetry connectivity."
         },
         {
             "route": "/endpoints",
@@ -114,12 +114,12 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                       help:
          *                         type: object
          */
-        this.app.route("/about").get((req: express.Request, res: express.Response) => {
+        this.app.route("/about").get(async (req: express.Request, res: express.Response) => {
             const typedReq = req as express.Request & {
                 mqtt_connected: boolean;
             };
             typedReq.mqtt_connected = this.networking.is_connected();
-            general_controller.getAbout(req, res);
+            await general_controller.getAbout(req, res);
         });
 
         // ENDPOINTS
@@ -243,7 +243,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /health:
          *   get:
          *     summary: Retrieve the health status of the API
-         *     description: Returns the current health status including MQTT broker, memory, and CPU.
+         *     description: Returns the current health status including MQTT broker, IP Pinger, and Sensor Telemetry connectivity.
          *     responses:
          *       200:
          *         description: API health status
@@ -254,44 +254,26 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *               properties:
          *                 status:
          *                   type: string
-         *                   enum: [ok, degraded]
-         *                 service:
-         *                   type: string
-         *                 version:
-         *                   type: string
+         *                   enum: [healthy, degraded]
          *                 mqtt:
          *                   type: string
          *                   enum: [connected, disconnected]
-         *                 uptime_seconds:
-         *                   type: integer
+         *                 ipPinger:
+         *                   type: string
+         *                   enum: [healthy, unreachable]
+         *                 sensorTelemetry:
+         *                   type: string
+         *                   enum: [healthy, unreachable]
          *                 timestamp:
          *                   type: string
          *                   format: date-time
-         *                 memory:
-         *                   type: object
-         *                   properties:
-         *                     rss:
-         *                       type: integer
-         *                     heap_used:
-         *                       type: integer
-         *                     heap_total:
-         *                       type: integer
-         *                 cpu:
-         *                   type: object
-         *                   properties:
-         *                     load_1min:
-         *                       type: number
-         *                     load_5min:
-         *                       type: number
-         *                     load_15min:
-         *                       type: number
          */
-        this.app.route("/health").get((req: express.Request, res: express.Response) => {
+        this.app.route("/health").get(async (req: express.Request, res: express.Response) => {
             const typedReq = req as express.Request & {
                 mqtt_connected: boolean;
             };
             typedReq.mqtt_connected = this.networking.is_connected();
-            general_controller.getHealth(req, res);
+            await general_controller.getHealth(req, res);
         });
 
         // API METRICS

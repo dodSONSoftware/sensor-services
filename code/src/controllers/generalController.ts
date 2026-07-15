@@ -5,7 +5,7 @@
 
 import type * as express from "express";
 import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
-import { aboutDude, logger } from "../common/global";
+import { aboutDude, getConfig, logger } from "../common/global";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
@@ -15,9 +15,65 @@ import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 
 const startTime = Date.now();
 
-export function getAbout(req: express.Request, res: express.Response) {
+// Default timeout for health checks (ms)
+const HEALTH_CHECK_TIMEOUT_MS = 5000;
+
+/**
+ * Check if the IP Pinger service is healthy by fetching its /about endpoint.
+ */
+async function checkIpPingerHealth(ipPingerUrl: string): Promise<boolean> {
+    try {
+        const url = `${ipPingerUrl}/about`;
+        const signal = AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS);
+        const response = await fetch(url, { signal });
+        return response.ok;
+    } catch (error) {
+        logger()?.write_warn("checkIpPingerHealth", `Failed to reach IP Pinger: ${(error as Error).message}`);
+        return false;
+    }
+}
+
+/**
+ * Check if the Sensor Telemetry service is healthy by fetching its /metrics endpoint.
+ */
+async function checkSensorTelemetryHealth(telemetryUrl: string): Promise<boolean> {
+    try {
+        const url = `${telemetryUrl}/metrics`;
+        const signal = AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS);
+        const response = await fetch(url, { signal });
+        return response.ok;
+    } catch (error) {
+        logger()?.write_warn("checkSensorTelemetryHealth", `Failed to reach Sensor Telemetry: ${(error as Error).message}`);
+        return false;
+    }
+}
+
+export async function getAbout(req: express.Request, res: express.Response) {
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
+    const config = getConfig();
     const dude = aboutDude();
+
+    // Get URLs from config
+    const ipPingerUrl = config ? config["ip-pinger-web-api"] : "";
+    const telemetryUrl = config ? config["sensor-telemetry-api"] : "";
+
+    // Perform health checks concurrently
+    const [ipPingerHealthy, telemetryHealthy] = await Promise.all([
+        ipPingerUrl ? checkIpPingerHealth(ipPingerUrl) : true,
+        telemetryUrl ? checkSensorTelemetryHealth(telemetryUrl) : true,
+    ]);
+
+    // MQTT is vital - if disconnected, status is unhealthy
+    // If MQTT connected but other services down, status is degraded
+    // If all services healthy, status is healthy
+    let status: "healthy" | "degraded" | "unhealthy";
+    if (!is_connected) {
+        status = "unhealthy";
+    } else if (!ipPingerHealthy || !telemetryHealthy) {
+        status = "degraded";
+    } else {
+        status = "healthy";
+    }
 
     const cmds = [];
     cmds.push({ "name": "General", "help": generalRoutesHelp });
@@ -35,8 +91,10 @@ export function getAbout(req: express.Request, res: express.Response) {
             license: dude.about.license
         },
         system: {
-            status: is_connected ? "healthy" : "unhealthy",
+            status,
             mqtt: is_connected ? "connected" : "disconnected",
+            ipPinger: ipPingerHealthy ? "healthy" : "unreachable",
+            sensorTelemetry: telemetryHealthy ? "healthy" : "unreachable",
             bootdate: new Date(startTime).toISOString()
         },
         routes: cmds
@@ -67,12 +125,37 @@ export function getDateCurrent(_req: express.Request, res: express.Response) {
     res.send(final);
 }
 
-export function getHealth(req: express.Request, res: express.Response) {
+export async function getHealth(req: express.Request, res: express.Response) {
     const is_connected = (req as express.Request & { mqtt_connected: boolean }).mqtt_connected;
+    const config = getConfig();
+
+    // Get URLs from config
+    const ipPingerUrl = config ? config["ip-pinger-web-api"] : "";
+    const telemetryUrl = config ? config["sensor-telemetry-api"] : "";
+
+    // Perform health checks concurrently
+    const [ipPingerHealthy, telemetryHealthy] = await Promise.all([
+        ipPingerUrl ? checkIpPingerHealth(ipPingerUrl) : true,
+        telemetryUrl ? checkSensorTelemetryHealth(telemetryUrl) : true,
+    ]);
+
+    // MQTT is vital - if disconnected, status is unhealthy
+    // If MQTT connected but other services down, status is degraded
+    // If all services healthy, status is healthy
+    let status: "healthy" | "degraded" | "unhealthy";
+    if (!is_connected) {
+        status = "unhealthy";
+    } else if (!ipPingerHealthy || !telemetryHealthy) {
+        status = "degraded";
+    } else {
+        status = "healthy";
+    }
 
     const health = {
-        status: is_connected ? "healthy" : "unhealthy",
+        status,
         mqtt: is_connected ? "connected" : "disconnected",
+        ipPinger: ipPingerHealthy ? "healthy" : "unreachable",
+        sensorTelemetry: telemetryHealthy ? "healthy" : "unreachable",
         timestamp: new Date().toISOString(),
     };
 
@@ -90,8 +173,8 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/about",
             verb: "GET",
             requestBody: "None",
-            responseBody: "Service information including about, system, and commands sections",
-            description: "Returns service information and available API commands."
+            responseBody: "{ about: {...}, system: { status: \"healthy|degraded\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", bootdate: string }, routes: [...] }",
+            description: "Returns service information including system health status for MQTT, IP Pinger, and Sensor Telemetry."
         },
         {
             name: "Endpoints",
@@ -106,8 +189,8 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/health",
             verb: "GET",
             requestBody: "None",
-            responseBody: "{ status: \"healthy\", mqtt: \"connected|disconnected\", timestamp: \"ISO-date-string\" }",
-            description: "Health check endpoint for container orchestration."
+            responseBody: "{ status: \"healthy|degraded\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", timestamp: \"ISO-date-string\" }",
+            description: "Health check endpoint for container orchestration. Status is 'degraded' if any component is unhealthy."
         },
         {
             name: "Metrics",

@@ -16,6 +16,7 @@ const { version } = pkgRequire("../../package.json") as { version: string };
 // **** public functions
 
 let _logger: Logger | undefined;
+let _config: z.infer<typeof configSchema> | undefined;
 
 export function setLogger(l: Logger) { _logger = l; }
 export const logger = () => _logger;
@@ -23,6 +24,11 @@ export const logger = () => _logger;
 export const createLogger = (config: z.infer<typeof configSchema>) => {
     setLogger(new Logger(config));
 };
+
+// **** config storage for hot-reload support
+
+export function getConfig() { return _config; }
+export function setConfig(cfg: z.infer<typeof configSchema>) { _config = cfg; }
 
 // ---- Request ID propagation via AsyncLocalStorage
 
@@ -55,7 +61,8 @@ const _staticAboutInfo = {
         description: "Provides sensor-related web services.",
         copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
         license: "MIT"
-    }
+    },
+    commands: []
 };
 
 export function aboutDude() {

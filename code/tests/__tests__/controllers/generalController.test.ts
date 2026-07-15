@@ -4,15 +4,46 @@
  */
 
 import type { Request, Response } from "express";
-import { getAbout, getDateCurrent, getDateUTC, getHealth, getReady } from "../../../src/controllers/generalController";
+import { getAbout, getDateCurrent, getDateUTC, getHealth } from "../../../src/controllers/generalController";
 import { createMockRes, createMockReq } from "../../mocks/express";
+import { setConfig } from "../../../src/common/global";
+
+/**
+ * Create a mock fetch response that resolves with a successful HTTP response.
+ */
+function createMockFetchResponse(): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: jest.fn().mockResolvedValue({}),
+    text: jest.fn().mockResolvedValue(""),
+    headers: new Headers(),
+    redirected: false,
+    statusText: "OK",
+    url: "",
+    clone: jest.fn(),
+    body: null,
+    bodyUsed: false,
+    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+    blob: jest.fn().mockResolvedValue(new Blob()),
+    formData: jest.fn().mockResolvedValue(new FormData()),
+    bytes: jest.fn().mockResolvedValue(new Uint8Array()),
+  } as Response;
+}
+
+afterEach(() => {
+  // Restore original fetch after each test
+  jest.restoreAllMocks();
+  // Clear config after each test
+  setConfig(undefined);
+});
 
 describe("getAbout", () => {
-  it("should return IAbout JSON with OK status", () => {
+  it("should return IAbout JSON with OK status", async () => {
     const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
     const req = createMockReq() as Request;
 
-    getAbout(req, res as Response);
+    await getAbout(req, res as Response);
 
     expect(statusCalls).toContain(200);
     expect(contentTypeCalls).toContain("application/json");
@@ -21,6 +52,11 @@ describe("getAbout", () => {
     expect(body).toHaveProperty("about");
     expect(body.about).toHaveProperty("name");
     expect(body.about).toHaveProperty("version");
+    expect(body.system).toHaveProperty("status");
+    expect(body.system).toHaveProperty("mqtt");
+    expect(body.system).toHaveProperty("ipPinger");
+    expect(body.system).toHaveProperty("sensorTelemetry");
+    expect(body.system).toHaveProperty("bootdate");
   });
 });
 
@@ -55,82 +91,114 @@ describe("getDateUTC", () => {
 });
 
 describe("getHealth", () => {
-  it("should return health object with MQTT check when connected", () => {
+  beforeEach(() => {
+    // Set up a minimal config for health checks
+    setConfig({
+      "log-level": "debug",
+      "express-port": 32000,
+      "prometheus-port": 3301,
+      "mqtt-broker-ip-address": "10.10.10.64",
+      "mqtt-topic-telemetry": "iot/telemetry",
+      "mqtt-topic-command": "iot/v2/command",
+      "mqtt-topic-command-response": "iot/v2/command-response",
+      "ip-pinger-web-api": "http://10.10.10.64:3300",
+      "case-sensitive": true,
+      "db-host": "localhost",
+      "db-port": 5432,
+      "db-name": "sensor_db",
+      "db-user": "sensor_user",
+      "db-password": "sensor_pass",
+    });
+  });
+
+  it("should return health object with MQTT check when connected", async () => {
     const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: true,
     }) as Request & { mqtt_connected: boolean };
 
-    getHealth(req, res as Response);
+    // Mock successful responses for both IP Pinger and Sensor Telemetry
+    jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+
+    await getHealth(req, res as Response);
 
     expect(statusCalls).toContain(200);
     expect(contentTypeCalls).toContain("application/json");
     expect(sendCalls).toHaveLength(1);
     const body = sendCalls[0] as Record<string, unknown>;
     expect(body).toHaveProperty("status");
-    expect(body.status).toBe("ok");
-    expect(body).toHaveProperty("service");
-    expect(body).toHaveProperty("version");
+    expect(body.status).toBe("healthy");
     expect(body).toHaveProperty("mqtt");
     expect(body.mqtt).toBe("connected");
-    expect(body).toHaveProperty("uptime_seconds");
-    expect(typeof body.uptime_seconds).toBe("number");
+    expect(body).toHaveProperty("ipPinger");
+    expect(body.ipPinger).toBe("healthy");
+    expect(body).toHaveProperty("sensorTelemetry");
+    expect(body.sensorTelemetry).toBe("healthy");
     expect(body).toHaveProperty("timestamp");
-    expect(body).toHaveProperty("memory");
-    expect(body.memory).toHaveProperty("rss");
-    expect(body.memory).toHaveProperty("heap_used");
-    expect(body.memory).toHaveProperty("heap_total");
-    expect(body).toHaveProperty("cpu");
-    expect(body.cpu).toHaveProperty("load_1min");
-    expect(body.cpu).toHaveProperty("load_5min");
-    expect(body.cpu).toHaveProperty("load_15min");
-    expect(typeof (body.cpu as Record<string, unknown>).load_1min).toBe("number");
-    expect(typeof (body.cpu as Record<string, unknown>).load_5min).toBe("number");
-    expect(typeof (body.cpu as Record<string, unknown>).load_15min).toBe("number");
   });
 
-  it("should report degraded when mqtt is disconnected", () => {
+  it("should report unhealthy status when mqtt is not connected", async () => {
     const { res, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: false,
     }) as Request & { mqtt_connected: boolean };
 
-    getHealth(req, res as Response);
+    jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+
+    await getHealth(req, res as Response);
 
     const body = sendCalls[0] as Record<string, unknown>;
-    expect(body.status).toBe("degraded");
+    expect(body.status).toBe("unhealthy");
     expect(body.mqtt).toBe("disconnected");
+    expect(body.ipPinger).toBe("healthy");
+    expect(body.sensorTelemetry).toBe("healthy");
   });
-});
 
-describe("getReady", () => {
-  it("should return 200 with status ready when MQTT is connected", () => {
-    const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
+  it("should mark ipPinger as unreachable when fetch fails", async () => {
+    const { res, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: true,
     }) as Request & { mqtt_connected: boolean };
 
-    getReady(req, res as Response);
+    // Use separate mock implementations for each call
+    // IP Pinger (/about) fails, telemetry (/metrics) succeeds
+    const mockFetch = jest.fn();
+    mockFetch.mockImplementationOnce((url: string) => {
+      if (url.includes("/about")) {
+        return Promise.reject(new Error("IP Pinger unavailable"));
+      }
+      return Promise.resolve(createMockFetchResponse());
+    });
 
-    expect(statusCalls).toContain(200);
-    expect(contentTypeCalls).toContain("application/json");
-    expect(sendCalls).toHaveLength(1);
+    jest.spyOn(global, "fetch").mockImplementation(mockFetch);
+
+    await getHealth(req, res as Response);
+
     const body = sendCalls[0] as Record<string, unknown>;
-    expect(body.status).toBe("ready");
-    expect(body.dependencies.mqtt).toBe("connected");
+    expect(body.status).toBe("degraded");
+    expect(body.mqtt).toBe("connected");
+    expect(body.ipPinger).toBe("unreachable");
+    expect(body.sensorTelemetry).toBe("healthy");
   });
 
-  it("should return 503 with status not_ready when MQTT is disconnected", () => {
-    const { res, statusCalls, sendCalls } = createMockRes();
+  it("should handle missing config gracefully", async () => {
+    const { res, sendCalls } = createMockRes();
     const req = createMockReq({
-      mqtt_connected: false,
+      mqtt_connected: true,
     }) as Request & { mqtt_connected: boolean };
 
-    getReady(req, res as Response);
+    // Clear config
+    setConfig(undefined);
 
-    expect(statusCalls).toContain(503);
+    jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+
+    await getHealth(req, res as Response);
+
     const body = sendCalls[0] as Record<string, unknown>;
-    expect(body.status).toBe("not_ready");
-    expect(body.dependencies.mqtt).toBe("disconnected");
+    // When config is missing, health checks are skipped (default to healthy)
+    expect(body.status).toBe("healthy");
+    expect(body.mqtt).toBe("connected");
+    expect(body.ipPinger).toBe("healthy");
+    expect(body.sensorTelemetry).toBe("healthy");
   });
 });

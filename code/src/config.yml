@@ -18,6 +18,7 @@ mqtt-topic-command-response: "iot/v2/command-response"
 
 # External services
 ip-pinger-web-api: "http://10.10.10.50:3300"
+sensor-telemetry-api: "http://10.10.10.50:3301"
 
 # Behavior
 case-sensitive: true
