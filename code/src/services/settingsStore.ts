@@ -39,26 +39,21 @@ function parseJsonbData(data: unknown): Record<string, unknown> {
 }
 
 /**
- * Migrate legacy theme value (string "light"/"dark") to boolean.
- * This handles backward compatibility with old YAML-based storage.
+ * Migrate legacy theme value (boolean) to string enum.
+ * This handles backward compatibility with old data where theme was stored as boolean.
+ * true -> "light", false -> "dark"
  */
 function migrateThemeValue(value: unknown): unknown {
-    if (typeof value === "string") {
-        // Legacy format: "light" -> true, "dark" -> false
-        if (value === "light") {
-            return true;
-        }
-        if (value === "dark") {
-            return false;
-        }
+    if (typeof value === "boolean") {
+        // Legacy format: true -> "light", false -> "dark"
+        return value ? "light" : "dark";
     }
-    // Already a boolean or invalid string (will be caught by validation)
+    // Already a string or invalid (will be caught by validation)
     return value;
 }
 
 /**
  * Validate settings data loaded from database against the schema.
- * Handles backward compatibility with legacy data formats.
  * Returns validated settings or throws if data is invalid.
  */
 function validateSettingsFromDb(data: unknown): AppSettings {
@@ -105,13 +100,6 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                     throw new Error(`Setting "${key}" must be <= ${meta.max}, got ${value}`);
                 }
                 (result as Record<string, number>)[key] = value;
-                break;
-            }
-            case "boolean": {
-                if (typeof value !== "boolean") {
-                    throw new Error(`Setting "${key}" must be a boolean, got ${typeof value}`);
-                }
-                (result as Record<string, boolean>)[key] = value;
                 break;
             }
             case "enum": {

@@ -220,23 +220,23 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
         },
         {
             name: "Settings Get",
-            route: "/settings",
+            route: "/ui/settings",
             verb: "GET",
             requestBody: "None",
             responseBody: "All application settings merged from database and defaults",
             description: "Retrieves all application settings."
         },
         {
-            name: "Settings Defaults",
-            route: "/settings/defaults",
+            name: "Settings Schema",
+            route: "/ui/settings-schema",
             verb: "GET",
             requestBody: "None",
-            responseBody: "Current settings plus schema metadata for dynamic form generation",
-            description: "Returns settings with schema metadata for dynamic forms."
+            responseBody: "Array of setting definitions with name, default, range, and description",
+            description: "Returns setting definitions for dynamic form generation."
         },
         {
             name: "Settings Update",
-            route: "/settings/update",
+            route: "/ui/settings-update",
             verb: "PATCH",
             requestBody: "Partial JSON object with settings fields to update",
             responseBody: "Merged settings object with updates applied",

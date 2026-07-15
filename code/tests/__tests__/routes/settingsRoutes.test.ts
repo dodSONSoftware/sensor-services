@@ -8,8 +8,8 @@ import request from "supertest";
 
 // Mock settingsStore so tests don't require a real DB connection.
 const baseMockCache = {
-    theme: true,
-    dashboard_layout: "grid" as const,
+    theme: "light" as const,
+    dashboard_layout: "cards" as const,
     notification_level: "warn" as const,
     time_range_hours: 24,
     decimal_places: 2,
@@ -41,9 +41,9 @@ describe("settings routes", () => {
         new CreateSettingsRoutes(app);
     });
 
-    describe("GET /settings", () => {
+    describe("GET /ui/settings", () => {
         it("should return 200 with all settings keys", async () => {
-            const res = await request(app).get("/settings");
+            const res = await request(app).get("/ui/settings");
 
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
@@ -55,118 +55,125 @@ describe("settings routes", () => {
         });
 
         it("should return default values when no settings exist", async () => {
-            const res = await request(app).get("/settings");
+            const res = await request(app).get("/ui/settings");
 
-            expect(res.body.theme).toBe(true);
+            expect(res.body.theme).toBe("light");
         });
     });
 
-    describe("GET /settings/defaults", () => {
-        it("should return 200 with settings and schema objects", async () => {
-            const res = await request(app).get("/settings/defaults");
+    describe("GET /ui/settings-schema", () => {
+        it("should return 200 with an array of setting definitions", async () => {
+            const res = await request(app).get("/ui/settings-schema");
 
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
-            expect(res.body).toHaveProperty("settings");
-            expect(res.body).toHaveProperty("schema");
+            expect(Array.isArray(res.body)).toBe(true);
         });
 
-        it("should return settings with all expected keys", async () => {
-            const res = await request(app).get("/settings/defaults");
+        it("should return setting definitions with name, type, default, range, and description", async () => {
+            const res = await request(app).get("/ui/settings-schema");
 
-            expect(res.body.settings).toHaveProperty("theme");
-            expect(res.body.settings).toHaveProperty("dashboard_layout");
-            expect(res.body.settings).toHaveProperty("notification_level");
-            expect(res.body.settings).toHaveProperty("time_range_hours");
-            expect(res.body.settings).toHaveProperty("decimal_places");
+            const body = res.body as Record<string, unknown>[];
+            const themeSetting = body.find(s => s.name === "theme");
+
+            expect(themeSetting).toBeDefined();
+            expect(themeSetting?.type).toBe("enum");
+            expect(themeSetting?.default).toBe("light");
+            expect(themeSetting?.range).toEqual({ options: ["light", "dark"] });
+            expect(themeSetting?.description).toBeDefined();
         });
 
-        it("should return schema with metadata for every setting", async () => {
-            const res = await request(app).get("/settings/defaults");
+        it("should include correct type for all settings", async () => {
+            const res = await request(app).get("/ui/settings-schema");
 
-            const schema = res.body.schema as Record<string, unknown>;
-            expect(schema).toHaveProperty("theme");
-            expect(schema).toHaveProperty("dashboard_layout");
-            expect(schema).toHaveProperty("notification_level");
-            expect(schema).toHaveProperty("time_range_hours");
-            expect(schema).toHaveProperty("decimal_places");
-            expect(schema).toHaveProperty("mqtt_broker_address");
-            
-            expect(schema).toHaveProperty("mqtt_topic_command");
-            expect(schema).toHaveProperty("mqtt_topic_command_response");
+            const body = res.body as Record<string, unknown>[];
+            const settingsMap = Object.fromEntries(body.map(s => [s.name as string, s]));
+
+            expect(settingsMap["theme"].type).toBe("enum");
+            expect(settingsMap["dashboard_layout"].type).toBe("enum");
+            expect(settingsMap["time_range_hours"].type).toBe("number");
+            expect(settingsMap["mqtt_broker_address"].type).toBe("string");
         });
 
-        it("should include label, description, type, and default in each schema entry", async () => {
-            const res = await request(app).get("/settings/defaults");
+        it("should include correct range for numeric settings", async () => {
+            const res = await request(app).get("/ui/settings-schema");
 
-            const themeSchema = (res.body.schema as Record<string, unknown>)["theme"] as Record<string, unknown>;
-            expect(themeSchema).toHaveProperty("label");
-            expect(themeSchema).toHaveProperty("description");
-            expect(themeSchema).toHaveProperty("type");
-            expect(themeSchema).toHaveProperty("default");
+            const body = res.body as Record<string, unknown>[];
+            const pingDelaySetting = body.find(s => s.name === "ping_delay_ms");
+
+            expect(pingDelaySetting?.range).toEqual({
+                min: 100,
+                max: 5000,
+                step: 100,
+            });
         });
 
-        it("should include enum values for settings that have them", async () => {
-            const res = await request(app).get("/settings/defaults");
+        it("should include correct range for enum settings", async () => {
+            const res = await request(app).get("/ui/settings-schema");
 
-            const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["cards", "list"]);
-            expect((schema["notification_level"] as Record<string, unknown>).options).toEqual(["none", "warn", "critical"]);
+            const body = res.body as Record<string, unknown>[];
+            const layoutSetting = body.find(s => s.name === "dashboard_layout");
+
+            expect(layoutSetting?.range).toEqual({
+                options: ["cards", "list"],
+            });
         });
 
-        it("should include min/max for numeric settings that have ranges", async () => {
-            const res = await request(app).get("/settings/defaults");
+        it("should include all expected settings", async () => {
+            const res = await request(app).get("/ui/settings-schema");
 
-            const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["ping_delay_ms"] as Record<string, unknown>).min).toBe(100);
-            expect((schema["ping_delay_ms"] as Record<string, unknown>).max).toBe(5000);
-        });
+            const body = res.body as Record<string, unknown>[];
+            const names = body.map(s => s.name as string);
 
-        it("should mark optional settings correctly", async () => {
-            const res = await request(app).get("/settings/defaults");
-
-            const schema = res.body.schema as Record<string, unknown>;
-            expect((schema["mqtt_broker_address"] as Record<string, unknown>).optional).toBe(true);
+            expect(names).toContain("theme");
+            expect(names).toContain("dashboard_layout");
+            expect(names).toContain("notification_level");
+            expect(names).toContain("time_range_hours");
+            expect(names).toContain("decimal_places");
+            expect(names).toContain("mqtt_broker_address");
+            expect(names).toContain("mqtt_topic_telemetry");
+            expect(names).toContain("mqtt_topic_command");
+            expect(names).toContain("mqtt_topic_command_response");
         });
     });
 
-    describe("PATCH /settings/update", () => {
+    describe("PATCH /ui/settings-update", () => {
         it("should return 200 with merged settings after partial update", async () => {
             const res = await request(app)
-                .patch("/settings/update")
-                .send({ theme: false });
+                .patch("/ui/settings-update")
+                .send({ theme: "dark" });
 
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
-            expect(res.body.theme).toBe(false);
+            expect(res.body.theme).toBe("dark");
         });
 
         it("should preserve unchanged keys after partial update", async () => {
             const res = await request(app)
-                .patch("/settings/update")
-                .send({ theme: false });
+                .patch("/ui/settings-update")
+                .send({ theme: "dark" });
 
-            expect(res.body.dashboard_layout).toBe("grid");
+            expect(res.body.dashboard_layout).toBe("cards");
         });
 
         it("should handle multiple field updates", async () => {
             const res = await request(app)
-                .patch("/settings/update")
-                .send({ theme: false, notification_level: "critical" });
+                .patch("/ui/settings-update")
+                .send({ theme: "dark", notification_level: "critical" });
 
             expect(res.status).toBe(200);
-            expect(res.body.theme).toBe(false);
+            expect(res.body.theme).toBe("dark");
             expect(res.body.notification_level).toBe("critical");
         });
 
         it("should reflect updated values on subsequent GET", async () => {
             await request(app)
-                .patch("/settings/update")
-                .send({ theme: false });
+                .patch("/ui/settings-update")
+                .send({ theme: "dark" });
 
-            const res = await request(app).get("/settings");
+            const res = await request(app).get("/ui/settings");
 
-            expect(res.body.theme).toBe(false);
+            expect(res.body.theme).toBe("dark");
         });
     });
 });

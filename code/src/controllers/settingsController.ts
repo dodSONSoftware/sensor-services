@@ -14,7 +14,7 @@ import type { ZodIssue } from "zod";
 const SETTINGS_UPDATE_SCHEMA = appSettingsUpdateSchema;
 
 /**
- * GET /settings — Return all application settings (merged from DB + defaults).
+ * GET /ui/settings — Return all application settings (merged from DB + defaults).
  */
 export async function getAllSettings(_req: express.Request, res: express.Response) {
     const settings = getSettings();
@@ -41,7 +41,36 @@ export async function getSettingsDefaults(_req: express.Request, res: express.Re
 }
 
 /**
- * PATCH /settings/update — Partial update of application settings.
+ * GET /ui/settings-schema — Return setting definitions with name, type, default, range, and description.
+ * Each setting contains:
+ * - name: The setting key
+ * - type: Data type (string, number, enum, array)
+ * - default: Default value
+ * - range: Min/max for numbers, options for enums, null otherwise
+ * - description: Human-readable description
+ */
+export async function getSettingsSchema(_req: express.Request, res: express.Response) {
+    const schema = Object.entries(SETTINGS_SCHEMA).map(([key, meta]) => ({
+        name: key,
+        type: meta.type,
+        default: meta.default,
+        range: meta.type === "number"
+            ? { min: meta.min, max: meta.max, step: meta.step }
+            : meta.type === "enum"
+              ? { options: meta.options }
+              : null,
+        description: meta.description,
+    }));
+
+    logger()?.write_debug("settingsController.ts/getSettingsSchema", JSON.stringify(schema));
+
+    res.status(OK);
+    res.contentType(Json);
+    res.send(schema);
+}
+
+/**
+ * PATCH /ui/settings-update — Partial update of application settings.
  * Only the fields present in the request body are updated; missing keys retain their current values.
  */
 export async function updateSettings(req: express.Request, res: express.Response) {

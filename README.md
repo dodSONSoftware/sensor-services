@@ -150,13 +150,13 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/ippinger/ping/:target` | Proxy to IP pinger service `/ping/{ip}` |
 | GET | `/ippinger/analyze-ippinger` | Compare pinger config against live sensors |
 
-### Settings Routes (`/settings`)
+### Settings Routes (`/ui/settings`)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/settings` | All application settings |
-| GET | `/settings/defaults` | Settings plus schema metadata |
-| PATCH | `/settings/update` | Partial update of settings |
+| GET | `/ui/settings` | All application settings |
+| GET | `/ui/settings-schema` | Setting definitions with name, default, range, and description |
+| PATCH | `/ui/settings-update` | Partial update of settings |
 
 ### Swagger
 

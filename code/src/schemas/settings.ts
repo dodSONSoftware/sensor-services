@@ -9,7 +9,7 @@ import { z } from "zod";
  * UI preferences for the Angular dashboard.
  */
 export const uiPreferencesSchema = z.object({
-    theme: z.boolean().default(true),
+    theme: z.enum(["light", "dark"]).default("light"),
     dashboard_layout: z.enum(["cards", "list"]).default("cards"),
     notification_level: z.enum(["none", "warn", "critical"]).default("warn"),
     time_range_hours: z.number().int().positive().min(1).max(720).default(24),
@@ -71,7 +71,7 @@ export const telemetrySettingsSchema = z.object({
  * Used when receiving PATCH requests where only changed fields should be applied.
  */
 export const appSettingsUpdateSchema = z.object({
-    theme: z.boolean().optional(),
+    theme: z.enum(["light", "dark"]).optional(),
     dashboard_layout: z.enum(["cards", "list"]).optional(),
     notification_level: z.enum(["none", "warn", "critical"]).optional(),
     time_range_hours: z.number().int().positive().min(1).max(720).optional(),
@@ -106,7 +106,7 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
  * Default settings values — used to fill in missing keys during partial updates.
  */
 export const DEFAULT_SETTINGS: AppSettings = {
-    theme: true,
+    theme: "light",
     dashboard_layout: "cards",
     notification_level: "warn",
     time_range_hours: 24,
@@ -144,7 +144,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const SETTINGS_SCHEMA: Record<string, {
     label: string;
     description: string;
-    type: "string" | "number" | "boolean" | "enum" | "array";
+    type: "string" | "number" | "enum" | "array";
     default: unknown;
     optional?: boolean;
     options?: string[];
@@ -154,9 +154,10 @@ export const SETTINGS_SCHEMA: Record<string, {
 }> = {
     theme: {
         label: "Theme",
-        description: "Dashboard color scheme (true = light, false = dark).",
-        type: "boolean",
-        default: true,
+        description: "Dashboard color scheme (light or dark).",
+        type: "enum",
+        default: "light",
+        options: ["light", "dark"],
     },
     dashboard_layout: {
         label: "Dashboard Layout",

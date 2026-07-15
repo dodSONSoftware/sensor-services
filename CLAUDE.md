@@ -40,14 +40,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load)
     │   │   ├── sensorController.ts   -- MQTT-based sensor command handlers (event-based completion via waitForCompletion + AbortController, 10s hard cap)
     │   │   ├── pingerController.ts   -- IP Pinger proxy + analyze logic (async/await, graceful degradation, validateIpAddress() rejects private/reserved IPs, fetchWithTimeout() via AbortSignal.timeout())
-    │   │   └── settingsController.ts -- GET /settings, GET /settings/defaults, PATCH /settings/update
+    │   │   └── settingsController.ts -- GET /ui/settings, GET /ui/settings-schema, PATCH /ui/settings-update
     │   ├── middleware/
     │   │   └── middleware.ts -- CORS, JSON parser (configurable body limit), rate limiting (default 100 req/15min), request ID (X-Request-ID + AsyncLocalStorage), request logger, body validation (Zod)
     │   ├── routes/
     │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
     │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable fetch_timeout_ms)
-    │   │   ├── settingsRoutes.ts  -- /settings, /settings/defaults, /settings/update (PostgreSQL persistence via settingsStore)
+    │   │   ├── settingsRoutes.ts  -- /ui/settings, /ui/settings-schema, /ui/settings-update (PostgreSQL persistence via settingsStore)
     │   │   └── routeNotFound.ts   -- 404 handler (wired into app)
     │   ├── schemas/
     │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn)
@@ -77,12 +77,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
     │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running, hard timeout
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchIt/postIt/fetchItOnly non-OK responses
-    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsDefaults, updateSettings
+    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
     │       ├── routes/
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
     │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify, get-details, reboot, read-config, write-config, update-config)
     │       │   ├── pingerRoutes.test.ts       -- All /ippinger/* routes via supertest (about, read-config, write-config, restart, ping, ping/:target, analyze-ippinger)
-    │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/defaults, PATCH /settings/update via supertest
+    │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
     │       ├── schemas/
     │       │   ├── config.test.ts     -- Zod v4 config schema validation tests
@@ -171,7 +171,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - Connects to PostgreSQL database, creates target DB/table if needed, seeds defaults on first run
 - `getSettings()` returns deep clone; `patchSettings(updates)` merges partial updates and persists to DB
 - Graceful degradation: DB unavailability falls back to in-memory defaults without crashing
-- Exposed via three routes: `GET /settings`, `GET /settings/defaults` (with schema metadata), `PATCH /settings/update`
+- Exposed via three routes: `GET /ui/settings`, `GET /ui/settings-schema`, `PATCH /ui/settings-update`
 
 **MqttCommandControl** (`dodsonlabs/MqttCommandControl.ts`) — Timeout-based state machine:
 - Tracks async MQTT command-response pairs
@@ -232,13 +232,13 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 ## API Endpoints
 
-### Settings Routes (`/settings`) — PostgreSQL persistence
+### Settings Routes (`/ui/settings`) — PostgreSQL persistence
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/settings` | All application settings (merged from DB + defaults) |
-| GET | `/settings/defaults` | Current settings plus schema metadata for dynamic form generation |
-| PATCH | `/settings/update` | Partial update — only fields in body are changed; persists to DB, returns merged result |
+| GET | `/ui/settings` | All application settings (merged from DB + defaults) |
+| GET | `/ui/settings-schema` | Setting definitions with name, default, range, and description for dynamic form generation |
+| PATCH | `/ui/settings-update` | Partial update — only fields in body are changed; persists to DB, returns merged result |
 
 ### General Routes (no prefix)
 
