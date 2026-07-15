@@ -8,8 +8,8 @@ import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
 import { aboutDude, getConfig, logger } from "../common/global";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
-import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
+import { __routesHelp as configRoutesHelp } from "../routes/configRoutes";
 
 // **** public functions
 
@@ -96,8 +96,8 @@ export async function getAbout(req: express.Request, res: express.Response) {
     const cmds = [];
     cmds.push({ "name": "General", "help": generalRoutesHelp });
     cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
-    cmds.push({ "name": "IP Pinger", "help": pingerRoutesHelp });
     cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
+    cmds.push({ "name": "Configuration", "help": configRoutesHelp });
 
     const about = {
         about: {
@@ -209,6 +209,38 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             requestBody: "None",
             responseBody: "{ status: \"healthy|degraded\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", timestamp: \"ISO-date-string\" }",
             description: "Health check endpoint for container orchestration. Status is 'degraded' if any component is unhealthy."
+        },
+        {
+            "name": "Date Local (legacy)",
+            "route": "/date_local",
+            "verb": "GET",
+            "requestBody": "None",
+            "responseBody": "Current local date/time string (yyyy-mm-ddThh:mm:ss)",
+            "description": "Returns the current local date and time of the server's timezone."
+        },
+        {
+            "name": "Date UTC (legacy)",
+            "route": "/date_utc",
+            "verb": "GET",
+            "requestBody": "None",
+            "responseBody": "Current UTC date/time string (yyyy-mm-ddThh:mm:ssZ)",
+            "description": "Returns the current date and time in Coordinated Universal Time (UTC)."
+        },
+        {
+            "name": "Date Local",
+            "route": "/date-local",
+            "verb": "GET",
+            "requestBody": "None",
+            "responseBody": "Current local date/time string (yyyy-mm-ddThh:mm:ss)",
+            "description": "Alias for /date_local with dash notation."
+        },
+        {
+            "name": "Date UTC",
+            "route": "/date-utc",
+            "verb": "GET",
+            "requestBody": "None",
+            "responseBody": "Current UTC date/time string (yyyy-mm-ddThh:mm:ssZ)",
+            "description": "Alias for /date_utc with dash notation."
         },
         {
             name: "Metrics",
@@ -331,52 +363,28 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             description: "Compares IP pinger configuration against live sensor discovery."
         },
         {
-            name: "IP Pinger About",
-            route: "/ippinger/about",
+            name: "Reload Config",
+            route: "/api/reload-config",
             verb: "GET",
-            requestBody: "None",
-            responseBody: "IP pinger service information",
-            description: "Proxy to IP pinger service /about endpoint."
-        },
-        {
-            name: "IP Pinger Read Config",
-            route: "/ippinger/read-config",
-            verb: "GET",
-            requestBody: "None",
-            responseBody: "IP pinger configuration",
-            description: "Proxy to IP pinger service /read-config endpoint."
-        },
-        {
-            name: "IP Pinger Write Config",
-            route: "/ippinger/write-config",
-            verb: "POST",
-            requestBody: "JSON object with IP pinger configuration",
-            responseBody: "{ success: boolean, message: string }",
-            description: "Proxy to IP pinger service /write-config endpoint."
-        },
-        {
-            name: "IP Pinger Restart",
-            route: "/ippinger/restart",
-            verb: "POST",
             requestBody: "None",
             responseBody: "{ success: boolean, message: string }",
-            description: "Proxy to IP pinger service /restart endpoint."
+            description: "Hot-reloads the application configuration from disk."
         },
         {
-            name: "IP Pinger Ping All",
-            route: "/ippinger/ping",
+            name: "Read Config",
+            route: "/api/read-config",
             verb: "GET",
             requestBody: "None",
-            responseBody: "Array of ping results for all configured devices",
-            description: "Proxy to IP pinger service /ping endpoint."
+            responseBody: "Current application configuration as JSON",
+            description: "Returns the current application configuration."
         },
         {
-            name: "IP Pinger Ping Target",
-            route: "/ippinger/ping/:target",
-            verb: "GET",
-            requestBody: "None",
-            responseBody: "Ping result for the specified IP address",
-            description: "Proxy to IP pinger service /ping/{ip} endpoint."
+            name: "Write Config",
+            route: "/api/write-config",
+            verb: "POST",
+            requestBody: "Complete valid configuration JSON object",
+            responseBody: "{ success: boolean, message: string }",
+            description: "Saves a new configuration to disk and hot-reloads the application."
         }
     ];
 

@@ -211,7 +211,7 @@ HTTP GET /ippinger/ping → pingerController.fetchIt() → fetch() → http://<i
 
 **IP Pinger Analysis (HTTP → MQTT + HTTP → Merge):**
 ```
-HTTP GET /ippinger/analyze-ippinger → getAnalyzeIpPinger()
+HTTP GET /sensors/ippinger-analyze → getAnalyzeIpPinger()
   → mqtt_command_get_messages(network, "*", "identify")  [fetch live sensors via MQTT]
   → fetchItOnly("http://<ip>:<port>/read-config")       [fetch pinger config via HTTP]
   → analyzeIt(sensors, ippinger_devices, case_sensitive)  [compare and classify]
@@ -239,6 +239,14 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | GET | `/ui/settings` | All application settings (merged from DB + defaults) |
 | GET | `/ui/settings-schema` | Setting definitions with name, default, range, and description for dynamic form generation |
 | PATCH | `/ui/settings-update` | Partial update — only fields in body are changed; persists to DB, returns merged result |
+
+### Configuration Routes (`/api/*`)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/reload-config` | Hot-reloads configuration from disk |
+| GET | `/api/read-config` | Returns current configuration as JSON |
+| POST | `/api/write-config` | Saves new configuration and hot-reloads |
 
 ### General Routes (no prefix)
 
@@ -276,7 +284,12 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | POST | `/ippinger/restart` | POST to IP pinger service `/restart` |
 | GET | `/ippinger/ping` | Proxy to IP pinger service `/ping` |
 | GET | `/ippinger/ping/:target` | Proxy to IP pinger service `/ping/{ip}` |
-| GET | `/ippinger/analyze-ippinger` | Compare pinger config against live sensors |
+
+### Sensor Routes (`/sensors`) — Analysis
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/sensors/ippinger-analyze` | Compare pinger config against live sensors |
 
 ### Prometheus Metrics (port 3301)
 

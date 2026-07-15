@@ -173,13 +173,6 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         new sensorRoutes.CreateSensorRoutes(app, networking);
         new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000);
 
-        // Also register analyze endpoint under /sensors namespace
-        app.route("/sensors/ippinger-analyze").get((req: express.Request, res: express.Response) =>
-            pingerRoutes.pinger_controller.getAnalyzeIpPinger(
-                req, res, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000
-            )
-        );
-
         new settingsRoutes.CreateSettingsRoutes(app);
         new configRoutes.CreateConfigRoutes(app);
         new CreateRouteNotFound(app);

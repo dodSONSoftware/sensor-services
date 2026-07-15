@@ -58,7 +58,17 @@ const _staticAboutInfo = {
         name: "Sensor Web Services",
         version,
         author: "Randy Dodson (dodsonsoftware@gmail.com)",
-        description: "Provides sensor-related web services.",
+        description:
+            "An Express-based REST API service for IoT sensor monitoring and management. " +
+            "This service acts as a bridge between IoT weather sensors (via MQTT protocol) and HTTP clients, " +
+            "providing comprehensive sensor control, configuration, and data ingestion capabilities. " +
+            "Features include real-time sensor telemetry ingestion through MQTT, PostgreSQL-backed settings " +
+            "persistence for persistent configuration, Prometheus metrics endpoints for both API observability " +
+            "and sensor gauge monitoring, and interactive Swagger UI for API discovery. The service supports " +
+            "dynamic sensor identification, configuration reading/writing, remote reboot operations, and " +
+            "integration with external IP pinger services for network device management. Built with TypeScript, " +
+            "it features graceful shutdown handling, request ID tracing via AsyncLocalStorage, rate limiting, " +
+            "and robust error handling for production-grade deployment.",
         copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
         license: "MIT"
     },

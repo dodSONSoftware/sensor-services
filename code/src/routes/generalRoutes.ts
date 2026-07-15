@@ -32,11 +32,11 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/date_local",
-            "description": "Returns the current local date and time of the server's timezone. Format=[yyyy-mm-ddThh:mm:ss]"
+            "description": "Returns the current local date and time of the server's timezone. Legacy endpoint retained for backward compatibility with older sensors. Format=[yyyy-mm-ddThh:mm:ss]"
         },
         {
             "route": "/date_utc",
-            "description": "Returns the current date and time in Coordinated Universal Time (UTC). Format=[yyyy-mm-ddThh:mm:ssZ]"
+            "description": "Returns the current date and time in Coordinated Universal Time (UTC). Legacy endpoint retained for backward compatibility with older sensors. Format=[yyyy-mm-ddThh:mm:ssZ]"
         },
         {
             "route": "/date-local",

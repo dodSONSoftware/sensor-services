@@ -10,24 +10,24 @@ import * as config_controller from "../controllers/configController";
 
 // Canonical list of route paths — kept in sync with createRoutes() to prevent drift.
 export const __routes: string[] = [
-    "/reload-config",
-    "/read-config",
-    "/write-config",
+    "/api/reload-config",
+    "/api/read-config",
+    "/api/write-config",
 ];
 
 export const __routesHelp: Record<string, unknown> = {
     "description": "Application configuration management (hot-reload, read, write).",
     "commands": [
         {
-            "route": "/reload-config",
+            "route": "/api/reload-config",
             "description": "GET Reloads the application's YAML configuration from disk and updates the running configuration."
         },
         {
-            "route": "/read-config",
+            "route": "/api/read-config",
             "description": "GET Reads the current configuration from disk, reloads it, and returns the updated configuration as JSON."
         },
         {
-            "route": "/write-config",
+            "route": "/api/write-config",
             "description": "POST Saves a new configuration to disk and reloads the application. Body must contain the complete valid configuration."
         }
     ]
@@ -78,12 +78,12 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   type: string
          *                   example: Could not find config file
          */
-        this.app.route("/reload-config").get((req: express.Request, res: express.Response) => config_controller.reloadConfig(req, res));
+        this.app.route("/api/reload-config").get((req: express.Request, res: express.Response) => config_controller.reloadConfig(req, res));
 
         // READ CONFIG
         /**
          * @swagger
-         * /read-config:
+         * /api/read-config:
          *   get:
          *     summary: Read current configuration
          *     description: Returns the current application configuration as a JSON object.
@@ -113,12 +113,12 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                 case-sensitive:
          *                   type: boolean
          */
-        this.app.route("/read-config").get((req: express.Request, res: express.Response) => config_controller.readConfig(req, res));
+        this.app.route("/api/read-config").get((req: express.Request, res: express.Response) => config_controller.readConfig(req, res));
 
         // WRITE CONFIG
         /**
          * @swagger
-         * /write-config:
+         * /api/write-config:
          *   post:
          *     summary: Save new configuration and reload
          *     description: Writes the provided configuration to disk and hot-reloads the application. The entire configuration must be provided (not partial updates).
@@ -174,6 +174,6 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *       500:
          *         description: Failed to save configuration
          */
-        this.app.route("/write-config").post((req: express.Request, res: express.Response) => config_controller.writeConfig(req, res));
+        this.app.route("/api/write-config").post((req: express.Request, res: express.Response) => config_controller.writeConfig(req, res));
     }
 }

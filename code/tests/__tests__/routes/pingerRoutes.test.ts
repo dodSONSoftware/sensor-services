@@ -26,7 +26,13 @@ function createTestApp(fetchMock?: jest.Mock): express.Application {
   const app = express();
   app.use(express.json());
   const networking = createMockMqttNetworking();
-  const pingerRoutes = new CreatePingerRoutes(app, networking, MOCK_PINGER_API, true, MOCK_FETCH_TIMEOUT_MS);
+  const pingerRoutes = new CreatePingerRoutes(
+    app,
+    networking,
+    MOCK_PINGER_API,
+    true,
+    MOCK_FETCH_TIMEOUT_MS
+  );
   if (fetchMock) {
     global.fetch = fetchMock;
   }
@@ -40,13 +46,13 @@ describe("Pinger Routes", () => {
     }
   });
 
-  describe("GET /ippinger/analyze-ippinger", () => {
+  describe("GET /sensors/ippinger-analyze", () => {
     it("should return 200 with warning when upstream is unavailable", async () => {
       // fetch rejects for the ippinger read-config call, but mqtt identify succeeds (mocked)
       jest.spyOn(global, "fetch").mockRejectedValue(new Error("ENOTFOUND"));
       const app = createTestApp();
 
-      const res = await request(app).get("/ippinger/analyze-ippinger");
+      const res = await request(app).get("/sensors/ippinger-analyze");
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
@@ -60,9 +66,10 @@ describe("Pinger Routes", () => {
       const fetchMock = createMockFetch(mockConfig);
       const app = createTestApp(fetchMock);
 
-      const res = await request(app).get("/ippinger/analyze-ippinger");
+      const res = await request(app).get("/sensors/ippinger-analyze");
 
       expect(res.status).toBe(200);
+      expect(typeof res.body).toBe('object');
       expect(Array.isArray(res.body)).toBe(true);
     });
   });

@@ -53,9 +53,9 @@ db-password: "testpass"
         }
     });
 
-    describe("GET /reload-config", () => {
+    describe("GET /api/reload-config", () => {
         it("should return 200 with success message when config is valid", async () => {
-            const res = await request(app).get("/reload-config");
+            const res = await request(app).get("/api/reload-config");
 
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
@@ -68,7 +68,7 @@ db-password: "testpass"
             fs.unlinkSync(TEST_CONFIG_PATH);
 
             try {
-                const res = await request(app).get("/reload-config");
+                const res = await request(app).get("/api/reload-config");
 
                 expect(res.status).toBe(500);
                 expect(res.body.success).toBe(false);
@@ -95,12 +95,12 @@ db-password: "testpass"
         });
     });
 
-    describe("GET /read-config", () => {
+    describe("GET /api/read-config", () => {
         it("should return 200 with current configuration", async () => {
             // First reload to initialize config
-            await request(app).get("/reload-config");
+            await request(app).get("/api/reload-config");
 
-            const res = await request(app).get("/read-config");
+            const res = await request(app).get("/api/read-config");
 
             expect(res.status).toBe(200);
             expect(res.headers["content-type"]).toContain("application/json");
@@ -110,7 +110,7 @@ db-password: "testpass"
         });
     });
 
-    describe("POST /write-config", () => {
+    describe("POST /api/write-config", () => {
         it("should return 200 with success message when config is valid", async () => {
             const newConfig = {
                 "express-port": 32001,
@@ -129,7 +129,7 @@ db-password: "testpass"
             };
 
             const res = await request(app)
-                .post("/write-config")
+                .post("/api/write-config")
                 .send(newConfig);
 
             expect(res.status).toBe(200);
@@ -160,7 +160,7 @@ db-password: "testpass"
             };
 
             const res = await request(app)
-                .post("/write-config")
+                .post("/api/write-config")
                 .send(invalidConfig);
 
             expect(res.status).toBe(400);
@@ -170,7 +170,7 @@ db-password: "testpass"
 
         it("should return 400 when request body is empty", async () => {
             const res = await request(app)
-                .post("/write-config")
+                .post("/api/write-config")
                 .send("");
 
             expect(res.status).toBe(400);

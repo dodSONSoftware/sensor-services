@@ -116,7 +116,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/about` | API metadata, version, commands list, system info |
+| GET | `/about` | API metadata (name, version, author), available commands list, and system info (platform, arch, hostname, uptime, memory) |
 | GET | `/date_local`, `/date-local` | Current local date/time |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time |
 | GET | `/endpoints` | Detailed information about each API endpoint |
@@ -148,7 +148,12 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | POST | `/ippinger/restart` | POST to IP pinger service `/restart` |
 | GET | `/ippinger/ping` | Proxy to IP pinger service `/ping` |
 | GET | `/ippinger/ping/:target` | Proxy to IP pinger service `/ping/{ip}` |
-| GET | `/ippinger/analyze-ippinger` | Compare pinger config against live sensors |
+
+### Sensor Routes (`/sensors/*`) - Analysis
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/sensors/ippinger-analyze` | Compare pinger config against live sensors |
 
 ### Settings Routes (`/ui/settings`)
 
@@ -157,6 +162,14 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/ui/settings` | All application settings |
 | GET | `/ui/settings-schema` | Setting definitions with name, default, range, and description |
 | PATCH | `/ui/settings-update` | Partial update of settings |
+
+### Configuration Routes (`/api/*`)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/reload-config` | Hot-reload configuration from disk |
+| GET | `/api/read-config` | Read current configuration as JSON |
+| POST | `/api/write-config` | Save new configuration and reload |
 
 ### Swagger
 

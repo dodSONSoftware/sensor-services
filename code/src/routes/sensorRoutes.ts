@@ -22,6 +22,7 @@ export const __routes: string[] = [
     "/sensors/read-config/:source",
     "/sensors/write-config/:source",
     "/sensors/update-config/:source",
+    "/sensors/ippinger-analyze",
 ];
 
 export const __routesHelp: Record<string, unknown> = {
@@ -66,6 +67,10 @@ export const __routesHelp: Record<string, unknown> = {
         {
             "route": "/sensors/update-config/:source",
             "description": "Posts the configuration update to the sensor identified by source."
+        },
+        {
+            "route": "/sensors/ippinger-analyze",
+            "description": "Analyzes the configured devices in the registered IP Pinger against the live-sensors and returns a report."
         }
     ]
 };
