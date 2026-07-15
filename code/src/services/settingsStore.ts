@@ -131,12 +131,22 @@ function validateSettingsFromDb(data: unknown): AppSettings {
                     throw new Error(`Setting "${key}" must be an array, got ${typeof value}`);
                 }
 
-                // Special handling for telemetry arrays: merge with defaults to include new items
-                if (key === "air_telemetry" || key === "water_telemetry" || key === "light_telemetry") {
-                    const defaultValue = DEFAULT_SETTINGS[key as keyof AppSettings] as Array<{ value: string }>;
-                    const dbValue = value as Array<{ value: string }>;
+                // Handle telemetry arrays (both flat legacy keys and nested keys)
+                // Legacy keys: air_telemetry, water_telemetry, light_telemetry
+                // New keys: telemetry.air, telemetry.water, telemetry.light
+                const telemetryKeys = ["air", "water", "light"];
+                const isLegacyTelemetryKey = key.startsWith("air_telemetry") || key.startsWith("water_telemetry") || key.startsWith("light_telemetry");
+                const isNestedTelemetryKey = key.startsWith("telemetry.") && telemetryKeys.some(k => key === `telemetry.${k}`);
+
+                if (isLegacyTelemetryKey || isNestedTelemetryKey) {
+                    // Extract the actual telemetry key (either "air", "water", "light")
+                    const telemetryKey = isLegacyTelemetryKey ? key.replace("_telemetry", "") : key.replace("telemetry.", "");
+
+                    // Get the default value for this telemetry type
+                    const defaultValue = DEFAULT_SETTINGS.telemetry[telemetryKey as keyof typeof DEFAULT_SETTINGS.telemetry] as Array<{ value: string }>;
 
                     // Start with DB values, then add any new items from defaults that aren't in DB
+                    const dbValue = value as Array<{ value: string }>;
                     const merged = [...dbValue];
                     for (const defaultItem of defaultValue) {
                         if (!merged.some(item => item.value === defaultItem.value)) {
@@ -295,11 +305,49 @@ export async function patchSettings(updates: Record<string, unknown>): Promise<A
     }
 
     // Apply updates to build the new cache value
-    const newCache: Partial<AppSettings> = { ...cache };
+    // Use type assertion to allow dynamic key access for both flat and nested keys
+    const newCache = structuredClone(cache) as Record<string, unknown>;
+
     for (const [key, value] of Object.entries(updates)) {
-        if (key in DEFAULT_SETTINGS) {
-            (newCache as Record<string, unknown>)[key] = value;
+        // Check if this is a valid setting key (flat or nested)
+        if (isSettingKeyValid(key)) {
+            // Handle nested key assignment (e.g., "telemetry.air")
+            const dotIndex = key.indexOf(".");
+            if (dotIndex > 0) {
+                const parentKey = key.substring(0, dotIndex);
+                const childKey = key.substring(dotIndex + 1);
+
+                // Ensure parent object exists
+                if (newCache[parentKey] == null || typeof newCache[parentKey] !== "object") {
+                    newCache[parentKey] = {};
+                }
+
+                // Assign to nested path
+                ((newCache[parentKey] as Record<string, unknown>))[childKey] = value;
+            } else {
+                newCache[key] = value;
+            }
         }
+    }
+
+    // Helper function to check if a key is valid in DEFAULT_SETTINGS
+    function isSettingKeyValid(key: string): boolean {
+        // Direct match for flat keys
+        if (key in DEFAULT_SETTINGS) {
+            return true;
+        }
+        // Handle dot-notation nested keys like "telemetry.air"
+        const dotIndex = key.indexOf(".");
+        if (dotIndex > 0) {
+            const parentKey = key.substring(0, dotIndex);
+            const childKey = key.substring(dotIndex + 1);
+            const parentValue = (DEFAULT_SETTINGS as Record<string, unknown>)[parentKey];
+            // Check if parent is an object and child key exists within it
+            if (parentValue != null && typeof parentValue === "object" && !Array.isArray(parentValue)) {
+                return childKey in parentValue;
+            }
+        }
+        return false;
     }
 
     if (!pool) {

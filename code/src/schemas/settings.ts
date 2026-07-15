@@ -34,39 +34,36 @@ export const serverConfigSchema = z.object({
  * Telemetry item definition for display configuration.
  */
 const telemetryItemSchema = z.object({
-    value: z.string(),        // The raw key from sensor data (e.g., "temperature-c")
-    visible: z.boolean(),     // Whether to display this value
     ui: z.string(),           // Label to show in the UI (e.g., "Temperature")
     order: z.number().int().min(0).default(0),  // Order position for sorting (lower numbers appear first)
+    value: z.string(),        // The raw key from sensor data (e.g., "temperature-c")
+    visible: z.boolean(),     // Whether to display this value
 });
 
 /**
- * Combined telemetry settings for each sensor type.
- * Each setting defines which telemetry fields to show, their order, and UI labels.
+ * Nested telemetry settings for each sensor type.
+ * Each key (air, water, light) contains an array of telemetry fields to display.
  */
 export const telemetrySettingsSchema = z.object({
-    // Air sensor telemetry settings
-    air_telemetry: z.array(telemetryItemSchema).default([
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
-        { value: "humidity-percent", visible: true, ui: "HUMIDITY %", order: 1 },
-        { value: "dew-point", visible: true, ui: "DEW POINT", order: 2 },
-        { value: "feels-like-c", visible: true, ui: "FEELS LIKE", order: 3 },
-        { value: "pressure-pascal", visible: true, ui: "PRESSURE", order: 4 },
-        { value: "altitude-meters", visible: true, ui: "ALTITUDE", order: 5 },
-    ]),
-
-    // Water sensor telemetry settings
-    water_telemetry: z.array(telemetryItemSchema).default([
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
-    ]),
-
-    // Light sensor telemetry settings
-    light_telemetry: z.array(telemetryItemSchema).default([
-        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT", order: 0 },
-        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT", order: 1 },
-        { value: "lux", visible: true, ui: "LUX", order: 2 },
-        { value: "uv-index", visible: true, ui: "UV INDEX", order: 3 },
-    ]),
+    telemetry: z.object({
+        air: z.array(telemetryItemSchema).default([
+            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+            { ui: "HUMIDITY %", order: 1, value: "humidity-percent", visible: true },
+            { ui: "DEW POINT", order: 2, value: "dew-point", visible: true },
+            { ui: "FEELS LIKE", order: 3, value: "feels-like-c", visible: true },
+            { ui: "PRESSURE", order: 4, value: "pressure-pascal", visible: true },
+            { ui: "ALTITUDE", order: 5, value: "altitude-meters", visible: true },
+        ]),
+        water: z.array(telemetryItemSchema).default([
+            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+        ]),
+        light: z.array(telemetryItemSchema).default([
+            { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw-ambient-light", visible: false },
+            { ui: "RAW UV LIGHT", order: 1, value: "raw-uv-light", visible: false },
+            { ui: "LUX", order: 2, value: "lux", visible: true },
+            { ui: "UV INDEX", order: 3, value: "uv-index", visible: true },
+        ]),
+    }),
 });
 
 /**
@@ -88,10 +85,10 @@ export const appSettingsUpdateSchema = z.object({
     mqtt_topic_command: z.string().optional(),
     mqtt_topic_command_response: z.string().optional(),
 
-    // Telemetry settings
-    air_telemetry: z.array(telemetryItemSchema).optional(),
-    water_telemetry: z.array(telemetryItemSchema).optional(),
-    light_telemetry: z.array(telemetryItemSchema).optional(),
+    // Telemetry settings (nested under telemetry.*)
+    "telemetry.air": z.array(telemetryItemSchema).optional(),
+    "telemetry.water": z.array(telemetryItemSchema).optional(),
+    "telemetry.light": z.array(telemetryItemSchema).optional(),
 });
 
 /**
@@ -118,27 +115,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ping_delay_ms: 500,
     recent_ips_max: 10,
     unit_system: "Imperial",
-
-    // Telemetry settings
-    air_telemetry: [
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
-        { value: "humidity-percent", visible: true, ui: "HUMIDITY %", order: 1 },
-        { value: "dew-point", visible: true, ui: "DEW POINT", order: 2 },
-        { value: "feels-like-c", visible: true, ui: "FEELS LIKE", order: 3 },
-        { value: "pressure-pascal", visible: true, ui: "PRESSURE", order: 4 },
-        { value: "altitude-meters", visible: true, ui: "ALTITUDE", order: 5 },
-    ],
-
-    water_telemetry: [
-        { value: "temperature-c", visible: true, ui: "TEMPERATURE", order: 0 },
-    ],
-
-    light_telemetry: [
-        { value: "raw-ambient-light", visible: true, ui: "RAW AMBIENT LIGHT", order: 0 },
-        { value: "raw-uv-light", visible: true, ui: "RAW UV LIGHT", order: 1 },
-        { value: "lux", visible: true, ui: "LUX", order: 2 },
-        { value: "uv-index", visible: true, ui: "UV INDEX", order: 3 },
-    ],
+    telemetry: {
+        air: [
+            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+            { ui: "HUMIDITY %", order: 1, value: "humidity-percent", visible: true },
+            { ui: "DEW POINT", order: 2, value: "dew-point", visible: true },
+            { ui: "FEELS LIKE", order: 3, value: "feels-like-c", visible: true },
+            { ui: "PRESSURE", order: 4, value: "pressure-pascal", visible: true },
+            { ui: "ALTITUDE", order: 5, value: "altitude-meters", visible: true },
+        ],
+        water: [
+            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+        ],
+        light: [
+            { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw-ambient-light", visible: false },
+            { ui: "RAW UV LIGHT", order: 1, value: "raw-uv-light", visible: false },
+            { ui: "LUX", order: 2, value: "lux", visible: true },
+            { ui: "UV INDEX", order: 3, value: "uv-index", visible: true },
+        ],
+    },
 } as const;
 
 /**
@@ -254,27 +249,25 @@ export const SETTINGS_SCHEMA: Record<string, {
         optional: true,
     },
 
-    // Air telemetry settings
-    air_telemetry: {
+    // Telemetry settings (nested under telemetry.*)
+    "telemetry.air": {
         label: "Air Telemetry Configuration",
         description: "Configure which air sensor telemetry fields to display and their order.",
         type: "array",
-        default: JSON.stringify(DEFAULT_SETTINGS.air_telemetry),
+        default: JSON.stringify(DEFAULT_SETTINGS.telemetry.air),
     },
 
-    // Water telemetry settings
-    water_telemetry: {
+    "telemetry.water": {
         label: "Water Telemetry Configuration",
         description: "Configure which water sensor telemetry fields to display and their order.",
         type: "array",
-        default: JSON.stringify(DEFAULT_SETTINGS.water_telemetry),
+        default: JSON.stringify(DEFAULT_SETTINGS.telemetry.water),
     },
 
-    // Light telemetry settings
-    light_telemetry: {
+    "telemetry.light": {
         label: "Light Telemetry Configuration",
         description: "Configure which light sensor telemetry fields to display and their order.",
         type: "array",
-        default: JSON.stringify(DEFAULT_SETTINGS.light_telemetry),
+        default: JSON.stringify(DEFAULT_SETTINGS.telemetry.light),
     },
 };

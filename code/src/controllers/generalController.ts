@@ -19,14 +19,27 @@ const startTime = Date.now();
 const HEALTH_CHECK_TIMEOUT_MS = 5000;
 
 /**
- * Check if the IP Pinger service is healthy by fetching its /about endpoint.
+ * Health check response from external services.
+ */
+interface HealthResponse {
+    status: string;
+    [key: string]: unknown;
+}
+
+/**
+ * Check if the IP Pinger service is healthy by fetching its /health endpoint.
+ * Returns true if the response contains status: "healthy".
  */
 async function checkIpPingerHealth(ipPingerUrl: string): Promise<boolean> {
     try {
-        const url = `${ipPingerUrl}/about`;
+        const url = `${ipPingerUrl}/health`;
         const signal = AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS);
         const response = await fetch(url, { signal });
-        return response.ok;
+        if (!response.ok) {
+            return false;
+        }
+        const data = (await response.json()) as HealthResponse;
+        return data.status === "healthy";
     } catch (error) {
         logger()?.write_warn("checkIpPingerHealth", `Failed to reach IP Pinger: ${(error as Error).message}`);
         return false;
@@ -34,14 +47,19 @@ async function checkIpPingerHealth(ipPingerUrl: string): Promise<boolean> {
 }
 
 /**
- * Check if the Sensor Telemetry service is healthy by fetching its /metrics endpoint.
+ * Check if the Sensor Telemetry service is healthy by fetching its /health endpoint.
+ * Returns true if the response contains status: "healthy".
  */
 async function checkSensorTelemetryHealth(telemetryUrl: string): Promise<boolean> {
     try {
-        const url = `${telemetryUrl}/metrics`;
+        const url = `${telemetryUrl}/health`;
         const signal = AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS);
         const response = await fetch(url, { signal });
-        return response.ok;
+        if (!response.ok) {
+            return false;
+        }
+        const data = (await response.json()) as HealthResponse;
+        return data.status === "healthy";
     } catch (error) {
         logger()?.write_warn("checkSensorTelemetryHealth", `Failed to reach Sensor Telemetry: ${(error as Error).message}`);
         return false;

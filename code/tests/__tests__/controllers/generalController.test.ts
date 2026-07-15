@@ -11,11 +11,11 @@ import { setConfig } from "../../../src/common/global";
 /**
  * Create a mock fetch response that resolves with a successful HTTP response.
  */
-function createMockFetchResponse(): Response {
+function createMockFetchResponse(status: string = "healthy"): Response {
   return {
     ok: true,
     status: 200,
-    json: jest.fn().mockResolvedValue({}),
+    json: jest.fn().mockResolvedValue({ status }),
     text: jest.fn().mockResolvedValue(""),
     headers: new Headers(),
     redirected: false,
@@ -161,10 +161,10 @@ describe("getHealth", () => {
     }) as Request & { mqtt_connected: boolean };
 
     // Use separate mock implementations for each call
-    // IP Pinger (/about) fails, telemetry (/metrics) succeeds
+    // IP Pinger (/health) fails, telemetry (/health) succeeds
     const mockFetch = jest.fn();
     mockFetch.mockImplementationOnce((url: string) => {
-      if (url.includes("/about")) {
+      if (url.includes("/health")) {
         return Promise.reject(new Error("IP Pinger unavailable"));
       }
       return Promise.resolve(createMockFetchResponse());
