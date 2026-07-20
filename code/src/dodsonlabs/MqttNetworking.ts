@@ -6,7 +6,7 @@
 import mqtt from "mqtt";
 import * as sysFunc from "./SystemFunctions";
 import { LogLevel } from "./Interfaces";
-import type { ILogger, IMqttCommandControl, IMqttNetworking } from "./Interfaces";
+import type { ILogger, IMqttCommandControl, IMqttNetworking, MqttCommandResult } from "./Interfaces";
 import { MqttCommandControl } from "./MqttCommandControl";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
@@ -31,6 +31,8 @@ export class MqttNetworking implements IMqttNetworking {
         this.mqtt_server_ip_address = config["mqtt-broker-ip-address"];
         this.mqtt_topic_command = config["mqtt-topic-command"];
         this.mqtt_topic_command_response = config["mqtt-topic-command-response"];
+        this.mqtt_topic_info_request = config["mqtt-topic-info-request"];
+        this.mqtt_topic_info_response = config["mqtt-topic-info-response"];
         // ----
         this.logger = logger;
         this.originator = "networking";
@@ -97,6 +99,8 @@ export class MqttNetworking implements IMqttNetworking {
     private readonly mqtt_server_ip_address: string;
     public readonly mqtt_topic_command: string;
     private readonly mqtt_topic_command_response: string;
+    private readonly mqtt_topic_info_request: string;
+    private readonly mqtt_topic_info_response: string;
     // ----
     private readonly originator: string;
     // ----
@@ -258,6 +262,10 @@ export class MqttNetworking implements IMqttNetworking {
         // subscribe to command-response topic for sensor command replies
         this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${this.mqtt_topic_command_response}`);
         this.mqtt_client.subscribe(this.mqtt_topic_command_response);
+
+        // subscribe to info-request topic for sensor queries
+        this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${this.mqtt_topic_info_request}`);
+        this.mqtt_client.subscribe(this.mqtt_topic_info_request);
     }
 
     private on_disconnect(): void {
@@ -322,6 +330,10 @@ export class MqttNetworking implements IMqttNetworking {
 
         case "command-response":
             this.handle_mqtt_message_command_response(json_doc);
+            break;
+
+        case "info-request":
+            this.handle_mqtt_message_info_request(json_doc);
             break;
 
         default:
@@ -470,22 +482,22 @@ export class MqttNetworking implements IMqttNetworking {
 
         // ----
         if (msg_type === "identify") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("identify")!, source, payload);
+            this.handle_mqtt_command_response_message(this.get_cr_dude("identify")!, source, payload, command_id);
             // ----
         } else if (msg_type === "get-details") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("get-details")!, source, payload);
+            this.handle_mqtt_command_response_message(this.get_cr_dude("get-details")!, source, payload, command_id);
             // ----
         } else if (msg_type === "read-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("read-config")!, source, payload);
+            this.handle_mqtt_command_response_message(this.get_cr_dude("read-config")!, source, payload, command_id);
             // ----
         } else if (msg_type === "write-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("write-config")!, source, payload);
+            this.handle_mqtt_command_response_message(this.get_cr_dude("write-config")!, source, payload, command_id);
             // ----
         } else if (msg_type === "update-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("update-config")!, source, payload);
+            this.handle_mqtt_command_response_message(this.get_cr_dude("update-config")!, source, payload, command_id);
             // ----
         } else if (msg_type === "reboot") {
-            this.handle_mqtt_command_response_reboot(this.get_cr_dude("reboot")!, source, payload);
+            this.handle_mqtt_command_response_reboot(this.get_cr_dude("reboot")!, source, payload, command_id);
 
         } else {
             this.logger.write_warn(
@@ -501,16 +513,24 @@ export class MqttNetworking implements IMqttNetworking {
     private handle_mqtt_command_response_message(
         dude: IMqttCommandControl,
         source: string,
-        payload: Record<string, any>
-    ) {
+        payload: Record<string, any>,
+        command_id?: string
+    ): void {
         // Add calculated feels-like temperature to air data if not already present
         const enrichedPayload = this.enrichAirDataWithFeelsLike(payload);
 
-        // add response to collection
-        dude.results.push({
+        // Create result with optional command_id
+        const result: MqttCommandResult = {
             source: source,
             payload: enrichedPayload,
-        });
+        };
+
+        if (command_id !== undefined) {
+            result.command_id = command_id;
+        }
+
+        // add response to collection
+        dude.results.push(result);
 
         // start a new timer
         dude.restart_clock();
@@ -566,12 +586,104 @@ export class MqttNetworking implements IMqttNetworking {
     private handle_mqtt_command_response_reboot(
         dude: IMqttCommandControl,
         source: string,
-        payload: Record<string, any>
-    ) {
-    // add response to collection
-        dude.results.push({ source, payload });
+        payload: Record<string, any>,
+        command_id?: string
+    ): void {
+        // Create result with optional command_id
+        const result: MqttCommandResult = { source, payload };
+        if (command_id !== undefined) {
+            result.command_id = command_id;
+        }
+
+        // add response to collection
+        dude.results.push(result);
 
         // start a new timer
         dude.restart_clock();
+    }
+
+    // ****************************************************************
+    // ****************************************************************
+    // ******** HANDLE INFO REQUEST MESSAGES (SENSOR-to-SERVER)
+
+    /**
+     * Handle info-request from sensors.
+     * Sensors can query for server time, settings, etc.
+     */
+    private handle_mqtt_message_info_request(json_doc: Record<string, any>): void {
+        // Validate required fields
+        const request_id_raw = json_doc["request-id"];
+        if (request_id_raw === undefined) {
+            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request-id', dropping");
+            return;
+        }
+        const request_id = String(request_id_raw);
+
+        const source_raw = json_doc["source"];
+        if (source_raw === undefined) {
+            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'source', dropping");
+            return;
+        }
+        const source = String(source_raw);
+
+        const request_type_raw = json_doc["request-type"];
+        if (request_type_raw === undefined) {
+            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request-type', dropping");
+            return;
+        }
+        const request_type = String(request_type_raw).toLowerCase();
+
+        // Log the request
+        this.logger.write_debug(this.originator, `<handle_mqtt_message_info_request>: request-type='${request_type}' from '${source}'`);
+
+        // Build response header
+        const response_header: Record<string, any> = {
+            "message-type": "info-response",
+            "version": "2",
+            "source": "server",
+            "request-id": request_id,
+            "request-type": request_type,
+        };
+
+        // Process based on request type
+        let response_payload: Record<string, any>;
+
+        switch (request_type) {
+        case "utc-time":
+            response_payload = {
+                timestamp: new Date().toISOString(),
+            };
+            break;
+
+        case "settings":
+            response_payload = {
+                "mqtt-broker": this.mqtt_server_ip_address,
+                "mqtt-topic-telemetry": this.mqtt_topic_command,
+                "mqtt-topic-command": this.mqtt_topic_command,
+                "mqtt-topic-command-response": this.mqtt_topic_command_response,
+                "mqtt-topic-info-request": this.mqtt_topic_info_request,
+            };
+            break;
+
+        default:
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request> => Unknown request-type '${request_type}', dropping`
+            );
+            return;
+        }
+
+        // Send response
+        try {
+            this.publish_mqtt_message(this.mqtt_topic_info_response, {
+                ...response_header,
+                payload: response_payload,
+            });
+        } catch (error) {
+            this.logger.write_error(
+                this.originator,
+                `<handle_mqtt_message_info_request> => Failed to send response: ${sysFunc.ensureError(error).message}`
+            );
+        }
     }
 }

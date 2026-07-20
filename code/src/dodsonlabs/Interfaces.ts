@@ -48,6 +48,7 @@ export interface IMqttNetworking {
 export interface MqttCommandResult {
   source: string;
   payload: Record<string, unknown>;
+  command_id?: string;
 }
 
 export interface IMqttCommandControl {
