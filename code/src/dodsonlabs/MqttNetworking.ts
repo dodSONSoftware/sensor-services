@@ -383,23 +383,6 @@ export class MqttNetworking implements IMqttNetworking {
 
     // --------------------------------
 
-    /**
-     * Sanitize sensitive fields from a payload.
-     * Removes passwords and other sensitive configuration values.
-     */
-    private sanitizePayload(payload: Record<string, any>): Record<string, any> {
-        const sanitized = structuredClone(payload);
-
-        // Remove sensitive fields from configuration if present
-        const config = sanitized?.["configuration"];
-        if (config && typeof config === "object") {
-            delete config["wifi-password"];
-            delete config["password"];
-        }
-
-        return sanitized;
-    }
-
     private handle_mqtt_message_command_response(
         json_doc: Record<string, any>
     ): void {
@@ -421,14 +404,19 @@ export class MqttNetworking implements IMqttNetworking {
 
         const payload = json_doc["payload"];
 
-        // Extract command_id for correlation (no longer used for deduplication)
-        // Deduplication was causing issues when multiple sensors responded with the same command-id
+        // Extract command_id for correlation
         const command_id = json_doc["command-id"];
 
-        // Log with sanitized payload to avoid exposing sensitive data
+        // Log with sanitized payload to avoid exposing sensitive data in logs
         const sanitizedDoc = { ...json_doc };
         if (sanitizedDoc["payload"]) {
-            sanitizedDoc["payload"] = this.sanitizePayload(sanitizedDoc["payload"]);
+            const sanitizedPayload = { ...sanitizedDoc["payload"] };
+            const config = sanitizedPayload["configuration"];
+            if (config && typeof config === "object") {
+                delete config["wifi-password"];
+                delete config["password"];
+            }
+            sanitizedDoc["payload"] = sanitizedPayload;
         }
         this.logger.write_debug(this.originator, `<handle_mqtt_message_command_response>: \n${JSON.stringify(sanitizedDoc)}`);
 
