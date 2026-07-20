@@ -16,6 +16,10 @@ mqtt-topic-telemetry: "iot/telemetry"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
 
+# Info request/response (sensor-to-server queries)
+mqtt-topic-info-request: "iot/v2/info-request"
+mqtt-topic-info-response: "iot/v2/info-response"
+
 # External services
 ip-pinger-web-api: "http://10.10.10.50:3300"
 sensor-telemetry-api: "http://10.10.10.50:3301"

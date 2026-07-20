@@ -207,7 +207,7 @@ export const SETTINGS_SCHEMA: Record<string, {
         step: 100,
     },
     recent_ips_max: {
-        label: "Recent IPs Max",
+        label: "Recent IPs Maximum",
         description: "Maximum number of recently pinged IP addresses to remember. Minimum 5, maximum 20.",
         type: "number",
         default: 10,

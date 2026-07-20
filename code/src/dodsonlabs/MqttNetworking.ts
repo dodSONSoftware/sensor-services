@@ -107,57 +107,11 @@ export class MqttNetworking implements IMqttNetworking {
     private readonly forward_sensor_logs: boolean;
     private readonly forward_sensor_logs_level: LogLevel;
 
-    // ---- command deduplication
-    private readonly seen_command_ids: Map<string, number> = new Map();
-    private readonly __dedup_ttl_ms = 60_000; // 1 minute TTL for command IDs
-    private readonly __dedup_max_size = 10_000; // cap to prevent unbounded growth
-
     // ---- command silence timeout
     private readonly __command_silence_timeout_ms: number;
 
     // ********
     // ******** PRIVATE FUNCTIONS
-
-    // ---- command deduplication
-
-    /**
-   * Register a command ID for deduplication tracking.
-   * Returns true if this is a new (non-duplicate) command ID.
-   * Uses a bounded map: when full, evicts the oldest entry (O(1)).
-   */
-    register_command_id(command_id: string): boolean {
-        if (this.seen_command_ids.has(command_id)) {
-            return false;
-        }
-
-        // Evict oldest entry when at capacity to prevent unbounded growth
-        if (this.seen_command_ids.size >= this.__dedup_max_size) {
-            const firstKey = this.seen_command_ids.keys().next().value;
-            if (firstKey !== undefined) {
-                this.seen_command_ids.delete(firstKey);
-            }
-        }
-
-        this.seen_command_ids.set(command_id, Date.now());
-        return true;
-    }
-
-    /**
-   * Check if a command ID has already been seen (duplicate).
-   * Expired entries are cleaned up lazily at lookup time.
-   */
-    private is_duplicate_command(command_id: string): boolean {
-        const timestamp = this.seen_command_ids.get(command_id);
-        if (timestamp === undefined) {
-            return false;
-        }
-        // Expired — evict and treat as new
-        if (Date.now() - timestamp > this.__dedup_ttl_ms) {
-            this.seen_command_ids.delete(command_id);
-            return false;
-        }
-        return true;
-    }
 
     private connect_to_mqtt_broker(): mqtt.MqttClient {
         const client = mqtt.connect(`mqtt://${this.mqtt_server_ip_address}`, {
@@ -218,21 +172,6 @@ export class MqttNetworking implements IMqttNetworking {
     }
 
     public publish_mqtt_message(topic: string, message: Record<string, any>): void {
-
-        // Outbound command deduplication: reject duplicate command IDs before publishing.
-        const command_id = message["command-id"];
-        if (command_id !== undefined) {
-            const cid = String(command_id);
-            if (this.is_duplicate_command(cid)) {
-                this.logger.write_debug(
-                    this.originator,
-                    `<publish_mqtt_message> => Duplicate command-id '${command_id}', skipping publish`
-                );
-                return;
-            }
-            // Register for future dedup checks (bounded map, O(1) eviction).
-            this.register_command_id(cid);
-        }
 
         // Log the message being published (for debugging)
         this.logger.write_debug(
@@ -465,20 +404,12 @@ export class MqttNetworking implements IMqttNetworking {
 
         const payload = json_doc["payload"];
 
-        // Extract command_id for deduplication
+        // Extract command_id for correlation (no longer used for deduplication)
+        // Deduplication was causing issues when multiple sensors responded with the same command-id
         const command_id = json_doc["command-id"];
 
         // log-it
         this.logger.write_debug(this.originator, `<handle_mqtt_message_command_response>: \n${JSON.stringify(json_doc)}`);
-
-        // ---- command deduplication check (skip adding results for duplicates)
-        if (command_id !== undefined && this.is_duplicate_command(String(command_id))) {
-            this.logger.write_debug(
-                this.originator,
-                `<handle_mqtt_message_command_response> => Duplicate command-id '${command_id}' for type '${msg_type}', skipping`
-            );
-            return;
-        }
 
         // ----
         if (msg_type === "identify") {

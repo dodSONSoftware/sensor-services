@@ -30,6 +30,12 @@ export const configSchema = z.object({
     "mqtt-topic-command-response": z.string({
         error: "mqtt-topic-command-response must be a string",
     }).min(1, "mqtt-topic-command-response must not be empty"),
+    "mqtt-topic-info-request": z.string({
+        error: "mqtt-topic-info-request must be a string",
+    }).min(1, "mqtt-topic-info-request must not be empty"),
+    "mqtt-topic-info-response": z.string({
+        error: "mqtt-topic-info-response must be a string",
+    }).min(1, "mqtt-topic-info-response must not be empty"),
     "ip-pinger-web-api": z.string({
         error: "ip-pinger-web-api must be a string",
     }).min(1, "ip-pinger-web-api must not be empty"),
