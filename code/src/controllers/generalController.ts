@@ -10,6 +10,7 @@ import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
 import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 import { __routesHelp as configRoutesHelp } from "../routes/configRoutes";
+import { __routesHelp as logRoutesHelp } from "../routes/logRoutes";
 
 // **** public functions
 
@@ -98,6 +99,7 @@ export async function getAbout(req: express.Request, res: express.Response) {
     cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
     cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
     cmds.push({ "name": "Configuration", "help": configRoutesHelp });
+    cmds.push({ "name": "Logs", "help": logRoutesHelp });
 
     const about = {
         about: {
@@ -353,6 +355,14 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             requestBody: "JSON object with partial sensor configuration values",
             responseBody: "{ success: boolean, message: string }",
             description: "Updates configuration on a specific sensor."
+        },
+        {
+            name: "Sensor Logs",
+            route: "/sensors/logs/:source",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Array of log entries with timestamp, level, and message",
+            description: "Retrieves logs for a specific sensor from Grafana Loki."
         },
         {
             name: "IP Pinger Analyze",

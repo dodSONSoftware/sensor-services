@@ -18,6 +18,7 @@ export const uiPreferencesSchema = z.object({
     ping_delay_ms: z.number().int().min(100).max(5000).default(500),
     recent_ips_max: z.number().int().min(5).max(20).default(10),
     unit_system: z.enum(["Metric", "Imperial"]).default("Imperial"),
+    log_levels: z.array(z.enum(["debug", "info", "warn", "error"])).default(["debug", "info"]),
 });
 
 /**
@@ -80,6 +81,7 @@ export const appSettingsUpdateSchema = z.object({
     ping_delay_ms: z.number().int().min(100).max(5000).optional(),
     recent_ips_max: z.number().int().min(5).max(20).optional(),
     unit_system: z.enum(["Metric", "Imperial"]).optional(),
+    log_levels: z.array(z.enum(["debug", "info", "warn", "error"])).optional(),
     mqtt_broker_address: z.string().optional(),
     mqtt_topic_telemetry: z.string().optional(),
     mqtt_topic_command: z.string().optional(),
@@ -115,6 +117,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ping_delay_ms: 500,
     recent_ips_max: 10,
     unit_system: "Imperial",
+    log_levels: ["debug", "info"],
     telemetry: {
         air: [
             { ui: "TEMPERATURE", order: 0, value: "temperature-f", visible: true },
@@ -220,6 +223,13 @@ export const SETTINGS_SCHEMA: Record<string, {
         type: "enum",
         default: "Imperial",
         options: ["Metric", "Imperial"],
+    },
+    log_levels: {
+        label: "Log Levels",
+        description: "Default log levels to display in the sensor details logs section.",
+        type: "array",
+        default: JSON.stringify(["debug", "info"]),
+        options: ["debug", "info", "warn", "error"],
     },
     mqtt_broker_address: {
         label: "MQTT Broker Address",

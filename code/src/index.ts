@@ -14,6 +14,7 @@ import * as pingerRoutes from "./routes/pingerRoutes";
 import { CreateRouteNotFound } from "./routes/routeNotFound";
 import * as settingsRoutes from "./routes/settingsRoutes";
 import * as configRoutes from "./routes/configRoutes";
+import * as logRoutes from "./routes/logRoutes";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { InternalServerError } from "./dodsonlabs/HttpConstants";
@@ -175,6 +176,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
         new settingsRoutes.CreateSettingsRoutes(app);
         new configRoutes.CreateConfigRoutes(app);
+        new logRoutes.CreateLogRoutes(app);
         new CreateRouteNotFound(app);
 
         // Validate __routesHelp entries match __routes arrays
@@ -183,6 +185,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         validateRoutesHelp("pingerRoutes", pingerRoutes.__routes, pingerRoutes.__routesHelp);
         validateRoutesHelp("settingsRoutes", settingsRoutes.__routes, settingsRoutes.__routesHelp);
         validateRoutesHelp("configRoutes", configRoutes.__routes, configRoutes.__routesHelp);
+        validateRoutesHelp("logRoutes", logRoutes.__routes, logRoutes.__routesHelp);
     } catch (err: unknown) {
         // log error
         appLogger.write_error("index.ts", ensureError(err).message);
