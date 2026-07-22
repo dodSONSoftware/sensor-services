@@ -180,7 +180,13 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number): P
                         // Message wasn't JSON, use as-is
                     }
 
-                    logs.push({ timestamp, level, message });
+                    // Loki returns timestamp as nanoseconds (string), convert to ISO string
+                    // Nanoseconds to milliseconds: divide by 1,000,000
+                    const nsTimestamp = parseFloat(timestamp);
+                    const msTimestamp = nsTimestamp / 1_000_000;
+                    const isoTimestamp = new Date(msTimestamp).toISOString();
+
+                    logs.push({ timestamp: isoTimestamp, level, message });
                 }
             }
         }

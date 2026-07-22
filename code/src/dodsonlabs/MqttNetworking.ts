@@ -408,9 +408,10 @@ export class MqttNetworking implements IMqttNetworking {
         const command_id = json_doc["command-id"];
 
         // Log with sanitized payload to avoid exposing sensitive data in logs
-        const sanitizedDoc = { ...json_doc };
+        // Use deep clone to ensure we don't accidentally modify the original payload
+        const sanitizedDoc = JSON.parse(JSON.stringify(json_doc));
         if (sanitizedDoc["payload"]) {
-            const sanitizedPayload = { ...sanitizedDoc["payload"] };
+            const sanitizedPayload = sanitizedDoc["payload"];
             const config = sanitizedPayload["configuration"];
             if (config && typeof config === "object") {
                 delete config["wifi-password"];
