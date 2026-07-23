@@ -591,8 +591,10 @@ export class MqttNetworking implements IMqttNetworking {
 
         switch (request_type) {
         case "utc-time":
+            const now = new Date();
             response_payload = {
-                timestamp: new Date().toISOString(),
+                timestamp: now.toISOString(),
+                utc_epoch_ms: now.getTime(),
             };
             break;
 
