@@ -61,22 +61,23 @@ describe("enrichResultsWithMetadata", () => {
 });
 
 describe("create_mqtt_command_message", () => {
-  it("should create a command message with default empty payload and a command-id", () => {
+  it("should create a command message with default empty payload and a command_id", () => {
     const msg = create_mqtt_command_message("sensor-1", "identify");
 
     expect(msg).toMatchObject({
-      "message-type": "command",
-      "version": "2",
+      "message_type": "command",
+      "schema_version": 2,
       "target": "sensor-1",
       "command": "identify",
-      "payload": {},
     });
-    expect(msg).toHaveProperty("command-id");
-    expect(typeof msg["command-id"]).toBe("string");
-    // command-id should be a valid UUID
-    expect(msg["command-id"]).toMatch(
+    expect(msg).toHaveProperty("command_id");
+    expect(typeof msg["command_id"]).toBe("string");
+    // command_id should be a valid UUID
+    expect(msg["command_id"]).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     );
+    // Empty payload should not be included
+    expect(msg["payload"]).toBeUndefined();
   });
 
   it("should lowercase target and command", () => {
@@ -100,16 +101,12 @@ describe("create_mqtt_command_message", () => {
     expect(msg["payload"]).toEqual(payload);
   });
 
-  it("should use empty payload when payload is null", () => {
-    const msg = create_mqtt_command_message("sensor-1", "reboot", null);
+  it("should omit payload when null or empty", () => {
+    const msgNull = create_mqtt_command_message("sensor-1", "reboot", null);
+    const msgEmpty = create_mqtt_command_message("sensor-1", "reboot", {});
 
-    expect(msg["payload"]).toEqual({});
-  });
-
-  it("should use empty payload when payload is undefined", () => {
-    const msg = create_mqtt_command_message("sensor-1", "reboot");
-
-    expect(msg["payload"]).toEqual({});
+    expect(msgNull["payload"]).toBeUndefined();
+    expect(msgEmpty["payload"]).toBeUndefined();
   });
 });
 

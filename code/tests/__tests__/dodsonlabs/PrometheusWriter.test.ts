@@ -71,20 +71,20 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     // ---- publish_light
 
-    it("should reject NaN uv-index in publish_light", () => {
+    it("should reject NaN uv_index in publish_light", () => {
         (writer as any).publish_light({
-            light: { "uv-index": "not-a-number", lux: 500 },
+            light: { "uv_index": "not-a-number", lux: 500 },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_light"),
-            expect.stringContaining("invalid uv-index")
+            expect.stringContaining("invalid uv_index")
         );
     });
 
     it("should reject NaN lux in publish_light", () => {
         (writer as any).publish_light({
-            light: { "uv-index": 5, lux: "not-a-number" },
+            light: { "uv_index": 5, lux: "not-a-number" },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
@@ -93,9 +93,9 @@ describe("PrometheusWriter Number.isFinite guards", () => {
         );
     });
 
-    it("should accept valid uv-index and lux in publish_light", () => {
+    it("should accept valid uv_index and lux in publish_light", () => {
         (writer as any).publish_light({
-            light: { "uv-index": 5.2, lux: 1000 },
+            light: { "uv_index": 5.2, lux: 1000 },
         }, "sensor-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -103,20 +103,20 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     // ---- publish_rain
 
-    it("should reject NaN in-h2o in publish_rain", () => {
+    it("should reject NaN in_h2o in publish_rain", () => {
         (writer as any).publish_rain({
-            rain: { "in-h2o": "not-a-number" },
+            rain: { "in_h2o": "not-a-number" },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_rain"),
-            expect.stringContaining("invalid in-h2o")
+            expect.stringContaining("invalid in_h2o")
         );
     });
 
-    it("should accept valid in-h2o in publish_rain", () => {
+    it("should accept valid in_h2o in publish_rain", () => {
         (writer as any).publish_rain({
-            rain: { "in-h2o": 0.5 },
+            rain: { "in_h2o": 0.5 },
         }, "sensor-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -124,31 +124,31 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     // ---- publish_wind
 
-    it("should reject NaN wind-speed-cm-sec in publish_wind", () => {
+    it("should reject NaN wind_speed_cm_sec in publish_wind", () => {
         (writer as any).publish_wind({
-            wind: { "wind-speed-cm-sec": "not-a-number", "gusts-cm-sec": 100 },
+            wind: { "wind_speed_cm_sec": "not-a-number", "gusts_cm_sec": 100 },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_wind"),
-            expect.stringContaining("invalid wind-speed-cm-sec")
+            expect.stringContaining("invalid wind_speed_cm_sec")
         );
     });
 
-    it("should reject NaN gusts-cm-sec in publish_wind", () => {
+    it("should reject NaN gusts_cm_sec in publish_wind", () => {
         (writer as any).publish_wind({
-            wind: { "wind-speed-cm-sec": 100, "gusts-cm-sec": "not-a-number" },
+            wind: { "wind_speed_cm_sec": 100, "gusts_cm_sec": "not-a-number" },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_wind"),
-            expect.stringContaining("invalid gusts-cm-sec")
+            expect.stringContaining("invalid gusts_cm_sec")
         );
     });
 
     it("should accept valid wind speed and gusts in publish_wind", () => {
         (writer as any).publish_wind({
-            wind: { "wind-speed-cm-sec": 500, "gusts-cm-sec": 800 },
+            wind: { "wind_speed_cm_sec": 500, "gusts_cm_sec": 800 },
         }, "sensor-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -156,20 +156,20 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     // ---- publish_lightning
 
-    it("should reject NaN lightning-count in publish_lightning", () => {
+    it("should reject NaN lightning_count in publish_lightning", () => {
         (writer as any).publish_lightning({
-            lightning: { "lightning-count": "not-a-number" },
+            lightning: { "lightning_count": "not-a-number" },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_lightning"),
-            expect.stringContaining("invalid lightning-count")
+            expect.stringContaining("invalid lightning_count")
         );
     });
 
-    it("should accept valid lightning-count in publish_lightning", () => {
+    it("should accept valid lightning_count in publish_lightning", () => {
         (writer as any).publish_lightning({
-            lightning: { "lightning-count": 3 },
+            lightning: { "lightning_count": 3 },
         }, "sensor-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -179,13 +179,13 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     it("should reject Infinity values in publish_light", () => {
         (writer as any).publish_light({
-            light: { "uv-index": Infinity, lux: -Infinity },
+            light: { "uv_index": Infinity, lux: -Infinity },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledTimes(2);
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_light"),
-            expect.stringContaining("invalid uv-index")
+            expect.stringContaining("invalid uv_index")
         );
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_light"),
@@ -195,17 +195,17 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     it("should reject Infinity values in publish_wind", () => {
         (writer as any).publish_wind({
-            wind: { "wind-speed-cm-sec": Infinity, "gusts-cm-sec": Infinity },
+            wind: { "wind_speed_cm_sec": Infinity, "gusts_cm_sec": Infinity },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledTimes(2);
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_wind"),
-            expect.stringContaining("invalid wind-speed-cm-sec")
+            expect.stringContaining("invalid wind_speed_cm_sec")
         );
         expect(logger.write_warn).toHaveBeenCalledWith(
             expect.stringContaining("publish_wind"),
-            expect.stringContaining("invalid gusts-cm-sec")
+            expect.stringContaining("invalid gusts_cm_sec")
         );
     });
 
@@ -213,7 +213,7 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     it("should reject out-of-range air temperature in publish_air", () => {
         (writer as any).publish_air({
-            air: { "temperature-c": -300, "humidity-percent": 50, "pressure-pascal": 101325 },
+            air: { "temperature_c": -300, "humidity_percent": 50, "pressure_pascal": 101325 },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
@@ -224,7 +224,7 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     it("should reject out-of-range water temperature in publish_water", () => {
         (writer as any).publish_water({
-            water: { "temperature-c": 300 },
+            water: { "temperature_c": 300 },
         }, "sensor-1");
 
         expect(logger.write_warn).toHaveBeenCalledWith(
@@ -235,7 +235,7 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     it("should accept valid air temperature in publish_air", () => {
         (writer as any).publish_air({
-            air: { "temperature-c": 20, "humidity-percent": 50, "pressure-pascal": 101325 },
+            air: { "temperature_c": 20, "humidity_percent": 50, "pressure_pascal": 101325 },
         }, "sensor-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -243,7 +243,7 @@ describe("PrometheusWriter Number.isFinite guards", () => {
 
     it("should accept valid water temperature in publish_water", () => {
         (writer as any).publish_water({
-            water: { "temperature-c": 15 },
+            water: { "temperature_c": 15 },
         }, "sensor-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -285,7 +285,7 @@ describe("sanitizeSource", () => {
 
     it("should preserve hyphens in source names", () => {
         (writer as any).publish_air({
-            air: { "temperature-c": 72, "humidity-percent": 50, "pressure-pascal": 101325 },
+            air: { "temperature_c": 72, "humidity_percent": 50, "pressure_pascal": 101325 },
         }, "Air-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -293,7 +293,7 @@ describe("sanitizeSource", () => {
 
     it("should strip spaces from source names", () => {
         (writer as any).publish_rain({
-            rain: { "in-h2o": 0.5 },
+            rain: { "in_h2o": 0.5 },
         }, "Rain Gauge");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -301,7 +301,7 @@ describe("sanitizeSource", () => {
 
     it("should preserve hyphens in water source names", () => {
         (writer as any).publish_water({
-            water: { "temperature-c": 15 },
+            water: { "temperature_c": 15 },
         }, "Water-1");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -309,7 +309,7 @@ describe("sanitizeSource", () => {
 
     it("should return 'unknown' for empty source", () => {
         (writer as any).publish_air({
-            air: { "temperature-c": 72, "humidity-percent": 50, "pressure-pascal": 101325 },
+            air: { "temperature_c": 72, "humidity_percent": 50, "pressure_pascal": 101325 },
         }, "");
 
         expect(logger.write_warn).not.toHaveBeenCalled();
@@ -317,7 +317,7 @@ describe("sanitizeSource", () => {
 
     it("should strip slashes from source names", () => {
         (writer as any).publish_light({
-            light: { "uv-index": 5, "lux": 1000 },
+            light: { "uv_index": 5, "lux": 1000 },
         }, "sensor/01");
 
         expect(logger.write_warn).not.toHaveBeenCalled();

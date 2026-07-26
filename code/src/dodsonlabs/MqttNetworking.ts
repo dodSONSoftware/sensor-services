@@ -219,7 +219,8 @@ export class MqttNetworking implements IMqttNetworking {
         _packet: mqtt.IPublishPacket
     ): void {
         try {
-            this.handle_mqtt_message(JSON.parse(payload.toString())).catch((error) => {
+            const json_doc = JSON.parse(payload.toString());
+            this.handle_mqtt_message(json_doc).catch((error) => {
                 this.logger.write_error(
                     this.originator,
                     `<on_message> => ERROR=${error}`
@@ -229,7 +230,7 @@ export class MqttNetworking implements IMqttNetworking {
         } catch (error) {
             this.logger.write_error(
                 this.originator,
-                `<on_message> => ERROR=${error}`
+                `<on_message> => Parse ERROR=${error}`
             );
         }
     }
@@ -252,14 +253,14 @@ export class MqttNetworking implements IMqttNetworking {
 
     private async handle_mqtt_message(json_doc: any): Promise<void> {
     // initialize
-        const msg_type_raw = json_doc["message-type"];
+        const msg_type_raw = json_doc["message_type"];
         if (msg_type_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message> => Missing 'message-type' key, dropping message");
+            this.logger.write_error(this.originator, "<handle_mqtt_message> => Missing 'message_type' key, dropping message");
             return;
         }
         const msg_type: string = msg_type_raw.toString();
 
-        // process message by 'message-type'
+        // process message by 'message_type'
         switch (msg_type) {
         case "log":
             if (this.forward_sensor_logs) {
@@ -278,7 +279,7 @@ export class MqttNetworking implements IMqttNetworking {
         default:
             this.logger.write_warn(
                 this.originator,
-                `<handle_mqtt_message> => Unknown message-type '${msg_type}', dropping message`
+                `<handle_mqtt_message> => Unknown message_type '${msg_type}', dropping message`
             );
         }
     }
@@ -290,7 +291,7 @@ export class MqttNetworking implements IMqttNetworking {
     // ******** HANDLE MQTT LOG MESSAGES
 
     private handle_mqtt_message_log(json_doc: any): void {
-        this.logger.write_debug(this.originator, "<handle_message_log>: message-type: LOG");
+        this.logger.write_debug(this.originator, "<handle_message_log>: message_type: LOG");
 
         const source = json_doc["source"] ?? "unknown";
         const level = json_doc["level"] ?? "info";
@@ -383,19 +384,25 @@ export class MqttNetworking implements IMqttNetworking {
 
     // --------------------------------
 
+    /**
+     * Get a value from an object using snake_case field names (V2 format).
+     * Supports both snake_case and camelCase for backward compatibility.
+     */
+    private getField(obj: any, ...fieldNames: string[]): any {
+        for (const fieldName of fieldNames) {
+            const value = obj[fieldName];
+            if (value !== undefined && value !== null) {
+                return value;
+            }
+        }
+        return undefined;
+    }
+
     private handle_mqtt_message_command_response(
         json_doc: Record<string, any>
     ): void {
 
-        // init
-        const type_raw = json_doc["type"];
-        if (type_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing 'type' key, dropping message");
-            return;
-        }
-        const msg_type = String(type_raw).toLowerCase();
-
-        const source_raw = json_doc["source"];
+        const source_raw = this.getField(json_doc, "source");
         if (source_raw === undefined) {
             this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing 'source' key, dropping message");
             return;
@@ -404,8 +411,15 @@ export class MqttNetworking implements IMqttNetworking {
 
         const payload = json_doc["payload"];
 
-        // Extract command_id for correlation
-        const command_id = json_doc["command-id"];
+        const command_id = this.getField(json_doc, "command_id");
+
+        // Get the command type from the top-level message (V2 format)
+        const cmd_type_raw = this.getField(json_doc, "type");
+        if (cmd_type_raw === undefined) {
+            this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing 'type' in message, dropping message");
+            return;
+        }
+        const cmd_type = String(cmd_type_raw).toLowerCase();
 
         // Log with sanitized payload to avoid exposing sensitive data in logs
         // Use deep clone to ensure we don't accidentally modify the original payload
@@ -419,31 +433,30 @@ export class MqttNetworking implements IMqttNetworking {
             }
             sanitizedDoc["payload"] = sanitizedPayload;
         }
-        this.logger.write_debug(this.originator, `<handle_mqtt_message_command_response>: \n${JSON.stringify(sanitizedDoc)}`);
 
         // ----
-        if (msg_type === "identify") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("identify")!, source, payload, command_id);
+        if (cmd_type === "identify") {
+            this.handle_mqtt_command_response_message(this.get_cr_dude("identify")!, source, payload, json_doc, command_id);
             // ----
-        } else if (msg_type === "get-details") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("get-details")!, source, payload, command_id);
+        } else if (cmd_type === "get-details") {
+            this.handle_mqtt_command_response_message(this.get_cr_dude("get-details")!, source, payload, json_doc, command_id);
             // ----
-        } else if (msg_type === "read-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("read-config")!, source, payload, command_id);
+        } else if (cmd_type === "read-config") {
+            this.handle_mqtt_command_response_message(this.get_cr_dude("read-config")!, source, payload, json_doc, command_id);
             // ----
-        } else if (msg_type === "write-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("write-config")!, source, payload, command_id);
+        } else if (cmd_type === "write-config") {
+            this.handle_mqtt_command_response_message(this.get_cr_dude("write-config")!, source, payload, json_doc, command_id);
             // ----
-        } else if (msg_type === "update-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("update-config")!, source, payload, command_id);
+        } else if (cmd_type === "update-config") {
+            this.handle_mqtt_command_response_message(this.get_cr_dude("update-config")!, source, payload, json_doc, command_id);
             // ----
-        } else if (msg_type === "reboot") {
-            this.handle_mqtt_command_response_reboot(this.get_cr_dude("reboot")!, source, payload, command_id);
+        } else if (cmd_type === "reboot") {
+            this.handle_mqtt_command_response_reboot(this.get_cr_dude("reboot")!, source, payload, json_doc, command_id);
 
         } else {
             this.logger.write_warn(
                 this.originator,
-                `<handle_mqtt_message_command_response> => Unknown command-response type '${msg_type}' from source '${source}', dropping`
+                `<handle_mqtt_message_command_response> => Unknown command-response type '${cmd_type}' from source '${source}', dropping`
             );
         }
     }
@@ -455,12 +468,19 @@ export class MqttNetworking implements IMqttNetworking {
         dude: IMqttCommandControl,
         source: string,
         payload: Record<string, any>,
+        json_doc: Record<string, any>,
         command_id?: string
     ): void {
+        // Extract V2 response fields
+        const targeted = this.getField(json_doc, "targeted");
+        const schema_version = this.getField(json_doc, "schema_version");
+        const firmware_version = this.getField(json_doc, "firmware_version");
+        const uptime_ms = this.getNumericField(json_doc, "uptime_ms");
+
         // Add calculated feels-like temperature to air data if not already present
         const enrichedPayload = this.enrichAirDataWithFeelsLike(payload);
 
-        // Create result with optional command_id
+        // Create result with optional command_id and V2 metadata
         const result: MqttCommandResult = {
             source: source,
             payload: enrichedPayload,
@@ -468,6 +488,20 @@ export class MqttNetworking implements IMqttNetworking {
 
         if (command_id !== undefined) {
             result.command_id = command_id;
+        }
+
+        // Add V2 response fields if present
+        if (targeted !== undefined) {
+            result.targeted = Boolean(targeted);
+        }
+        if (schema_version !== undefined) {
+            result.schema_version = Number(schema_version);
+        }
+        if (firmware_version !== undefined) {
+            result.firmware_version = String(firmware_version);
+        }
+        if (uptime_ms !== undefined) {
+            result.uptime_ms = uptime_ms;
         }
 
         // add response to collection
@@ -481,8 +515,25 @@ export class MqttNetworking implements IMqttNetworking {
     // ******** HELPER METHODS
 
     /**
+     * Get a numeric value from an object using V2 snake_case field names.
+     * Returns undefined if not found or not a valid finite number.
+     */
+    private getNumericField(obj: any, ...fieldNames: string[]): number | undefined {
+        for (const fieldName of fieldNames) {
+            const value = obj[fieldName];
+            if (value !== undefined && value !== null) {
+                const numValue = Number(value);
+                if (Number.isFinite(numValue)) {
+                    return numValue;
+                }
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * Enrich air data with calculated feels-like temperature.
-     * Adds 'feels-like-c' field if both temperature-c and humidity-percent are present
+     * Adds 'feels_like_c' field if both temperature_c and humidity_percent are present
      * and the temperature is above the heat index threshold.
      * Used to enhance sensor command responses with calculated values.
      * @param payload The original payload
@@ -498,12 +549,12 @@ export class MqttNetworking implements IMqttNetworking {
         }
 
         // If feels-like is already present, don't recalculate
-        if (air["feels-like-c"] !== undefined) {
+        if (air["feels_like_c"] !== undefined) {
             return enrichedPayload;
         }
 
-        const tempC = Number(air["temperature-c"]);
-        const humidity = Number(air["humidity-percent"]);
+        const tempC = Number(air["temperature_c"]);
+        const humidity = Number(air["humidity_percent"]);
 
         // Only calculate if we have valid numeric values
         if (!Number.isFinite(tempC) || !Number.isFinite(humidity)) {
@@ -515,7 +566,7 @@ export class MqttNetworking implements IMqttNetworking {
 
         if (feelsLikeC !== undefined) {
             // Round to 4 decimal places for consistency
-            air["feels-like-c"] = Math.round(feelsLikeC * 10000) / 10000;
+            air["feels_like_c"] = Math.round(feelsLikeC * 10000) / 10000;
         }
 
         return enrichedPayload;
@@ -528,12 +579,33 @@ export class MqttNetworking implements IMqttNetworking {
         dude: IMqttCommandControl,
         source: string,
         payload: Record<string, any>,
+        json_doc: Record<string, any>,
         command_id?: string
     ): void {
-        // Create result with optional command_id
+        // Extract V2 response fields
+        const targeted = this.getField(json_doc, "targeted");
+        const schema_version = this.getField(json_doc, "schema_version");
+        const firmware_version = this.getField(json_doc, "firmware_version");
+        const uptime_ms = this.getNumericField(json_doc, "uptime_ms");
+
+        // Create result with optional command_id and V2 metadata
         const result: MqttCommandResult = { source, payload };
         if (command_id !== undefined) {
             result.command_id = command_id;
+        }
+
+        // Add V2 response fields if present
+        if (targeted !== undefined) {
+            result.targeted = Boolean(targeted);
+        }
+        if (schema_version !== undefined) {
+            result.schema_version = Number(schema_version);
+        }
+        if (firmware_version !== undefined) {
+            result.firmware_version = String(firmware_version);
+        }
+        if (uptime_ms !== undefined) {
+            result.uptime_ms = uptime_ms;
         }
 
         // add response to collection
@@ -552,38 +624,37 @@ export class MqttNetworking implements IMqttNetworking {
      * Sensors can query for server time, settings, etc.
      */
     private handle_mqtt_message_info_request(json_doc: Record<string, any>): void {
-        // Validate required fields
-        const request_id_raw = json_doc["request-id"];
+        const request_id_raw = this.getField(json_doc, "request_id");
         if (request_id_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request-id', dropping");
+            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request_id', dropping");
             return;
         }
         const request_id = String(request_id_raw);
 
-        const source_raw = json_doc["source"];
+        const source_raw = this.getField(json_doc, "device_source");
         if (source_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'source', dropping");
+            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'device_source', dropping");
             return;
         }
         const source = String(source_raw);
 
-        const request_type_raw = json_doc["request-type"];
+        const request_type_raw = this.getField(json_doc, "request_type");
         if (request_type_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request-type', dropping");
+            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request_type', dropping");
             return;
         }
         const request_type = String(request_type_raw).toLowerCase();
 
         // Log the request
-        this.logger.write_debug(this.originator, `<handle_mqtt_message_info_request>: request-type='${request_type}' from '${source}'`);
+        this.logger.write_debug(this.originator, `<handle_mqtt_message_info_request>: request_type='${request_type}' from '${source}'`);
 
-        // Build response header
+        // Build response header - use V2 snake_case format
         const response_header: Record<string, any> = {
-            "message-type": "info-response",
-            "version": "2",
+            "message_type": "info-response",
+            "schema_version": 2,
             "source": "server",
-            "request-id": request_id,
-            "request-type": request_type,
+            "request_id": request_id,
+            "request_type": request_type,
         };
 
         // Process based on request type
@@ -600,18 +671,18 @@ export class MqttNetworking implements IMqttNetworking {
 
         case "settings":
             response_payload = {
-                "mqtt-broker": this.mqtt_server_ip_address,
-                "mqtt-topic-telemetry": this.mqtt_topic_command,
-                "mqtt-topic-command": this.mqtt_topic_command,
-                "mqtt-topic-command-response": this.mqtt_topic_command_response,
-                "mqtt-topic-info-request": this.mqtt_topic_info_request,
+                "mqtt_broker": this.mqtt_server_ip_address,
+                "mqtt_topic_telemetry": this.mqtt_topic_command,
+                "mqtt_topic_command": this.mqtt_topic_command,
+                "mqtt_topic_command_response": this.mqtt_topic_command_response,
+                "mqtt_topic_info_request": this.mqtt_topic_info_request,
             };
             break;
 
         default:
             this.logger.write_warn(
                 this.originator,
-                `<handle_mqtt_message_info_request> => Unknown request-type '${request_type}', dropping`
+                `<handle_mqtt_message_info_request> => Unknown request_type '${request_type}', dropping`
             );
             return;
         }

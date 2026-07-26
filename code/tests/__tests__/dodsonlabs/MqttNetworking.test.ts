@@ -60,8 +60,8 @@ describe("MqttNetworking", () => {
         const sizeBefore = seenIds.size;
 
         const msg = {
-            "message-type": "command",
-            "command-id": "dedup-test-1",
+            "message_type": "command",
+            "command_id": "dedup-test-1",
             "command": "identify",
         };
 
@@ -81,13 +81,13 @@ describe("MqttNetworking", () => {
         const sizeBefore = seenIds.size;
 
         networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
-            "command-id": "dedup-test-2a",
+            "message_type": "command",
+            "command_id": "dedup-test-2a",
             "command": "identify",
         });
         networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
-            "command-id": "dedup-test-2b",
+            "message_type": "command",
+            "command_id": "dedup-test-2b",
             "command": "identify",
         });
 
@@ -101,11 +101,11 @@ describe("MqttNetworking", () => {
         const sizeBefore = seenIds.size;
 
         networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
+            "message_type": "command",
             "command": "identify",
         });
         networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
+            "message_type": "command",
             "command": "identify",
         });
 
@@ -124,8 +124,8 @@ describe("MqttNetworking", () => {
         // Fill to capacity
         for (let i = 0; i < maxCapacity; i++) {
             networking.publish_mqtt_message("iot/v2/command", {
-                "message-type": "command",
-                "command-id": `cap-dedup-${i}`,
+                "message_type": "command",
+                "command_id": `cap-dedup-${i}`,
                 "command": "identify",
             });
         }
@@ -133,8 +133,8 @@ describe("MqttNetworking", () => {
 
         // Next insert evicts oldest, size stays at cap
         networking.publish_mqtt_message("iot/v2/command", {
-            "message-type": "command",
-            "command-id": "cap-dedup-new",
+            "message_type": "command",
+            "command_id": "cap-dedup-new",
             "command": "identify",
         });
         expect(seenIds.size).toBe(maxCapacity);

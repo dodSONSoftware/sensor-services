@@ -14,6 +14,8 @@ describe("configSchema", () => {
     "mqtt-topic-telemetry": "iot/telemetry",
     "mqtt-topic-command": "iot/v2/command",
     "mqtt-topic-command-response": "iot/v2/command-response",
+    "mqtt-topic-info-request": "iot/v2/info-request",
+    "mqtt-topic-info-response": "iot/v2/info-response",
     "ip-pinger-web-api": "http://127.0.0.1:3300",
     "case-sensitive": true,
     "db-host": "localhost",

@@ -36,16 +36,22 @@ const _reboot_command_delay_seconds: number = 3;
 // ****************************************************************
 // **** private functions
 
-export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null, commandId: string = randomUUID()): Record<string, unknown> {
-    // create base message
-    return {
-        "message-type": "command",
-        "version": "2",
+export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null, commandId: string = randomUUID(), schemaVersion: number = 2): Record<string, unknown> {
+    // create base message - support both V1 (message-type) and V2 (message_type) formats
+    const message: Record<string, unknown> = {
+        "message_type": "command",
+        "schema_version": schemaVersion,
         "target": target.toLowerCase().trim(),
         "command": command.toLowerCase().trim(),
-        "command-id": commandId,
-        "payload": payload ?? {}
+        "command_id": commandId,
     };
+
+    // Only include payload if non-empty to match sensor expectations
+    if (payload !== null && Object.keys(payload).length > 0) {
+        message["payload"] = payload;
+    }
+
+    return message;
 }
 
 function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {

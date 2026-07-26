@@ -48,21 +48,21 @@ const telemetryItemSchema = z.object({
 export const telemetrySettingsSchema = z.object({
     telemetry: z.object({
         air: z.array(telemetryItemSchema).default([
-            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
-            { ui: "HUMIDITY %", order: 1, value: "humidity-percent", visible: true },
-            { ui: "DEW POINT", order: 2, value: "dew-point", visible: true },
-            { ui: "FEELS LIKE", order: 3, value: "feels-like-c", visible: true },
-            { ui: "PRESSURE", order: 4, value: "pressure-pascal", visible: true },
-            { ui: "ALTITUDE", order: 5, value: "altitude-meters", visible: true },
+            { ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true },
+            { ui: "HUMIDITY %", order: 1, value: "humidity_percent", visible: true },
+            { ui: "DEW POINT", order: 2, value: "dew_point", visible: true },
+            { ui: "FEELS LIKE", order: 3, value: "feels_like_c", visible: true },
+            { ui: "PRESSURE", order: 4, value: "pressure_pascal", visible: true },
+            { ui: "ALTITUDE", order: 5, value: "altitude_meters", visible: true },
         ]),
         water: z.array(telemetryItemSchema).default([
-            { ui: "TEMPERATURE", order: 0, value: "temperature-c", visible: true },
+            { ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true },
         ]),
         light: z.array(telemetryItemSchema).default([
-            { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw-ambient-light", visible: false },
-            { ui: "RAW UV LIGHT", order: 1, value: "raw-uv-light", visible: false },
+            { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw_ambient_light", visible: false },
+            { ui: "RAW UV LIGHT", order: 1, value: "raw_uv_light", visible: false },
             { ui: "LUX", order: 2, value: "lux", visible: true },
-            { ui: "UV INDEX", order: 3, value: "uv-index", visible: true },
+            { ui: "UV INDEX", order: 3, value: "uv_index", visible: true },
         ]),
     }),
 });
@@ -120,21 +120,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
     log_levels: ["debug", "info"],
     telemetry: {
         air: [
-            { ui: "TEMPERATURE", order: 0, value: "temperature-f", visible: true },
-            { ui: "HUMIDITY %", order: 1, value: "humidity-percent", visible: true },
-            { ui: "DEW POINT", order: 2, value: "dew-point", visible: true },
-            { ui: "FEELS LIKE", order: 3, value: "feels-like-f", visible: true },
-            { ui: "PRESSURE", order: 4, value: "pressure-pascal", visible: true },
-            { ui: "ALTITUDE", order: 5, value: "altitude-feet", visible: true },
+            { ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true },
+            { ui: "HUMIDITY %", order: 1, value: "humidity_percent", visible: true },
+            { ui: "DEW POINT", order: 2, value: "dew_point", visible: true },
+            { ui: "FEELS LIKE", order: 3, value: "feels_like_c", visible: true },
+            { ui: "PRESSURE", order: 4, value: "pressure_pascal", visible: true },
+            { ui: "ALTITUDE", order: 5, value: "altitude_meters", visible: true },
         ],
         water: [
-            { ui: "TEMPERATURE", order: 0, value: "temperature-f", visible: true },
+            { ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true },
         ],
         light: [
-            { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw-ambient-light", visible: false },
-            { ui: "RAW UV LIGHT", order: 1, value: "raw-uv-light", visible: false },
+            { ui: "RAW AMBIENT LIGHT", order: 0, value: "raw_ambient_light", visible: false },
+            { ui: "RAW UV LIGHT", order: 1, value: "raw_uv_light", visible: false },
             { ui: "LUX", order: 2, value: "lux", visible: true },
-            { ui: "UV INDEX", order: 3, value: "uv-index", visible: true },
+            { ui: "UV INDEX", order: 3, value: "uv_index", visible: true },
         ],
     },
 } as const;

@@ -163,24 +163,24 @@ export class PrometheusWriter {
         }
 
         const temp_f =
-      (Number(air["temperature-c"]) * 9) / 5 + 32;
+      (Number(air["temperature_c"]) * 9) / 5 + 32;
         if (!Number.isFinite(temp_f)) {
             this.logger.write_warn(
                 this.originator + ".publish_air",
-                `Source: ${sanitized}, invalid temperature-c (${air["temperature-c"]}), skipping Air_Temperature gauge`
+                `Source: ${sanitized}, invalid temperature_c (${air["temperature_c"]}), skipping Air_Temperature gauge`
             );
         } else if (temp_f < -100 || temp_f > 200) {
             this.logger.write_warn(
                 this.originator + ".publish_air",
-                `Source: ${sanitized}, temperature-c out of physical range (${air["temperature-c"]}C = ${temp_f}F), skipping Air_Temperature gauge`
+                `Source: ${sanitized}, temperature_c out of physical range (${air["temperature_c"]}C = ${temp_f}F), skipping Air_Temperature gauge`
             );
         } else {
             this.prometheus_Gauge_AirTemp!.set({ source: sanitized }, temp_f);
         }
 
-        const humidity = Number(air["humidity-percent"]);
+        const humidity = Number(air["humidity_percent"]);
         const pressure = this.pascalToInHg(
-            Number(air["pressure-pascal"])
+            Number(air["pressure_pascal"])
         );
 
         this.logger.write_debug(
@@ -209,11 +209,11 @@ export class PrometheusWriter {
             return;
         }
 
-        const uvIndex = Number(light["uv-index"]);
+        const uvIndex = Number(light["uv_index"]);
         if (!Number.isFinite(uvIndex)) {
             this.logger.write_warn(
                 this.originator + ".publish_light",
-                `Source: ${sanitized}, invalid uv-index (${light["uv-index"]}), skipping Light_UV_Index gauge`
+                `Source: ${sanitized}, invalid uv_index (${light["uv_index"]}), skipping Light_UV_Index gauge`
             );
         } else {
             this.prometheus_Gauge_LightUVIndex!.set({ source: sanitized }, uvIndex);
@@ -247,11 +247,11 @@ export class PrometheusWriter {
             return;
         }
 
-        const inches = Number(rain["in-h2o"]);
+        const inches = Number(rain["in_h2o"]);
         if (!Number.isFinite(inches)) {
             this.logger.write_warn(
                 this.originator + ".publish_rain",
-                `Source: ${sanitized}, invalid in-h2o (${rain["in-h2o"]}), skipping Rain_In_H2O gauge`
+                `Source: ${sanitized}, invalid in_h2o (${rain["in_h2o"]}), skipping Rain_In_H2O gauge`
             );
         } else {
             this.prometheus_Gauge_RainInches!.set({ source: sanitized }, inches);
@@ -276,24 +276,24 @@ export class PrometheusWriter {
         }
 
         const speed = this.cmPerSecToMph(
-            Number(wind["wind-speed-cm-sec"])
+            Number(wind["wind_speed_cm_sec"])
         );
         if (!Number.isFinite(speed)) {
             this.logger.write_warn(
                 this.originator + ".publish_wind",
-                `Source: ${sanitized}, invalid wind-speed-cm-sec (${wind["wind-speed-cm-sec"]}), skipping Wind_Speed gauge`
+                `Source: ${sanitized}, invalid wind_speed_cm_sec (${wind["wind_speed_cm_sec"]}), skipping Wind_Speed gauge`
             );
         } else {
             this.prometheus_Gauge_WindSpeed!.set({ source: sanitized }, speed);
         }
 
         const gusts = this.cmPerSecToMph(
-            Number(wind["gusts-cm-sec"])
+            Number(wind["gusts_cm_sec"])
         );
         if (!Number.isFinite(gusts)) {
             this.logger.write_warn(
                 this.originator + ".publish_wind",
-                `Source: ${sanitized}, invalid gusts-cm-sec (${wind["gusts-cm-sec"]}), skipping Wind_Gusts gauge`
+                `Source: ${sanitized}, invalid gusts_cm_sec (${wind["gusts_cm_sec"]}), skipping Wind_Gusts gauge`
             );
         } else {
             this.prometheus_Gauge_WindGusts!.set({ source: sanitized }, gusts);
@@ -318,16 +318,16 @@ export class PrometheusWriter {
         }
 
         const temp_f =
-      (Number(water["temperature-c"]) * 9) / 5 + 32;
+      (Number(water["temperature_c"]) * 9) / 5 + 32;
         if (!Number.isFinite(temp_f)) {
             this.logger.write_warn(
                 this.originator + ".publish_water",
-                `Source: ${sanitized}, invalid temperature-c (${water["temperature-c"]}), skipping Water_Temperature gauge`
+                `Source: ${sanitized}, invalid temperature_c (${water["temperature_c"]}), skipping Water_Temperature gauge`
             );
         } else if (temp_f < -50 || temp_f > 212) {
             this.logger.write_warn(
                 this.originator + ".publish_water",
-                `Source: ${sanitized}, temperature-c out of physical range (${water["temperature-c"]}C = ${temp_f}F), skipping Water_Temperature gauge`
+                `Source: ${sanitized}, temperature_c out of physical range (${water["temperature_c"]}C = ${temp_f}F), skipping Water_Temperature gauge`
             );
         } else {
             this.prometheus_Gauge_WaterTemp!.set({ source: sanitized }, temp_f);
@@ -351,11 +351,11 @@ export class PrometheusWriter {
             return;
         }
 
-        const count = Number(lightning["lightning-count"]);
+        const count = Number(lightning["lightning_count"]);
         if (!Number.isFinite(count)) {
             this.logger.write_warn(
                 this.originator + ".publish_lightning",
-                `Source: ${sanitized}, invalid lightning-count (${lightning["lightning-count"]}), skipping Lightning gauge`
+                `Source: ${sanitized}, invalid lightning_count (${lightning["lightning_count"]}), skipping Lightning gauge`
             );
         } else {
             this.prometheus_Gauge_Lightning!.set({ source: sanitized }, count);
