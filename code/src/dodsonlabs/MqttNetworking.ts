@@ -516,6 +516,7 @@ export class MqttNetworking implements IMqttNetworking {
 
     /**
      * Get a numeric value from an object using V2 snake_case field names.
+     * For time-related fields (milliseconds), truncates to integer.
      * Returns undefined if not found or not a valid finite number.
      */
     private getNumericField(obj: any, ...fieldNames: string[]): number | undefined {
@@ -524,6 +525,11 @@ export class MqttNetworking implements IMqttNetworking {
             if (value !== undefined && value !== null) {
                 const numValue = Number(value);
                 if (Number.isFinite(numValue)) {
+                    // Truncate to integer for millisecond time fields
+                    if (fieldName.includes('time') || fieldName.includes('Time') ||
+                        fieldName.includes('millis') || fieldName.includes('Millis')) {
+                        return Math.trunc(numValue);
+                    }
                     return numValue;
                 }
             }
@@ -665,7 +671,7 @@ export class MqttNetworking implements IMqttNetworking {
             const now = new Date();
             response_payload = {
                 timestamp: now.toISOString(),
-                utc_epoch_ms: now.getTime(),
+                utc_epoch_ms: Math.trunc(now.getTime()),
             };
             break;
 
