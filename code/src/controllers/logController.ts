@@ -87,9 +87,10 @@ interface LokiResponse {
  * @param source The sensor source name (e.g., "Air-Light-1")
  * @param levels Array of log levels to filter (debug, info, warn, error)
  * @param limit Maximum number of log entries to return
+ * @param endTime Optional end timestamp in seconds for pagination (loads logs before this time)
  * @returns Array of log entries
  */
-async function fetchLokiLogs(source: string, levels: string[], limit: number): Promise<Array<{ timestamp: string; level: string; message: string }>> {
+async function fetchLokiLogs(source: string, levels: string[], limit: number, endTime?: number): Promise<Array<{ timestamp: string; level: string; message: string }>> {
     const lokiConfig = getLokiConfig();
     if (!lokiConfig) {
         _log().write_error("logController.ts/fetchLokiLogs", "Loki configuration not found");
@@ -113,8 +114,13 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number): P
         query += `|level=~"^(${escapedLevels})$"`;
     }
 
-    const endTime = Math.floor(Date.now() / 1000); // Current time in seconds
-    const startTime = endTime - 3600; // Last hour
+    const defaultEndTime = Math.floor(Date.now() / 1000); // Current time in seconds
+    const actualEndTime = endTime ?? defaultEndTime;
+    // Use a longer window when paginating to ensure we get more logs
+    // When endTime is provided (pagination), use 2 hours to capture more history
+    // When fetching fresh logs, use 1 hour to avoid overwhelming the user
+    const windowHours = endTime ? 2 : 1;
+    const startTime = actualEndTime - (windowHours * 3600);
 
     // Build URL with query parameters
     // dir=backward for descending order (newest first)
@@ -122,7 +128,7 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number): P
     const params = new URLSearchParams({
         query,
         start: String(startTime),
-        end: String(endTime),
+        end: String(actualEndTime),
         dir: "backward",
         limit: String(limit)
     });
@@ -191,6 +197,13 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number): P
             }
         }
 
+        // Limit results to the requested count
+        // Loki's limit parameter limits streams, not individual log entries,
+        // so we need to manually slice the results
+        if (logs.length > limit) {
+            logs.splice(limit);
+        }
+
         return logs;
 
     } catch (err) {
@@ -210,6 +223,7 @@ export async function getLogs(req: express.Request, res: express.Response): Prom
     // Get query parameters
     const levelsParam = req.query.level;
     const limitParam = req.query.limit;
+    const endParam = req.query.end;  // For pagination: end timestamp (ISO 8601)
 
     // Parse levels (can be multiple)
     let levels: string[] = [];
@@ -236,8 +250,19 @@ export async function getLogs(req: express.Request, res: express.Response): Prom
         }
     }
 
+    // Parse end timestamp for pagination (optional)
+    let endTime: number | undefined;
+    if (endParam) {
+        const endStr = String(endParam);
+        // Parse ISO 8601 timestamp to milliseconds
+        const parsedEnd = Date.parse(endStr);
+        if (!isNaN(parsedEnd)) {
+            endTime = Math.floor(parsedEnd / 1000);  // Convert to seconds for Loki
+        }
+    }
+
     try {
-        const logs = await fetchLokiLogs(source, levels, limit);
+        const logs = await fetchLokiLogs(source, levels, limit, endTime);
 
         res.status(OK);
         res.contentType(Json);

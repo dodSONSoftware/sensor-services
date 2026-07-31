@@ -177,6 +177,7 @@ export async function getHealth(req: express.Request, res: express.Response) {
         ipPinger: ipPingerHealthy ? "healthy" : "unreachable",
         sensorTelemetry: telemetryHealthy ? "healthy" : "unreachable",
         timestamp: new Date().toISOString(),
+        uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
     };
 
     logger()?.write_debug("generalController.ts/getHealth", JSON.stringify(health));

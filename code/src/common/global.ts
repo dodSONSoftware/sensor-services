@@ -55,7 +55,7 @@ export const reqId = () => _reqIdStore.getStore() ?? "none";
 // Static about info - cached at module load time
 const _staticAboutInfo = {
     about: {
-        name: "Sensor Web Services",
+        name: "SensorNET Services",
         version,
         author: "Randy Dodson (dodsonsoftware@gmail.com)",
         description:

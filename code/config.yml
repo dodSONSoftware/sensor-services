@@ -1,4 +1,4 @@
-# Sensor Web Services configuration
+# SensorNET Services configuration
 
 # Main HTTP server port
 express-port: 32000
