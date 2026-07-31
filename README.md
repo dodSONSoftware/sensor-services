@@ -1,4 +1,4 @@
-# Typescript Sensor Web Services
+# Typescript SensorNET Services
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -10,7 +10,7 @@
 
 ## Overview
 
-The Typescript Sensor Web Services project provides an Express-based REST API for IoT sensor monitoring with:
+The Typescript SensorNET Services project provides an Express-based REST API for IoT sensor monitoring with:
 
 - **MQTT integration** for real-time sensor telemetry ingestion and command-response communication
 - **PostgreSQL-backed settings persistence** for application configuration
