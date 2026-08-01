@@ -59,16 +59,24 @@ const _staticAboutInfo = {
         version,
         author: "Randy Dodson (dodsonsoftware@gmail.com)",
         description:
-            "An Express-based REST API service for IoT sensor monitoring and management. " +
-            "This service acts as a bridge between IoT weather sensors (via MQTT protocol) and HTTP clients, " +
-            "providing comprehensive sensor control, configuration, and data ingestion capabilities. " +
-            "Features include real-time sensor telemetry ingestion through MQTT, PostgreSQL-backed settings " +
-            "persistence for persistent configuration, Prometheus metrics endpoints for both API observability " +
-            "and sensor gauge monitoring, and interactive Swagger UI for API discovery. The service supports " +
-            "dynamic sensor identification, configuration reading/writing, remote reboot operations, and " +
-            "integration with external IP pinger services for network device management. Built with TypeScript, " +
-            "it features graceful shutdown handling, request ID tracing via AsyncLocalStorage, rate limiting, " +
-            "and robust error handling for production-grade deployment.",
+            "**SensorNET Services** is the primary backend API for the **SensorNET** platform. " +
+            "Built with Express and TypeScript, it connects MQTT-enabled IoT sensors with web applications, " +
+            "monitoring systems, and other HTTP clients.\n" +
+            "\n" +
+            "**SensorNET Services** provides centralized sensor discovery, real-time telemetry access, " +
+            "remote device commands, and configuration management. " +
+            "Supported operations include identifying sensors, retrieving device details, " +
+            "reading and updating configuration, and remotely restarting devices. " +
+            "MQTT command responses are tracked asynchronously with configurable timeouts " +
+            "to prevent requests from hanging indefinitely.\n" +
+            "\n" +
+            "**SensorNET Services** manages application settings with PostgreSQL. " +
+            "Exposes Prometheus metrics for tracking API request volume, latency, failures, and overall service health, " +
+            "while forwarding structured application logs to Loki for centralized search, filtering, and troubleshooting.\n" +
+            "\n" +
+            "Production-focused features—including request ID tracing, rate limiting, input validation, " +
+            "configuration hot reloading, graceful shutdown, and resilient error handling—help ensure " +
+            "reliable operation across the SensorNET environment.",
         copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
         license: "MIT"
     },
