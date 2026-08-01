@@ -77,7 +77,7 @@ const _staticAboutInfo = {
             "Production-focused features—including request ID tracing, rate limiting, input validation, " +
             "configuration hot reloading, graceful shutdown, and resilient error handling—help ensure " +
             "reliable operation across the SensorNET environment.",
-        copyright: "Copyright (c) 2026 dodson Software ( dodson labs )",
+        copyright: "Copyright © 2026 dodson Software ( dodson labs )",
         license: "MIT"
     },
     commands: []
