@@ -84,7 +84,7 @@ interface LokiResponse {
 
 /**
  * Fetch logs from Loki for a specific sensor source and log levels.
- * @param source The sensor source name (e.g., "Air-Light-1")
+ * @param source The sensor source name (e.g., "Air-Light-1" or "ip-pinger")
  * @param levels Array of log levels to filter (debug, info, warn, error)
  * @param limit Maximum number of log entries to return
  * @param endTime Optional end timestamp in seconds for pagination (loads logs before this time)
@@ -98,14 +98,26 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
     }
 
     // Build LogQL query
-    // {service_name="sensor-telemetry",container="sensor-telemetry"}|json|source="Air-Light-1"|level=~"^(info|debug)$"
+    // Sensor telemetry uses: {service_name="sensor-telemetry",container="sensor-telemetry"}
+    // IP pinger uses: {app="ip-pinger",env="production"}
     // Note: order and limit are passed as query parameters (dir=backward&limit=N), not in the query string
-    let query = `{service_name="sensor-telemetry",container="sensor-telemetry"}`;
+    let query: string;
+
+    if (source === "ip-pinger") {
+        // IP pinger may use different labels - try both possible label sets
+        // Grafana shows logs with service_name: ip-pinger
+        query = `{service_name="ip-pinger"}`;
+    } else {
+        // Default to sensor-telemetry labels
+        query = `{service_name="sensor-telemetry",container="sensor-telemetry"}`;
+    }
 
     // Parse JSON first so we can filter on fields within the JSON
     query += "|json";
 
-    if (source) {
+    if (source && source !== "ip-pinger") {
+        // Only filter on source field for non-ip-pinger sources
+        // IP pinger doesn't include a 'source' field in its log messages
         query += `|source="${source}"`;
     }
 
@@ -135,7 +147,8 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
 
     const url = `${lokiConfig.url}/loki/api/v1/query_range?${params.toString()}`;
 
-    _log().write_debug("logController.ts/fetchLokiLogs", `Loki query: ${query}`);
+    _log().write_info("logController.ts/fetchLokiLogs", `Fetching logs for source: ${source}`);
+    _log().write_info("logController.ts/fetchLokiLogs", `Loki query: ${query}`);
     _log().write_debug("logController.ts/fetchLokiLogs", `Loki URL: ${url}`);
 
     try {
@@ -149,13 +162,19 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
 
         const data = await response.json() as LokiResponse;
 
-        // Parse Loki response
-        // Response structure: { data: { resultType: "...", result: [{ stream: {...}, values: [[timestamp, message]] }] } }
+        // Log result count for debugging
         const results = data.data?.result || [];
+        _log().write_info("logController.ts/fetchLokiLogs", `Loki returned ${results.length} result stream(s)`);
+        _log().write_debug("logController.ts/fetchLokiLogs", `Loki full response: ${JSON.stringify(data)}`);
+
         const logs: Array<{ timestamp: string; level: string; message: string }> = [];
 
         for (const row of results) {
             const values = row.values || [];
+
+            // Log stream labels for debugging
+            const streamLabels = row.stream ? JSON.stringify(row.stream) : "no labels";
+            _log().write_debug("logController.ts/fetchLokiLogs", `Stream labels: ${streamLabels}`);
 
             for (const value of values) {
                 if (Array.isArray(value) && value.length >= 2) {
@@ -203,6 +222,8 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
         if (logs.length > limit) {
             logs.splice(limit);
         }
+
+        _log().write_info("logController.ts/fetchLokiLogs", `Returning ${logs.length} log entry(s) for source: ${source}`);
 
         return logs;
 

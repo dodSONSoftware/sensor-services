@@ -46,7 +46,7 @@ Classify every changed file:
 - **Deleted** (`D`)
 - **Renamed** (`R`)
 
-### 3. DETERMINE VERSION BUMP FROM CONVENTIONAL COMMITS
+### 3. DETERMINE VERSION BUMP AND UPDATE PACKAGE.JSON
 
 Parse recent commits to determine appropriate version bump:
 
@@ -59,12 +59,22 @@ Apply semantic versioning rules:
 - **minor**: `feat:` commits (new features)
 - **patch**: `fix:` commits (bug fixes), `chore:`, `docs:`, `refactor:`, `test:`, or no conventional commit type
 
-Use `semver` library if available, otherwise manual bump:
-- Patch: increment third number, reset lower numbers
-- Minor: increment second number, reset third to 0
-- Major: increment first number, reset others to 0
+Read current version and compute new version:
+```bash
+PACKAGE_JSON=$(git rev-parse --show-toplevel)/code/package.json
+CURRENT_VERSION=$(node -p "require('$PACKAGE_JSON').version")
+# Compute NEW_VERSION based on version bump rules
+```
 
-Update `package.json` with new version and verify.
+**Update package.json** with the new version:
+```bash
+node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('$PACKAGE_JSON')); pkg.version = '$NEW_VERSION'; fs.writeFileSync('$PACKAGE_JSON', JSON.stringify(pkg, null, 2) + '\n');"
+```
+
+Verify the update:
+```bash
+node -p "require('$PACKAGE_JSON').version"
+```
 
 ### 4. GENERATE COMMIT MESSAGE
 
