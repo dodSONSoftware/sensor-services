@@ -44,7 +44,7 @@ The schema includes these default settings:
 - `time_range_hours`: `24` (min: 1, max: 720)
 - `decimal_places`: `2` (min: 0, max: 4)
 - `ping_attempts`: `3` (min: 3, max: 10)
-- `ping_delay_ms`: `500` (min: 100, max: 5000)
+- `ping_delay_ms`: `500` (min: 0, max: 1000)
 - `recent_ips_max`: `10` (min: 5, max: 20)
 - `unit_system`: `"Imperial"` (enum: "Metric", "Imperial")
 
