@@ -125,8 +125,8 @@ describe("getSettingsDefaults", () => {
 
         const body = sendCalls[0] as Record<string, unknown>;
         const schema = body.schema as Record<string, unknown>;
-        expect((schema["ping_delay_ms"] as Record<string, unknown>).min).toBe(100);
-        expect((schema["ping_delay_ms"] as Record<string, unknown>).max).toBe(5000);
+        expect((schema["ping_delay_ms"] as Record<string, unknown>).min).toBe(0);
+        expect((schema["ping_delay_ms"] as Record<string, unknown>).max).toBe(1000);
     });
 
     it("should mark optional settings correctly", async () => {
@@ -348,9 +348,9 @@ describe("getSettingsSchema", () => {
         const pingDelaySetting = body.find(s => s.name === "ping_delay_ms");
 
         expect(pingDelaySetting?.range).toEqual({
-            min: 100,
-            max: 5000,
-            step: 100,
+            min: 0,
+            max: 1000,
+            step: 10,
         });
     });
 
