@@ -4,14 +4,10 @@
  */
 
 import { AsyncLocalStorage } from "async_hooks";
-import { createRequire } from "module";
 import { Logger } from "../dodsonlabs/Logger";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
-
-// Load version from package.json at module load time
-const pkgRequire = createRequire(__filename);
-const { version } = pkgRequire("../../package.json") as { version: string };
+import { APP_NAME, APP_VERSION } from "../version";
 
 // **** public functions
 
@@ -56,7 +52,8 @@ export const reqId = () => _reqIdStore.getStore() ?? "none";
 const _staticAboutInfo = {
     about: {
         name: "SensorNET Services",
-        version,
+        version: APP_VERSION,
+        codename: APP_NAME,
         author: "Randy Dodson (dodsonsoftware@gmail.com)",
         description:
             "**SensorNET Services** is the primary backend API for the **SensorNET** platform. " +

@@ -1,8 +1,13 @@
 # Typescript SensorNET Services
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Series 1 - SensorNET Services
+
+**Release:** Mercury Falcon — version 4.9.0
+
+[![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22.22.0-green.svg)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **dodson labs** &mdash; A RESTful web service connecting IoT weather sensors to HTTP clients and Prometheus monitoring.
 
@@ -16,14 +21,6 @@ The Typescript SensorNET Services project provides an Express-based REST API for
 - **PostgreSQL-backed settings persistence** for application configuration
 - **Prometheus metrics** for both API observability and sensor gauges
 - **Swagger UI** for interactive API discovery
-
----
-
-## Version
-
-**Current:** v4.7.0
-
-See git history for release notes.
 
 ---
 
@@ -116,7 +113,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/about` | API metadata (name, version, author), available commands list, and system info (platform, arch, hostname, uptime, memory) |
+| GET | `/about` | API metadata (name, version, codename, author), available commands list, and system info (platform, arch, hostname, uptime, memory) |
 | GET | `/date_local`, `/date-local` | Current local date/time |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time |
 | GET | `/endpoints` | Detailed information about each API endpoint |

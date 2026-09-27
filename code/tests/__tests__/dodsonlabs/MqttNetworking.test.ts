@@ -168,4 +168,208 @@ describe("MqttNetworking", () => {
         const dictAfter = anyNetworking.cr_dude_dict;
         expect(dictAfter).toEqual(dictBefore); // no new entry created
     });
+
+    // ---- V3 UTC info-request tests
+
+    it("should handle valid V3 utc_time request and publish response", () => {
+        const anyNetworking = networking as any;
+
+        // Mock the publish_mqtt_message to capture calls
+        const originalPublish = anyNetworking.publish_mqtt_message.bind(anyNetworking);
+        const publishedMessages: Array<{ topic: string; message: any }> = [];
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            publishedMessages.push({ topic, message });
+        };
+
+        // Valid V3 utc_time request
+        const request = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "Test-Pico-1",
+            "request_id": "utc-test-001",
+            "request_type": "utc_time",
+            "payload": {},
+        };
+
+        anyNetworking.handle_mqtt_message_info_request_v3(request);
+
+        // Verify exactly one publication
+        expect(publishedMessages.length).toBe(1);
+        const [publication] = publishedMessages;
+
+        // Verify topic
+        expect(publication.topic).toBe("iot/v3/info-response");
+
+        // Verify response message
+        const response = publication.message;
+        expect(response["message_type"]).toBe("info_response");
+        expect(response["message_schema_version"]).toBe(3);
+        expect(response["source"]).toBe("server");
+        expect(response["request_id"]).toBe("utc-test-001");
+        expect(response["request_type"]).toBe("utc_time");
+
+        // Verify payload
+        const payload = response["payload"];
+        expect(payload).toBeDefined();
+        expect(payload["timestamp"]).toBeDefined();
+        expect(payload["utc_epoch_ms"]).toBeDefined();
+
+        // Verify timestamp is valid ISO string
+        const timestamp = payload["timestamp"];
+        expect(new Date(timestamp).toISOString()).toBe(timestamp);
+
+        // Verify utc_epoch_ms is a valid timestamp
+        expect(typeof payload["utc_epoch_ms"]).toBe("number");
+        expect(payload["utc_epoch_ms"]).toBeGreaterThan(0);
+    });
+
+    it("should reject V3 request with invalid message_schema_version", () => {
+        const anyNetworking = networking as any;
+
+        let errorMessage = "";
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            errorMessage = `Unexpected publication: ${topic}`;
+        };
+
+        const request = {
+            "message_type": "info_request",
+            "message_schema_version": 2, // Invalid - should be 3
+            "source": "Test-Pico-1",
+            "request_id": "utc-test-002",
+            "request_type": "utc_time",
+            "payload": {},
+        };
+
+        anyNetworking.handle_mqtt_message_info_request_v3(request);
+
+        expect(errorMessage).toBe("");
+    });
+
+    it("should reject V3 request with missing source", () => {
+        const anyNetworking = networking as any;
+
+        let errorMessage = "";
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            errorMessage = `Unexpected publication: ${topic}`;
+        };
+
+        const request = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "",
+            "request_id": "utc-test-003",
+            "request_type": "utc_time",
+            "payload": {},
+        };
+
+        anyNetworking.handle_mqtt_message_info_request_v3(request);
+
+        expect(errorMessage).toBe("");
+    });
+
+    it("should reject V3 request with missing request_id", () => {
+        const anyNetworking = networking as any;
+
+        let errorMessage = "";
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            errorMessage = `Unexpected publication: ${topic}`;
+        };
+
+        const request = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "Test-Pico-1",
+            "request_id": "",
+            "request_type": "utc_time",
+            "payload": {},
+        };
+
+        anyNetworking.handle_mqtt_message_info_request_v3(request);
+
+        expect(errorMessage).toBe("");
+    });
+
+    it("should reject V3 request with non-empty payload", () => {
+        const anyNetworking = networking as any;
+
+        let errorMessage = "";
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            errorMessage = `Unexpected publication: ${topic}`;
+        };
+
+        const request = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "Test-Pico-1",
+            "request_id": "utc-test-004",
+            "request_type": "utc_time",
+            "payload": { "unexpected": true },
+        };
+
+        anyNetworking.handle_mqtt_message_info_request_v3(request);
+
+        expect(errorMessage).toBe("");
+    });
+
+    it("should reject V3 request with unknown request_type", () => {
+        const anyNetworking = networking as any;
+
+        let errorMessage = "";
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            errorMessage = `Unexpected publication: ${topic}`;
+        };
+
+        const request = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "Test-Pico-1",
+            "request_id": "utc-test-005",
+            "request_type": "unknown_type",
+            "payload": {},
+        };
+
+        anyNetworking.handle_mqtt_message_info_request_v3(request);
+
+        expect(errorMessage).toBe("");
+    });
+
+    it("should echo request_id correctly for multiple V3 requests", () => {
+        const anyNetworking = networking as any;
+
+        const publishedMessages: Array<{ topic: string; message: any }> = [];
+        anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
+            publishedMessages.push({ topic, message });
+        };
+
+        // First request
+        const request1 = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "Test-Pico-1",
+            "request_id": "utc-hardware-001",
+            "request_type": "utc_time",
+            "payload": {},
+        };
+        anyNetworking.handle_mqtt_message_info_request_v3(request1);
+
+        // Second request
+        const request2 = {
+            "message_type": "info_request",
+            "message_schema_version": 3,
+            "source": "Test-Pico-1",
+            "request_id": "utc-hardware-002",
+            "request_type": "utc_time",
+            "payload": {},
+        };
+        anyNetworking.handle_mqtt_message_info_request_v3(request2);
+
+        // Verify two responses
+        expect(publishedMessages.length).toBe(2);
+
+        // First response should echo utc-hardware-001
+        expect(publishedMessages[0].message["request_id"]).toBe("utc-hardware-001");
+
+        // Second response should echo utc-hardware-002
+        expect(publishedMessages[1].message["request_id"]).toBe("utc-hardware-002");
+    });
 });

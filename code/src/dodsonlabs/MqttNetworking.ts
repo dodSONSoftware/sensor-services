@@ -22,6 +22,10 @@ export class MqttNetworking implements IMqttNetworking {
     // Below this temperature, feels-like equals actual temperature
     private static readonly HEAT_INDEX_THRESHOLD_C: number = 20;
 
+    // V3 MQTT topics for info-request/response
+    private static readonly MQTT_TOPIC_INFO_REQUEST_V3 = "iot/v3/info-request";
+    private static readonly MQTT_TOPIC_INFO_RESPONSE_V3 = "iot/v3/info-response";
+
     // ********
     // ******** CTOR
 
@@ -205,6 +209,10 @@ export class MqttNetworking implements IMqttNetworking {
         // subscribe to info-request topic for sensor queries
         this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${this.mqtt_topic_info_request}`);
         this.mqtt_client.subscribe(this.mqtt_topic_info_request);
+
+        // subscribe to V3 info-request topic for compatibility
+        this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${MqttNetworking.MQTT_TOPIC_INFO_REQUEST_V3}`);
+        this.mqtt_client.subscribe(MqttNetworking.MQTT_TOPIC_INFO_REQUEST_V3);
     }
 
     private on_disconnect(): void {
@@ -274,6 +282,10 @@ export class MqttNetworking implements IMqttNetworking {
 
         case "info-request":
             this.handle_mqtt_message_info_request(json_doc);
+            break;
+
+        case "info_request":
+            this.handle_mqtt_message_info_request_v3(json_doc);
             break;
 
         default:
@@ -703,6 +715,120 @@ export class MqttNetworking implements IMqttNetworking {
             this.logger.write_error(
                 this.originator,
                 `<handle_mqtt_message_info_request> => Failed to send response: ${sysFunc.ensureError(error).message}`
+            );
+        }
+    }
+
+    // ****************************************************************
+    // ****************************************************************
+    // ******** HANDLE V3 INFO REQUEST MESSAGES (sensor-to-server)
+
+    /**
+     * Handle V3 info_request from sensors.
+     * This is a temporary compatibility bridge for V3 Pico firmware.
+     * Only supports utc_time request_type.
+     */
+    private handle_mqtt_message_info_request_v3(json_doc: Record<string, any>): void {
+        // Validate message_schema_version == 3
+        const schema_version = json_doc["message_schema_version"];
+        if (schema_version !== 3) {
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Invalid message_schema_version: ${schema_version}, expected 3`
+            );
+            return;
+        }
+
+        // Validate source (non-empty string)
+        const source_raw = json_doc["source"];
+        if (source_raw === undefined || source_raw === null || typeof source_raw !== "string" || source_raw.trim() === "") {
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Invalid or missing 'source', dropping`
+            );
+            return;
+        }
+        const source = source_raw.trim();
+
+        // Validate request_id (non-empty string)
+        const request_id_raw = json_doc["request_id"];
+        if (request_id_raw === undefined || request_id_raw === null || typeof request_id_raw !== "string" || request_id_raw.trim() === "") {
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Invalid or missing 'request_id', dropping`
+            );
+            return;
+        }
+        const request_id = request_id_raw.trim();
+
+        // Validate request_type
+        const request_type_raw = json_doc["request_type"];
+        if (request_type_raw === undefined || request_type_raw === null || typeof request_type_raw !== "string") {
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Invalid or missing 'request_type', dropping`
+            );
+            return;
+        }
+        const request_type = request_type_raw.trim();
+
+        // Validate payload (must be non-null object with no keys)
+        const payload = json_doc["payload"];
+        if (
+            payload === null ||
+            typeof payload !== "object" ||
+            Array.isArray(payload) ||
+            Object.keys(payload).length !== 0
+        ) {
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Invalid payload, expected empty object, dropping`
+            );
+            return;
+        }
+
+        // Log the request
+        this.logger.write_debug(
+            this.originator,
+            `<handle_mqtt_message_info_request_v3>: request_type='${request_type}' from '${source}'`
+        );
+
+        // Only utc_time is supported for this compatibility bridge
+        if (request_type !== "utc_time") {
+            this.logger.write_warn(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Unknown request_type '${request_type}', dropping`
+            );
+            return;
+        }
+
+        // Generate UTC timestamp using the same mechanism as V2
+        const now = new Date();
+        const response_payload = {
+            timestamp: now.toISOString(),
+            utc_epoch_ms: Math.trunc(now.getTime()),
+        };
+
+        // Build V3 response header
+        const response_header: Record<string, any> = {
+            "message_type": "info_response",
+            "message_schema_version": 3,
+            "source": "server",
+            "target": source,
+            "request_id": request_id,
+            "request_type": request_type,
+        };
+
+        // Send response to V3 topic
+        try {
+            this.publish_mqtt_message(MqttNetworking.MQTT_TOPIC_INFO_RESPONSE_V3, {
+                ...response_header,
+                payload: response_payload,
+            });
+        } catch (error) {
+            this.logger.write_error(
+                this.originator,
+                `<handle_mqtt_message_info_request_v3> => Failed to send response: ${sysFunc.ensureError(error).message}`
             );
         }
     }

@@ -30,6 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     ├── .editorconfig      -- Editor config (indentation, charset, line endings)
     ├── src/
     │   ├── index.ts       -- Entry point: config load, Zod validation, logger init, MQTT init, Swagger, middleware, API metrics, routes, listen, graceful shutdown (15s hard timeout)
+    │   ├── version.ts     -- App version source of truth: APP_VERSION + APP_NAME (release codename, derived per the codename scheme in .claude/commands/git-commit.md); package.json version kept in sync
     │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, rate limiting, YAML format)
     │   ├── swagger.ts     -- Swagger UI setup at /swagger (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
     │   ├── common/
@@ -55,8 +56,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   └── settings.ts      -- Zod schemas + defaults + metadata for application settings (UI preferences + server connection details)
     │   ├── services/
     │   │   └── settingsStore.ts -- PostgreSQL-backed persistence for application settings (init, getSettings, patchSettings)
-    │   ├── git-dodsonlabs-from-cloud.sh -- Clone + rename dodson-labs-core submodule
-    │   ├── README.txt             -- Instructions for setting up dodsonlabs/
     │   └── dodsonlabs/          -- Shared library (git clone from dodson-labs-core)
     │       ├── CreatorBase.ts       -- Abstract RoutesCreatorBase for route creators
     │       ├── Interfaces.ts        -- IAbout, ILogger, IMqttCommandControl, IMqttNetworking, LogLevel
@@ -366,7 +365,7 @@ case-sensitive: true
 
 ## Key Patterns and Caveats
 
-- **`dodsonlabs/` is a shared library** — cloned from `http://10.10.10.7:30008/sensor-services/dodson-labs-core.git` (main branch). Excluded from ESLint and test coverage (shared library, not a git submodule). Clone via `code/src/git-dodsonlabs-from-cloud.sh` or manually: `git clone --branch main http://10.10.10.7:30008/sensor-services/dodson-labs-core.git && mv dodson-labs-core dodsonlabs`. See `code/src/README.txt` for instructions.
+- **`dodsonlabs/` is a shared library** — cloned from `http://10.10.10.7:30008/sensor-services/dodson-labs-core.git` (main branch). Excluded from ESLint and test coverage (shared library, not a git submodule). Clone manually: `git clone --branch main http://10.10.10.7:30008/sensor-services/dodson-labs-core.git && mv dodson-labs-core dodsonlabs`.
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, rate limiting, request ID propagation, and body validation.
 - **No CI/CD pipeline** — no GitHub Actions, GitLab CI, or other automation.
 - **All logging goes through Winston** — `error`/`warn`/`info`/`debug` levels, console transport always active, optional Loki transport. `handle_mqtt_message_log()` in MqttNetworking forwards sensor application logs at the appropriate level; controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level, default `debug`) config keys.
