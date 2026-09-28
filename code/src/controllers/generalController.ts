@@ -278,22 +278,6 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             description: "Partially updates settings in the database."
         },
         {
-            name: "Sensor Identify All",
-            route: "/sensors/identify",
-            verb: "GET",
-            requestBody: "None",
-            responseBody: "Array of sensor identification responses",
-            description: "Identifies all sensors on the network."
-        },
-        {
-            name: "Sensor Identify Single",
-            route: "/sensors/identify/:source",
-            verb: "GET",
-            requestBody: "None",
-            responseBody: "Sensor identification response for specified source",
-            description: "Identifies a specific sensor by source ID."
-        },
-        {
             name: "Sensor Get Details",
             route: "/sensors/get-details",
             verb: "GET",

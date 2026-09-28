@@ -102,9 +102,9 @@ describe("settings routes", () => {
             const pingDelaySetting = body.find(s => s.name === "ping_delay_ms");
 
             expect(pingDelaySetting?.range).toEqual({
-                min: 100,
-                max: 5000,
-                step: 100,
+                min: 0,
+                max: 1000,
+                step: 10,
             });
         });
 

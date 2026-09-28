@@ -148,7 +148,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
                     const duration = sec + nsec / 1e9;
 
                     const method = req.method;
-                    // Use the matched route pattern (e.g., /sensors/identify/:source)
+                    // Use the matched route pattern (e.g., /sensors/get-details/:source)
                     const route = req.route ? req.route.path : req.path;
                     const status = res.statusCode;
 

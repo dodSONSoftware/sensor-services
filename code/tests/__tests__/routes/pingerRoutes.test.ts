@@ -48,7 +48,7 @@ describe("Pinger Routes", () => {
 
   describe("GET /sensors/ippinger-analyze", () => {
     it("should return 200 with warning when upstream is unavailable", async () => {
-      // fetch rejects for the ippinger read-config call, but mqtt identify succeeds (mocked)
+      // fetch rejects for the ippinger read-config call, but mqtt get-details succeeds (mocked)
       jest.spyOn(global, "fetch").mockRejectedValue(new Error("ENOTFOUND"));
       const app = createTestApp();
 

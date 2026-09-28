@@ -14,7 +14,11 @@ import { mqtt_command_get_messages } from "./sensorController";
 export interface LiveSensor {
     source: string;
     payload?: {
-        "ip-address"?: string;
+        data?: {
+            network?: {
+                ip_address?: string;
+            };
+        };
     };
 }
 
@@ -100,7 +104,8 @@ export function analyzeIt(
         // check
         if (sensor) {
             // init
-            const sensor_ipaddress = String(sensor?.payload?.["ip-address"] ?? "");
+            // V3 get-details: the IP lives at payload.data.network.ip_address
+            const sensor_ipaddress = String(sensor?.payload?.data?.network?.ip_address ?? "");
 
             // check if ip-addresses are equal
             if (sensor_ipaddress === ip_address) {
@@ -114,7 +119,7 @@ export function analyzeIt(
 
         } else {
             // check if device.ip-address is-in livesensors
-            const sensor_ip: LiveSensor | undefined = live_sensors.find(x => { return x?.payload?.["ip-address"] === ip_address; });
+            const sensor_ip: LiveSensor | undefined = live_sensors.find(x => { return x?.payload?.data?.network?.ip_address === ip_address; });
             if (sensor_ip) {
                 // init
                 const sensor_source = String(sensor_ip["source"]);
@@ -132,7 +137,8 @@ export function analyzeIt(
     // process each device defined in the IP Pinger configuration
     live_sensors.forEach(sensor => {
         const source = sensor["source"];
-        const ip_address = sensor?.payload?.["ip-address"];
+        // V3 get-details: the IP lives at payload.data.network.ip_address
+        const ip_address = sensor?.payload?.data?.network?.ip_address;
 
         // check if live_sensor.source is in ippinger-devices
         let dude: IppingerDevice | undefined;
@@ -161,8 +167,8 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
 
     if (ippingerConfig === null) {
         // IP pinger unreachable — fall back to live sensors only.
-        // Start the MQTT identify in parallel so we don't block on the slow path.
-        const commandControl = await mqtt_command_get_messages(network, "*", "identify");
+        // Start the MQTT get-details in parallel so we don't block on the slow path.
+        const commandControl = await mqtt_command_get_messages(network, "*", "get-details");
         if (commandControl === null) {
             res.status(InternalServerError).json({ error: "Unknown command type received from sensor" });
             return;
@@ -184,7 +190,7 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
     }
 
     // Both sources available — fetch sensors and run full analysis
-    const commandControl = await mqtt_command_get_messages(network, "*", "identify");
+    const commandControl = await mqtt_command_get_messages(network, "*", "get-details");
     if (commandControl === null) {
         res.status(InternalServerError).json({ error: "Unknown command type received from sensor" });
         return;

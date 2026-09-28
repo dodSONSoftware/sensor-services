@@ -33,7 +33,7 @@ describe("analyzeIt", () => {
   describe("case-sensitive mode", () => {
     it("should return OK when source and IP match", () => {
       const liveSensors = [
-        { source: "sensor-1", payload: { "ip-address": "192.168.1.10" } },
+        { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
       ];
       const ippingerDevices = [
         { source: "sensor-1", "ip-address": "192.168.1.10" },
@@ -47,7 +47,7 @@ describe("analyzeIt", () => {
 
     it("should return IP Address Mismatch when source matches but IP differs", () => {
       const liveSensors = [
-        { source: "sensor-1", payload: { "ip-address": "192.168.1.99" } },
+        { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.99" } } } },
       ];
       const ippingerDevices = [
         { source: "sensor-1", "ip-address": "192.168.1.10" },
@@ -75,7 +75,7 @@ describe("analyzeIt", () => {
 
     it("should return New when live sensor has no matching config entry", () => {
       const liveSensors = [
-        { source: "sensor-new", payload: { "ip-address": "192.168.1.50" } },
+        { source: "sensor-new", payload: { data: { network: { ip_address: "192.168.1.50" } } } },
       ];
       const ippingerDevices: Record<string, any>[] = [];
 
@@ -87,7 +87,7 @@ describe("analyzeIt", () => {
 
     it("should return Name Mismatch when IP matches but source differs", () => {
       const liveSensors = [
-        { source: "different-name", payload: { "ip-address": "192.168.1.10" } },
+        { source: "different-name", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
       ];
       const ippingerDevices = [
         { source: "sensor-1", "ip-address": "192.168.1.10" },
@@ -105,7 +105,7 @@ describe("analyzeIt", () => {
   describe("case-insensitive mode", () => {
     it("should match sources with different casing", () => {
       const liveSensors = [
-        { source: "Sensor-1", payload: { "ip-address": "192.168.1.10" } },
+        { source: "Sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
       ];
       const ippingerDevices = [
         { source: "sensor-1", "ip-address": "192.168.1.10" },
@@ -119,7 +119,7 @@ describe("analyzeIt", () => {
 
     it("should detect name mismatch with different casing and same IP", () => {
       const liveSensors = [
-        { source: "Different-Name", payload: { "ip-address": "192.168.1.10" } },
+        { source: "Different-Name", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
       ];
       const ippingerDevices = [
         { source: "sensor-1", "ip-address": "192.168.1.10" },
@@ -134,9 +134,9 @@ describe("analyzeIt", () => {
 
   it("should handle multiple sensors and devices", () => {
     const liveSensors = [
-      { source: "sensor-1", payload: { "ip-address": "192.168.1.10" } },
-      { source: "sensor-2", payload: { "ip-address": "192.168.1.20" } },
-      { source: "sensor-new", payload: { "ip-address": "192.168.1.30" } },
+      { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
+      { source: "sensor-2", payload: { data: { network: { ip_address: "192.168.1.20" } } } },
+      { source: "sensor-new", payload: { data: { network: { ip_address: "192.168.1.30" } } } },
     ];
     const ippingerDevices = [
       { source: "sensor-1", "ip-address": "192.168.1.10" },
@@ -158,8 +158,8 @@ describe("analyzeIt", () => {
 function createMockNetwork(liveResults: unknown[]): MqttNetworking {
   return {
 
-    mqtt_topic_command: "iot/v2/command",
-    mqtt_topic_command_response: "iot/v2/command-response",
+    mqtt_topic_command: "iot/v3/command",
+    mqtt_topic_command_response: "iot/v3/command-response",
     is_connected: jest.fn().mockReturnValue(true),
     prometheus_server_ready: jest.fn().mockReturnValue(true),
     publish_mqtt_message: jest.fn(),
@@ -205,7 +205,7 @@ describe("getAnalyzeIpPinger", () => {
     mockFetch.mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     const network = createMockNetwork([
-      { source: "sensor-1", payload: { "ip-address": "192.168.1.10" } },
+      { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
     ]);
 
     const res: any = {
@@ -228,7 +228,7 @@ describe("getAnalyzeIpPinger", () => {
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
         warning: "ip-pinger service unavailable — analysis incomplete",
-        live_sensors: [{ source: "sensor-1", payload: { "ip-address": "192.168.1.10" } }],
+        live_sensors: [{ source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } }],
       })
     );
   });
@@ -245,7 +245,7 @@ describe("getAnalyzeIpPinger", () => {
     });
 
     const network = createMockNetwork([
-      { source: "sensor-1", payload: { "ip-address": "192.168.1.10" } },
+      { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
     ]);
 
     const res: any = {

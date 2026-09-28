@@ -12,8 +12,6 @@ import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 
 // Canonical list of route paths — kept in sync with createRoutes() to prevent drift.
 export const __routes: string[] = [
-    "/sensors/identify",
-    "/sensors/identify/:source",
     "/sensors/get-details",
     "/sensors/get-details/:source",
     "/sensors/reboot",
@@ -29,14 +27,6 @@ export const __routesHelp: Record<string, unknown> = {
     "description": "Apis that gather information about and control over the sensors in the sensor net.",
     "commands": [
         {
-            "route": "/sensors/identify",
-            "description": "Retrieves identification information about all of the sensors."
-        },
-        {
-            "route": "/sensors/identify/:source",
-            "description": "Retrieves identification information about the named sensor."
-        },
-        {
             "route": "/sensors/get-details",
             "description": "Retrieves detailed information about all of the sensors."
         },
@@ -46,7 +36,7 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/sensors/reboot",
-            "description": "Sends a reboot command to all sensors via MQTT."
+            "description": "Sends a reboot command to all sensors via MQTT. The firmware resets ~5 seconds after responding."
         },
         {
             "route": "/sensors/reboot/:source",
@@ -62,11 +52,11 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/sensors/write-config/:source",
-            "description": "Posts the given configuration to the sensor identified by source."
+            "description": "Posts the complete configuration to the sensor identified by source. The request body must be the sensor's complete config object."
         },
         {
             "route": "/sensors/update-config/:source",
-            "description": "Posts the configuration update to the sensor identified by source."
+            "description": "Deprecated — firmware v4 has no partial update. Returns 501; use write-config with a complete config."
         },
         {
             "route": "/sensors/ippinger-analyze",
@@ -87,80 +77,6 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
     // **** protected functions
 
     protected createRoutes() {
-        // IDENTIFY
-        /**
-         * @swagger
-         * /sensors/identify:
-         *   get:
-         *     summary: Retrieves identification information about all of the sensors
-         *     description: Returns identification information for all of the sensors.
-         *     responses:
-         *       200:
-         *         description: Identification information for all of the sensors
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: array
-         *               items:
-         *                 type: object
-         *                 properties:
-         *                   source:
-         *                     type: string
-         *                   payload:
-         *                     type: object
-         *       500:
-         *         description: Internal error
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: object
-         *               properties:
-         *                 error:
-         *                   type: string
-         */
-        this.app.route("/sensors/identify").get((req: express.Request, res: express.Response) => sensor_controller.getIdentify(req, res, this.network));
-
-        // IDENTIFY
-        /**
-         * @swagger
-         * /sensors/identify/{source}:
-         *   get:
-         *     summary: Retrieves identification information about the sensors by source
-         *     description: Returns identification information for the specified sensor source.
-         *     parameters:
-         *       - name: source
-         *         in: path
-         *         required: true
-         *         description: The name of the sensor source for identification.
-         *         schema:
-         *           type: string
-         *     responses:
-         *       200:
-         *         description: Identification information for the specified sensor
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: array
-         *               items:
-         *                 type: object
-         *                 properties:
-         *                   source:
-         *                     type: string
-         *                   payload:
-         *                     type: object
-         *       500:
-         *         description: Internal error
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: object
-         *               properties:
-         *                 error:
-         *                   type: string
-         */
-        this.app.route("/sensors/identify/:source").get((req: express.Request, res: express.Response) => sensor_controller.getIdentifyBySource(req, res, this.network, req.params.source));
-
-
         // GET-DETAILS
         /**
          * @swagger
@@ -389,7 +305,7 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          * /sensors/write-config/{source}:
          *   post:
          *     summary: Instructs the sensor identified by source to write the given configuration to their configuration file
-         *     description: Posts the given configuration to the sensor identified by source.
+         *     description: Posts the given configuration to the sensor identified by source. The request body must be the sensor's complete config object (firmware v4 rejects partial configs).
          *     parameters:
          *       - name: source
          *         in: path
@@ -433,13 +349,13 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         });
 
 
-        // UPDATE-CONFIG
+        // UPDATE-CONFIG (deprecated)
         /**
          * @swagger
          * /sensors/update-config/{source}:
          *   post:
-         *     summary: Instructs the sensor identified by source to update the given configuration to their configuration file
-         *     description: Posts the configuration update to the sensor identified by source.
+         *     summary: Deprecated — partial config updates are not supported by firmware v4
+         *     description: Returns 501. Firmware v4 has no partial update; use write-config with the sensor's complete config.
          *     parameters:
          *       - name: source
          *         in: path

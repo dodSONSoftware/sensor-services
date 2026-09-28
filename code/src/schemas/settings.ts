@@ -247,7 +247,7 @@ export const SETTINGS_SCHEMA: Record<string, {
     },
     mqtt_topic_command: {
         label: "MQTT Topic — Command",
-        description: "MQTT topic to publish commands on (e.g., reboot, identify).",
+        description: "MQTT topic to publish commands on (e.g., reboot, get-details).",
         type: "string",
         default: "",
         optional: true,

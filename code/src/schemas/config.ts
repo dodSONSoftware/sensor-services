@@ -30,12 +30,6 @@ export const configSchema = z.object({
     "mqtt-topic-command-response": z.string({
         error: "mqtt-topic-command-response must be a string",
     }).min(1, "mqtt-topic-command-response must not be empty"),
-    "mqtt-topic-info-request": z.string({
-        error: "mqtt-topic-info-request must be a string",
-    }).min(1, "mqtt-topic-info-request must not be empty"),
-    "mqtt-topic-info-response": z.string({
-        error: "mqtt-topic-info-response must be a string",
-    }).min(1, "mqtt-topic-info-response must not be empty"),
     "ip-pinger-web-api": z.string({
         error: "ip-pinger-web-api must be a string",
     }).min(1, "ip-pinger-web-api must not be empty"),
@@ -46,6 +40,7 @@ export const configSchema = z.object({
     "swagger-server-url": z.string().optional(),
     "loki-url": z.string().optional(),
     "loki-enabled": z.boolean().optional(),
+    "mqtt-topic-log": z.string().optional(),
     "forward-sensor-logs": z.boolean().optional(),
     "forward-sensor-logs-level": z.enum(["error", "warn", "info", "debug"], {
         error: "forward-sensor-logs-level must be one of: error, warn, info, debug",

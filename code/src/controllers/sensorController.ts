@@ -4,7 +4,7 @@
  */
 
 import type * as express from "express";
-import { InternalServerError, Json, OK } from "../dodsonlabs/HttpConstants";
+import { InternalServerError, Json, NotImplemented, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
@@ -29,29 +29,27 @@ const _log = () => logger() ?? _noopLogger;
 // ****************************************************************
 // **** private variables
 
-const _reboot_command_delay_seconds: number = 3;
+// The firmware v4 publishes the reboot response, then resets ~5 seconds later.
+// This value is informational metadata returned to HTTP callers only.
+const _reboot_command_delay_seconds: number = 5;
 
 
 
 // ****************************************************************
 // **** private functions
 
-export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null, commandId: string = randomUUID(), schemaVersion: number = 2): Record<string, unknown> {
-    // create base message - support both V1 (message-type) and V2 (message_type) formats
-    const message: Record<string, unknown> = {
+export function create_mqtt_command_message(target: string, command: string, payload: Record<string, unknown> | null = null, commandId: string = randomUUID()): Record<string, unknown> {
+    // V3 command envelope (message_schema_version 3) — the firmware drops any
+    // message without message_schema_version: 3, and every command requires a
+    // payload object ({} for all commands except write-config)
+    return {
         "message_type": "command",
-        "schema_version": schemaVersion,
+        "message_schema_version": 3,
         "target": target.toLowerCase().trim(),
         "command": command.toLowerCase().trim(),
         "command_id": commandId,
+        "payload": payload ?? {},
     };
-
-    // Only include payload if non-empty to match sensor expectations
-    if (payload !== null && Object.keys(payload).length > 0) {
-        message["payload"] = payload;
-    }
-
-    return message;
 }
 
 function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
@@ -113,7 +111,7 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     dude.deinitialize();
 }
 
-export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, parameters: string = "", commandId?: string): Promise<IMqttCommandControl | null> {
+export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, commandId?: string): Promise<IMqttCommandControl | null> {
     // get-it
     const start_date = new Date();
     const cmdId = commandId ?? randomUUID();
@@ -133,7 +131,7 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
 
     } else {
         // create mqtt request
-        const mqtt_request = create_mqtt_command_message(target, `${command} ${parameters}`, null, cmdId);
+        const mqtt_request = create_mqtt_command_message(target, command, null, cmdId);
 
         // start-it
         mqtt_command_start(dude, mqtt_request, network);
@@ -152,10 +150,10 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     return dude;
 }
 
-async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, parameters: string = "", commandId?: string) {
+async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, commandId?: string) {
     try {
         // log-it
-        const dude = await mqtt_command_get_messages(network, target, command, parameters, commandId);
+        const dude = await mqtt_command_get_messages(network, target, command, commandId);
         if (dude === null) {
             return; // error already sent by mqtt_command_get_messages
         }
@@ -233,18 +231,6 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
 // ****************************************************************
 // **** public functions
 
-// IDENTIFY
-
-export async function getIdentify(req: express.Request, res: express.Response, network: MqttNetworking) {
-    // get-it
-    await get_it(req, res, network, "*", "identify");
-}
-export async function getIdentifyBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
-    // get-it
-    await get_it(req, res, network, source, "identify");
-}
-
-
 // GET DETAILS
 
 export async function getDetails(req: express.Request, res: express.Response, network: MqttNetworking) {
@@ -258,20 +244,20 @@ export async function getDetailsBySource(req: express.Request, res: express.Resp
 
 
 // REBOOT
-// NOTE: Uses get_it (not post_it) because reboot has no JSON body —
-// the delay parameter is passed as an MQTT command argument, not a request body.
+// NOTE: Uses get_it (not post_it) because reboot has no JSON body.
+// The firmware resets ~5 seconds after publishing its response (fixed by the firmware).
 
 export async function postReboot(req: express.Request, res: express.Response, network: MqttNetworking) {
     // Generate commandId upfront so we can include it in enriched results
     const commandId = randomUUID();
     // get-it with commandId for enrichment
-    await get_it(req, res, network, "*", "reboot", `${_reboot_command_delay_seconds}`, commandId);
+    await get_it(req, res, network, "*", "reboot", commandId);
 }
 export async function postRebootBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
     // Generate commandId upfront so we can include it in enriched results
     const commandId = randomUUID();
     // get-it with commandId for enrichment
-    await get_it(req, res, network, source, "reboot", `${_reboot_command_delay_seconds}`, commandId);
+    await get_it(req, res, network, source, "reboot", commandId);
 }
 
 
@@ -290,14 +276,18 @@ export async function getReadConfigBySource(req: express.Request, res: express.R
 // WRITE CONFIG
 
 export async function postWriteConfigBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
-    // post-it with request body as config payload
-    await post_it(req, res, network, source, "write-config", req.body);
+    // The V3 protocol requires the complete config wrapped in a 'config' key:
+    // payload must be exactly {"config": <complete candidate config>}
+    await post_it(req, res, network, source, "write-config", { config: req.body });
 }
 
 
 // UPDATE CONFIG
+// Deprecated: firmware v4 has no partial-update command — write-config requires
+// a complete config. Kept as a route so clients get a clear 501 instead of a 404.
 
-export async function postUpdateConfigBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
-    // post-it with request body as config payload
-    await post_it(req, res, network, source, "update-config", req.body);
+export function postUpdateConfigBySource(_req: express.Request, res: express.Response, _network: MqttNetworking, _source: string) {
+    res.status(NotImplemented).contentType(Json).json({
+        error: "update-config is not supported by firmware v4 — use write-config with a complete config",
+    });
 }

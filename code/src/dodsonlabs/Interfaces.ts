@@ -49,11 +49,14 @@ export interface MqttCommandResult {
   source: string;
   payload: Record<string, unknown>;
   command_id?: string;
-  // V2 response fields
+  // V3 response fields
   targeted?: boolean;
   schema_version?: number;
   firmware_version?: string;
   uptime_ms?: number;
+  timestamp?: string;
+  sequence?: number;
+  runtime_id?: string;
 }
 
 export interface IMqttCommandControl {

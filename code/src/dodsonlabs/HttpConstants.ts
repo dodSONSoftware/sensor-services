@@ -8,6 +8,7 @@
 export const OK = 200;
 export const NotFound = 404;
 export const InternalServerError = 500;
+export const NotImplemented = 501;
 
 // **** MIME Types
 

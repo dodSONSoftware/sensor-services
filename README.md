@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Mercury Falcon — version 4.9.0
+**Release:** Titanium Falcon — version 4.10.0
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -61,9 +61,9 @@ prometheus-port: 3301
 
 # MQTT broker connection
 mqtt-broker-ip-address: "10.10.10.64"
-mqtt-topic-telemetry: "iot/telemetry"
-mqtt-topic-command: "iot/v2/command"
-mqtt-topic-command-response: "iot/v2/command-response"
+mqtt-topic-telemetry: "iot/v3/telemetry"
+mqtt-topic-command: "iot/v3/command"
+mqtt-topic-command-response: "iot/v3/command-response"
 
 # External services
 ip-pinger-web-api: "http://<ip-pinger-host>:<port>"
@@ -124,16 +124,14 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/sensors/identify` | Identify all sensors via MQTT |
-| GET | `/sensors/identify/:source` | Identify a specific sensor |
 | GET | `/sensors/get-details` | Get details for all sensors |
 | GET | `/sensors/get-details/:source` | Get details for a specific sensor |
-| POST | `/sensors/reboot` | Reboot all sensors (returns command metadata) |
+| POST | `/sensors/reboot` | Reboot all sensors (returns command metadata; firmware resets ~5s after responding) |
 | POST | `/sensors/reboot/:source` | Reboot a specific sensor (returns command metadata) |
 | GET | `/sensors/read-config` | Read config from all sensors |
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
-| POST | `/sensors/write-config/:source` | Write config to a specific sensor |
-| POST | `/sensors/update-config/:source` | Update config on a specific sensor |
+| POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor |
+| POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
 
 ### IP Pinger Routes (`/ippinger/*`)
 

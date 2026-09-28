@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.3.1)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.10.0)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -79,7 +79,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
     │       ├── routes/
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
-    │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify, get-details, reboot, read-config, write-config, update-config)
+    │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501)
     │       │   ├── pingerRoutes.test.ts       -- All /ippinger/* routes via supertest (about, read-config, write-config, restart, ping, ping/:target, analyze-ippinger)
     │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
@@ -159,7 +159,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 **MqttNetworking** (`dodsonlabs/MqttNetworking.ts`) — The central sensor networking class:
 - Connects to MQTT broker with auto-reconnect (5s reconnectPeriod, 10s connectTimeout)
-- Subscribes to `iot/v2/command-response` topic only (telemetry handled by sensor-telemetry-service)
+- Subscribes to the command-response topic (`iot/v3/command-response`), the V3 info-request topic (`iot/v3/info-request`, for sensor UTC-time queries), and — when `forward-sensor-logs` is enabled — the sensor log topic (`mqtt-topic-log`, default `iot/v3/log`). Telemetry is handled by sensor-telemetry-service.
 - Command responses tracked via `MqttCommandControl` state machines (configurable `command-silence-timeout-ms`, default 1500ms)
 - Outbound command deduplication via `seen_command_ids` map (TTL-based eviction, max size cap)
 - Sensor log forwarding via `handle_mqtt_message_log()` — controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level) config keys
@@ -195,9 +195,9 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 **Sensor Commands (HTTP → MQTT → Response):**
 ```
-HTTP GET /sensors/identify → sensorController → mqtt_command_get_messages()
-  → MqttNetworking.publish_mqtt_message(topic: iot/v2/command, msg)
-  → Sensor processes command, responds on iot/v2/command-response
+HTTP GET /sensors/get-details → sensorController → mqtt_command_get_messages()
+  → MqttNetworking.publish_mqtt_message(topic: iot/v3/command, msg)
+  → Sensor processes command, responds on iot/v3/command-response
   → MqttNetworking.handle_mqtt_message_command_response() → MqttCommandControl.results[]
   → Event-based wait: MqttCommandControl.waitForCompletion() with 10s hard cap
   → HTTP response returns MqttCommandControl.results
@@ -211,7 +211,7 @@ HTTP GET /ippinger/ping → pingerController.fetchIt() → fetch() → http://<i
 **IP Pinger Analysis (HTTP → MQTT + HTTP → Merge):**
 ```
 HTTP GET /sensors/ippinger-analyze → getAnalyzeIpPinger()
-  → mqtt_command_get_messages(network, "*", "identify")  [fetch live sensors via MQTT]
+  → mqtt_command_get_messages(network, "*", "get-details")  [fetch live sensors via MQTT]
   → fetchItOnly("http://<ip>:<port>/read-config")       [fetch pinger config via HTTP]
   → analyzeIt(sensors, ippinger_devices, case_sensitive)  [compare and classify]
   → Results: "OK", "IP Address Mismatch", "Name Mismatch", "Offline", "New"
@@ -262,16 +262,14 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/sensors/identify` | Identify all sensors via MQTT |
-| GET | `/sensors/identify/:source` | Identify a specific sensor |
 | GET | `/sensors/get-details` | Get details for all sensors |
 | GET | `/sensors/get-details/:source` | Get details for a specific sensor |
-| POST | `/sensors/reboot` | Reboot all sensors via MQTT (3s delay) |
+| POST | `/sensors/reboot` | Reboot all sensors via MQTT (firmware resets ~5s after responding) |
 | POST | `/sensors/reboot/:source` | Reboot a specific sensor |
 | GET | `/sensors/read-config` | Read config from all sensors |
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
-| POST | `/sensors/write-config/:source` | Write config to a specific sensor (MQTT command) |
-| POST | `/sensors/update-config/:source` | Update config on a specific sensor (MQTT command) |
+| POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor (MQTT command) |
+| POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
 
 ### IP Pinger Routes (`/ippinger`) — Proxy to external service
 
@@ -328,9 +326,9 @@ prometheus-port: 3301
 
 # MQTT broker connection
 mqtt-broker-ip-address: "10.10.10.64"
-mqtt-topic-telemetry: "iot/telemetry"
-mqtt-topic-command: "iot/v2/command"
-mqtt-topic-command-response: "iot/v2/command-response"
+mqtt-topic-telemetry: "iot/v3/telemetry"
+mqtt-topic-command: "iot/v3/command"
+mqtt-topic-command-response: "iot/v3/command-response"
 
 # External services
 ip-pinger-web-api: "http://10.10.10.64:3300"
@@ -340,6 +338,9 @@ case-sensitive: true
 
 # Optional: override auto-derived Swagger server URL
 # swagger-server-url: "http://10.10.10.217:32000/"
+
+# Optional: sensor application log topic (default: iot/v3/log)
+# mqtt-topic-log: "iot/v3/log"
 
 # Optional: disable forwarding of sensor application logs to the app logger (default: true)
 # forward-sensor-logs: false
@@ -359,7 +360,7 @@ case-sensitive: true
 
 **Required config keys:** `express-port` (positive int), `log-level` (error/warn/info/debug), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
-**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
+**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
 
 **Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`. Settings persistence stores to PostgreSQL database.
 
@@ -374,7 +375,8 @@ case-sensitive: true
 - **Native `fetch` API is used** (Node 18+ built-in) — `node-fetch` was removed from dependencies.
 - **`swagger-server-url` is configurable** via `config.yml` (falls back to auto-derived from routable IP + port). `routableAddress()` skips loopback and Docker-internal addresses.
 - **`case-sensitive` is configurable** via `config.yml` (used by `analyzeIt()` in pingerController).
-- **`write-config` and `update-config` sensor routes are active** POST endpoints in `sensorRoutes.ts`.
+- **V3 MQTT protocol (firmware v4)** — outbound commands use the `message_schema_version: 3` envelope with a required `payload` object (write-config wraps the complete config as `{"config": <config>}`); command responses are parsed from `payload.command`/`payload.command_id` (no top-level `type`). The `identify` command and `/sensors/identify` routes were removed — use `get-details` (sensor IP now at `payload.data.network.ip_address` in pinger analysis). `update-config` is not supported by firmware v4 — the route returns 501.
+- **`write-config` is an active** POST endpoint in `sensorRoutes.ts`; **`update-config` is deprecated** and returns 501 (NotImplemented).
 - **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`. Uses `if (!res.headersSent)` guard to prevent double-sending when matched routes fall through without calling next().
 - **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod v4 schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).

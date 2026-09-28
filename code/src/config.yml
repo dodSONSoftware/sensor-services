@@ -12,13 +12,9 @@ loki-enabled: true
 
 # MQTT broker connection
 mqtt-broker-ip-address: "10.10.10.64"
-mqtt-topic-telemetry: "iot/v2/telemetry"
-mqtt-topic-command: "iot/v2/command"
-mqtt-topic-command-response: "iot/v2/command-response"
-
-# Info request/response (sensor-to-server queries)
-mqtt-topic-info-request: "iot/v2/info-request"
-mqtt-topic-info-response: "iot/v2/info-response"
+mqtt-topic-telemetry: "iot/v3/telemetry"
+mqtt-topic-command: "iot/v3/command"
+mqtt-topic-command-response: "iot/v3/command-response"
 
 # External services
 ip-pinger-web-api: "http://10.10.10.50:3300"
@@ -29,6 +25,9 @@ case-sensitive: true
 
 # Optional: override auto-derived Swagger server URL
 # swagger-server-url: "http://10.10.10.217:32000/"
+
+# Optional: sensor application log topic (default: iot/v3/log)
+# mqtt-topic-log: "iot/v3/log"
 
 # Optional: disable forwarding of sensor application logs to the app logger (default: true)
 # forward-sensor-logs: false

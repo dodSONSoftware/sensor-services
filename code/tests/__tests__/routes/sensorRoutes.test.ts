@@ -17,27 +17,21 @@ function createTestApp(): express.Application {
 }
 
 describe("Sensor Routes", () => {
-  describe("GET /sensors/identify", () => {
-    it("should return 200 and delegate to sensor controller", async () => {
+  describe("GET /sensors/identify (removed)", () => {
+    it("should return 404 — firmware v4 has no identify command", async () => {
       const app = createTestApp();
 
       const res = await request(app).get("/sensors/identify");
 
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/application\/json/);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.status).toBe(404);
     });
-  });
 
-  describe("GET /sensors/identify/:source", () => {
-    it("should return 200 and delegate to sensor controller with source param", async () => {
+    it("should return 404 for /sensors/identify/:source", async () => {
       const app = createTestApp();
 
       const res = await request(app).get("/sensors/identify/air-temp-1");
 
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/application\/json/);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.status).toBe(404);
     });
   });
 
@@ -81,7 +75,7 @@ describe("Sensor Routes", () => {
       expect(res.body[0].command_metadata).toMatchObject({
         command_id: expect.any(String),
         command_sent_at: expect.any(String),
-        expected_delay_seconds: 3,
+        expected_delay_seconds: 5,
       });
     });
   });
@@ -102,7 +96,7 @@ describe("Sensor Routes", () => {
       expect(res.body[0].command_metadata).toMatchObject({
         command_id: expect.any(String),
         command_sent_at: expect.any(String),
-        expected_delay_seconds: 3,
+        expected_delay_seconds: 5,
       });
     });
   });
@@ -156,28 +150,28 @@ describe("Sensor Routes", () => {
     });
   });
 
-  describe("POST /sensors/update-config/:source", () => {
-    it("should return 200 and delegate to sensor controller with body", async () => {
+  describe("POST /sensors/update-config/:source (deprecated)", () => {
+    it("should return 501 with an error pointing to write-config", async () => {
       const app = createTestApp();
 
       const res = await request(app)
         .post("/sensors/update-config/air-temp-1")
         .send({ "update-config": { key: "new-value" } });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveProperty("error");
+      expect(String(res.body.error)).toMatch(/write-config/);
     });
 
-    it("should return 200 with empty body", async () => {
+    it("should return 501 with empty body", async () => {
       const app = createTestApp();
 
       const res = await request(app)
         .post("/sensors/update-config/air-temp-1")
         .send({});
 
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.status).toBe(501);
     });
   });
 

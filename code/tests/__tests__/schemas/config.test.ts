@@ -11,11 +11,9 @@ describe("configSchema", () => {
     "express-port": 32000,
     "prometheus-port": 3301,
     "mqtt-broker-ip-address": "127.0.0.1",
-    "mqtt-topic-telemetry": "iot/telemetry",
-    "mqtt-topic-command": "iot/v2/command",
-    "mqtt-topic-command-response": "iot/v2/command-response",
-    "mqtt-topic-info-request": "iot/v2/info-request",
-    "mqtt-topic-info-response": "iot/v2/info-response",
+    "mqtt-topic-telemetry": "iot/v3/telemetry",
+    "mqtt-topic-command": "iot/v3/command",
+    "mqtt-topic-command-response": "iot/v3/command-response",
     "ip-pinger-web-api": "http://127.0.0.1:3300",
     "case-sensitive": true,
     "db-host": "localhost",
@@ -29,6 +27,29 @@ describe("configSchema", () => {
     const result = validateConfig(baseConfig);
     expect(result).toBeDefined();
     expect(result["fetch-timeout-ms"]).toBeUndefined();
+  });
+
+  it("should strip removed V2 info-request/info-response topic keys", () => {
+    const config = {
+      ...baseConfig,
+      "mqtt-topic-info-request": "iot/v2/info-request",
+      "mqtt-topic-info-response": "iot/v2/info-response",
+    };
+    const result = validateConfig(config);
+    expect(result["mqtt-topic-info-request"]).toBeUndefined();
+    expect(result["mqtt-topic-info-response"]).toBeUndefined();
+  });
+
+  it("should accept config without mqtt-topic-log (optional)", () => {
+    const result = validateConfig(baseConfig);
+    expect(result).toBeDefined();
+    expect(result["mqtt-topic-log"]).toBeUndefined();
+  });
+
+  it("should accept config with mqtt-topic-log", () => {
+    const config = { ...baseConfig, "mqtt-topic-log": "iot/v3/log" };
+    const result = validateConfig(config);
+    expect(result["mqtt-topic-log"]).toBe("iot/v3/log");
   });
 
   it("should accept config with fetch-timeout-ms", () => {

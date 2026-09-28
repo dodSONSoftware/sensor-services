@@ -22,9 +22,10 @@ export class MqttNetworking implements IMqttNetworking {
     // Below this temperature, feels-like equals actual temperature
     private static readonly HEAT_INDEX_THRESHOLD_C: number = 20;
 
-    // V3 MQTT topics for info-request/response
+    // V3 MQTT topics
     private static readonly MQTT_TOPIC_INFO_REQUEST_V3 = "iot/v3/info-request";
     private static readonly MQTT_TOPIC_INFO_RESPONSE_V3 = "iot/v3/info-response";
+    private static readonly MQTT_TOPIC_LOG_V3 = "iot/v3/log";
 
     // ********
     // ******** CTOR
@@ -35,8 +36,7 @@ export class MqttNetworking implements IMqttNetworking {
         this.mqtt_server_ip_address = config["mqtt-broker-ip-address"];
         this.mqtt_topic_command = config["mqtt-topic-command"];
         this.mqtt_topic_command_response = config["mqtt-topic-command-response"];
-        this.mqtt_topic_info_request = config["mqtt-topic-info-request"];
-        this.mqtt_topic_info_response = config["mqtt-topic-info-response"];
+        this.mqtt_topic_log = config["mqtt-topic-log"] ?? MqttNetworking.MQTT_TOPIC_LOG_V3;
         // ----
         this.logger = logger;
         this.originator = "networking";
@@ -103,8 +103,7 @@ export class MqttNetworking implements IMqttNetworking {
     private readonly mqtt_server_ip_address: string;
     public readonly mqtt_topic_command: string;
     private readonly mqtt_topic_command_response: string;
-    private readonly mqtt_topic_info_request: string;
-    private readonly mqtt_topic_info_response: string;
+    private readonly mqtt_topic_log: string;
     // ----
     private readonly originator: string;
     // ----
@@ -206,13 +205,15 @@ export class MqttNetworking implements IMqttNetworking {
         this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${this.mqtt_topic_command_response}`);
         this.mqtt_client.subscribe(this.mqtt_topic_command_response);
 
-        // subscribe to info-request topic for sensor queries
-        this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${this.mqtt_topic_info_request}`);
-        this.mqtt_client.subscribe(this.mqtt_topic_info_request);
-
-        // subscribe to V3 info-request topic for compatibility
+        // subscribe to V3 info-request topic for sensor UTC-time queries
         this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${MqttNetworking.MQTT_TOPIC_INFO_REQUEST_V3}`);
         this.mqtt_client.subscribe(MqttNetworking.MQTT_TOPIC_INFO_REQUEST_V3);
+
+        // subscribe to the sensor log topic when log forwarding is enabled
+        if (this.forward_sensor_logs) {
+            this.logger.write_debug(this.originator, `<on_connect> => Subscribing to Topic: ${this.mqtt_topic_log}`);
+            this.mqtt_client.subscribe(this.mqtt_topic_log);
+        }
     }
 
     private on_disconnect(): void {
@@ -276,12 +277,8 @@ export class MqttNetworking implements IMqttNetworking {
             }
             break;
 
-        case "command-response":
+        case "command_response":
             this.handle_mqtt_message_command_response(json_doc);
-            break;
-
-        case "info-request":
-            this.handle_mqtt_message_info_request(json_doc);
             break;
 
         case "info_request":
@@ -305,9 +302,15 @@ export class MqttNetworking implements IMqttNetworking {
     private handle_mqtt_message_log(json_doc: any): void {
         this.logger.write_debug(this.originator, "<handle_message_log>: message_type: LOG");
 
+        // V3 log messages nest level/message/event/module in payload; fall back
+        // to top level for anything that isn't in the documented shape
+        const log_payload = json_doc["payload"] !== null && typeof json_doc["payload"] === "object" && !Array.isArray(json_doc["payload"])
+            ? json_doc["payload"]
+            : {};
+
         const source = json_doc["source"] ?? "unknown";
-        const level = json_doc["level"] ?? "info";
-        const message = json_doc["message"] ?? json_doc;
+        const level = log_payload["level"] ?? json_doc["level"] ?? "info";
+        const message = log_payload["message"] ?? json_doc["message"] ?? json_doc;
 
         // Gate: only forward if the sensor's log level meets the configured threshold
         const sensor_level = this.sensor_log_level_to_enum(String(level).toLowerCase());
@@ -315,8 +318,16 @@ export class MqttNetworking implements IMqttNetworking {
             return;
         }
 
+        // Include the V3 event/module metadata when present
+        let detail = JSON.stringify(message);
+        const event = log_payload["event"];
+        const module = log_payload["module"];
+        if (event !== undefined || module !== undefined) {
+            detail = `event='${event ?? ""}' module='${module ?? ""}' ${detail}`;
+        }
+
         // Forward sensor log messages to the application logger at the appropriate level
-        const logMessage = `[${source}] ${JSON.stringify(message)}`;
+        const logMessage = `[${source}] ${detail}`;
 
         switch (sensor_level) {
         case LogLevel.Error:
@@ -361,15 +372,14 @@ export class MqttNetworking implements IMqttNetworking {
     // ****************************************************************
     // ******** HANDLE MQTT COMMAND RESPONSE MESSAGES
 
-    // Known command-response types — only these are allowed in cr_dude_dict.
-    // Keeping this as a constant prevents unbounded growth if an unknown
-    // msg_type slips through the if/else chain in handle_mqtt_message_command_response.
+    // Known command types supported by the firmware v4 (V3) protocol — only
+    // these are allowed in cr_dude_dict. Keeping this as a constant prevents
+    // unbounded growth if an unknown command slips through the if/else chain
+    // in handle_mqtt_message_command_response.
     private readonly known_command_types: Set<string> = new Set([
-        "identify",
         "get-details",
         "read-config",
         "write-config",
-        "update-config",
         "reboot",
     ]);
 
@@ -422,53 +432,62 @@ export class MqttNetworking implements IMqttNetworking {
         const source = String(source_raw);
 
         const payload = json_doc["payload"];
-
-        const command_id = this.getField(json_doc, "command_id");
-
-        // Get the command type from the top-level message (V2 format)
-        const cmd_type_raw = this.getField(json_doc, "type");
-        if (cmd_type_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing 'type' in message, dropping message");
+        if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+            this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing or invalid 'payload' object, dropping message");
             return;
         }
-        const cmd_type = String(cmd_type_raw).toLowerCase();
 
-        // Log with sanitized payload to avoid exposing sensitive data in logs
-        // Use deep clone to ensure we don't accidentally modify the original payload
+        // V3: the command name lives in payload.command (no top-level 'type' field)
+        const cmd_type_raw = this.getField(payload, "command");
+        if (cmd_type_raw === undefined || typeof cmd_type_raw !== "string") {
+            this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing 'payload.command' in message, dropping message");
+            return;
+        }
+        const cmd_type = cmd_type_raw.toLowerCase();
+
+        // V3: command_id lives inside payload
+        const command_id = this.getField(payload, "command_id");
+
+        // Log with sanitized payload to avoid exposing sensitive data in logs.
+        // Use deep clone to ensure we don't accidentally modify the original payload.
+        // V2 configs lived at payload.configuration/payload.config; V3 nests the
+        // read-config result at payload.data.config.
         const sanitizedDoc = JSON.parse(JSON.stringify(json_doc));
         if (sanitizedDoc["payload"]) {
             const sanitizedPayload = sanitizedDoc["payload"];
-            const config = sanitizedPayload["configuration"];
-            if (config && typeof config === "object") {
-                delete config["wifi-password"];
-                delete config["password"];
+            const scrubConfig = (cfg: any) => {
+                if (cfg && typeof cfg === "object" && !Array.isArray(cfg)) {
+                    delete cfg["wifi-password"];
+                    delete cfg["password"];
+                    delete cfg["db-password"];
+                }
+            };
+            scrubConfig(sanitizedPayload["configuration"]);
+            scrubConfig(sanitizedPayload["config"]);
+            if (sanitizedPayload["data"] && typeof sanitizedPayload["data"] === "object") {
+                scrubConfig(sanitizedPayload["data"]["config"]);
             }
             sanitizedDoc["payload"] = sanitizedPayload;
         }
+        this.logger.write_debug(this.originator, `<handle_mqtt_message_command_response>: ${cmd_type} from '${source}': ${JSON.stringify(sanitizedDoc)}`);
 
         // ----
-        if (cmd_type === "identify") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("identify")!, source, payload, json_doc, command_id);
+        if (cmd_type === "reboot") {
+            const dude = this.get_cr_dude("reboot");
+            if (dude !== null) {
+                this.handle_mqtt_command_response_reboot(dude, source, payload, json_doc, command_id);
+            }
             // ----
-        } else if (cmd_type === "get-details") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("get-details")!, source, payload, json_doc, command_id);
-            // ----
-        } else if (cmd_type === "read-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("read-config")!, source, payload, json_doc, command_id);
-            // ----
-        } else if (cmd_type === "write-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("write-config")!, source, payload, json_doc, command_id);
-            // ----
-        } else if (cmd_type === "update-config") {
-            this.handle_mqtt_command_response_message(this.get_cr_dude("update-config")!, source, payload, json_doc, command_id);
-            // ----
-        } else if (cmd_type === "reboot") {
-            this.handle_mqtt_command_response_reboot(this.get_cr_dude("reboot")!, source, payload, json_doc, command_id);
+        } else if (cmd_type === "get-details" || cmd_type === "read-config" || cmd_type === "write-config") {
+            const dude = this.get_cr_dude(cmd_type);
+            if (dude !== null) {
+                this.handle_mqtt_command_response_message(dude, source, payload, json_doc, command_id);
+            }
 
         } else {
             this.logger.write_warn(
                 this.originator,
-                `<handle_mqtt_message_command_response> => Unknown command-response type '${cmd_type}' from source '${source}', dropping`
+                `<handle_mqtt_message_command_response> => Unknown command type '${cmd_type}' from source '${source}', dropping`
             );
         }
     }
@@ -483,26 +502,49 @@ export class MqttNetworking implements IMqttNetworking {
         json_doc: Record<string, any>,
         command_id?: string
     ): void {
-        // Extract V2 response fields
-        const targeted = this.getField(json_doc, "targeted");
-        const schema_version = this.getField(json_doc, "schema_version");
+        // create the result and record it
+        dude.results.push(this.create_command_result(source, payload, json_doc, command_id));
+
+        // start a new timer
+        dude.restart_clock();
+    }
+
+    /**
+     * Build a MqttCommandResult from a V3 command_response message.
+     * The firmware's payload object (command_id/targeted/command/success/data|error)
+     * is passed through verbatim; envelope fields are mapped onto the result.
+     */
+    private create_command_result(
+        source: string,
+        payload: Record<string, any>,
+        json_doc: Record<string, any>,
+        command_id?: string
+    ): MqttCommandResult {
+        // V3 metadata: targeted and command_id live in payload, the rest in the envelope
+        const targeted = this.getField(payload, "targeted");
+        const schema_version = this.getField(json_doc, "message_schema_version");
         const firmware_version = this.getField(json_doc, "firmware_version");
         const uptime_ms = this.getNumericField(json_doc, "uptime_ms");
+        const timestamp = this.getField(json_doc, "timestamp");
+        const sequence = this.getNumericField(json_doc, "sequence");
+        const runtime_id = this.getField(json_doc, "runtime_id");
 
         // Add calculated feels-like temperature to air data if not already present
         const enrichedPayload = this.enrichAirDataWithFeelsLike(payload);
 
-        // Create result with optional command_id and V2 metadata
+        // Create result with optional command_id and V3 metadata
         const result: MqttCommandResult = {
             source: source,
             payload: enrichedPayload,
         };
 
-        if (command_id !== undefined) {
-            result.command_id = command_id;
+        const payload_command_id = this.getField(payload, "command_id");
+        const result_command_id = command_id ?? (payload_command_id !== undefined ? String(payload_command_id) : undefined);
+        if (result_command_id !== undefined) {
+            result.command_id = result_command_id;
         }
 
-        // Add V2 response fields if present
+        // Add V3 response fields if present
         if (targeted !== undefined) {
             result.targeted = Boolean(targeted);
         }
@@ -515,12 +557,17 @@ export class MqttNetworking implements IMqttNetworking {
         if (uptime_ms !== undefined) {
             result.uptime_ms = uptime_ms;
         }
+        if (timestamp !== undefined && timestamp !== null) {
+            result.timestamp = String(timestamp);
+        }
+        if (sequence !== undefined) {
+            result.sequence = sequence;
+        }
+        if (runtime_id !== undefined) {
+            result.runtime_id = String(runtime_id);
+        }
 
-        // add response to collection
-        dude.results.push(result);
-
-        // start a new timer
-        dude.restart_clock();
+        return result;
     }
 
     // ********
@@ -600,34 +647,8 @@ export class MqttNetworking implements IMqttNetworking {
         json_doc: Record<string, any>,
         command_id?: string
     ): void {
-        // Extract V2 response fields
-        const targeted = this.getField(json_doc, "targeted");
-        const schema_version = this.getField(json_doc, "schema_version");
-        const firmware_version = this.getField(json_doc, "firmware_version");
-        const uptime_ms = this.getNumericField(json_doc, "uptime_ms");
-
-        // Create result with optional command_id and V2 metadata
-        const result: MqttCommandResult = { source, payload };
-        if (command_id !== undefined) {
-            result.command_id = command_id;
-        }
-
-        // Add V2 response fields if present
-        if (targeted !== undefined) {
-            result.targeted = Boolean(targeted);
-        }
-        if (schema_version !== undefined) {
-            result.schema_version = Number(schema_version);
-        }
-        if (firmware_version !== undefined) {
-            result.firmware_version = String(firmware_version);
-        }
-        if (uptime_ms !== undefined) {
-            result.uptime_ms = uptime_ms;
-        }
-
-        // add response to collection
-        dude.results.push(result);
+        // create the result and record it
+        dude.results.push(this.create_command_result(source, payload, json_doc, command_id));
 
         // start a new timer
         dude.restart_clock();
@@ -635,98 +656,12 @@ export class MqttNetworking implements IMqttNetworking {
 
     // ****************************************************************
     // ****************************************************************
-    // ******** HANDLE INFO REQUEST MESSAGES (SENSOR-to-SERVER)
-
-    /**
-     * Handle info-request from sensors.
-     * Sensors can query for server time, settings, etc.
-     */
-    private handle_mqtt_message_info_request(json_doc: Record<string, any>): void {
-        const request_id_raw = this.getField(json_doc, "request_id");
-        if (request_id_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request_id', dropping");
-            return;
-        }
-        const request_id = String(request_id_raw);
-
-        const source_raw = this.getField(json_doc, "device_source");
-        if (source_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'device_source', dropping");
-            return;
-        }
-        const source = String(source_raw);
-
-        const request_type_raw = this.getField(json_doc, "request_type");
-        if (request_type_raw === undefined) {
-            this.logger.write_error(this.originator, "<handle_mqtt_message_info_request> => Missing 'request_type', dropping");
-            return;
-        }
-        const request_type = String(request_type_raw).toLowerCase();
-
-        // Log the request
-        this.logger.write_debug(this.originator, `<handle_mqtt_message_info_request>: request_type='${request_type}' from '${source}'`);
-
-        // Build response header - use V2 snake_case format
-        const response_header: Record<string, any> = {
-            "message_type": "info-response",
-            "schema_version": 2,
-            "source": "server",
-            "request_id": request_id,
-            "request_type": request_type,
-        };
-
-        // Process based on request type
-        let response_payload: Record<string, any>;
-
-        switch (request_type) {
-        case "utc-time":
-            const now = new Date();
-            response_payload = {
-                timestamp: now.toISOString(),
-                utc_epoch_ms: Math.trunc(now.getTime()),
-            };
-            break;
-
-        case "settings":
-            response_payload = {
-                "mqtt_broker": this.mqtt_server_ip_address,
-                "mqtt_topic_telemetry": this.mqtt_topic_command,
-                "mqtt_topic_command": this.mqtt_topic_command,
-                "mqtt_topic_command_response": this.mqtt_topic_command_response,
-                "mqtt_topic_info_request": this.mqtt_topic_info_request,
-            };
-            break;
-
-        default:
-            this.logger.write_warn(
-                this.originator,
-                `<handle_mqtt_message_info_request> => Unknown request_type '${request_type}', dropping`
-            );
-            return;
-        }
-
-        // Send response
-        try {
-            this.publish_mqtt_message(this.mqtt_topic_info_response, {
-                ...response_header,
-                payload: response_payload,
-            });
-        } catch (error) {
-            this.logger.write_error(
-                this.originator,
-                `<handle_mqtt_message_info_request> => Failed to send response: ${sysFunc.ensureError(error).message}`
-            );
-        }
-    }
-
-    // ****************************************************************
-    // ****************************************************************
-    // ******** HANDLE V3 INFO REQUEST MESSAGES (sensor-to-server)
+    // ******** HANDLE INFO REQUEST MESSAGES (sensor-to-server)
 
     /**
      * Handle V3 info_request from sensors.
-     * This is a temporary compatibility bridge for V3 Pico firmware.
-     * Only supports utc_time request_type.
+     * The firmware publishes info_request on iot/v3/info-request to query
+     * the server for UTC time. Only supports utc_time request_type.
      */
     private handle_mqtt_message_info_request_v3(json_doc: Record<string, any>): void {
         // Validate message_schema_version == 3
