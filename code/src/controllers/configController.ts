@@ -14,6 +14,51 @@ import type * as yamlModule from "js-yaml";
 // Config file paths to try (in order)
 const CONFIG_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
 
+/**
+ * Configuration keys that take effect immediately on reload: the logger is
+ * re-created and every log path (including logController's Loki lookup) reads
+ * the current logger/config live at request time.
+ *
+ * Every other key is captured at construction time by long-lived components
+ * (MqttNetworking, middleware, pinger routes, the settings store, and the
+ * HTTP servers) and only takes effect after a process restart. Callers must
+ * report those keys as restart-required rather than claiming they reloaded.
+ */
+export const HOT_RELOADABLE_KEYS: readonly string[] = ["log-level", "loki-url", "loki-enabled"];
+
+/**
+ * Compare the running config against a newly validated one and classify the
+ * changed keys: hot-reloadable keys are applied live by doReloadConfig();
+ * all others require a restart to take effect.
+ */
+export function diffConfigReload(
+    previous: z.infer<typeof configSchema> | null,
+    next: z.infer<typeof configSchema>
+): { restart_keys: string[]; applied_keys: string[] } {
+    const restart_keys: string[] = [];
+    const applied_keys: string[] = [];
+
+    // First load — nothing changed relative to the running state
+    if (!previous) {
+        return { restart_keys, applied_keys };
+    }
+
+    const prev = previous as Record<string, unknown>;
+    const nextCfg = next as Record<string, unknown>;
+    for (const key of new Set([...Object.keys(prev), ...Object.keys(nextCfg)])) {
+        if (JSON.stringify(prev[key]) === JSON.stringify(nextCfg[key])) {
+            continue;
+        }
+        if (HOT_RELOADABLE_KEYS.includes(key)) {
+            applied_keys.push(key);
+        } else {
+            restart_keys.push(key);
+        }
+    }
+
+    return { restart_keys: restart_keys.sort(), applied_keys: applied_keys.sort() };
+}
+
 // Export for testing - allows overriding the config path
 export let TEST_CONFIG_PATH: string | null = null;
 
@@ -50,23 +95,36 @@ function findConfigPath(): string | null {
 }
 
 /**
- * Reload configuration from disk
+ * Result of a config reload: success plus the reload contract — which changed
+ * keys were applied live and which require a restart to take effect.
  */
-async function doReloadConfig(): Promise<{ success: boolean; message: string }> {
+interface ReloadResult {
+    success: boolean;
+    message: string;
+    restart_required: boolean;
+    restart_keys: string[];
+    applied_keys: string[];
+}
+
+function reloadFailure(message: string): ReloadResult {
+    return { success: false, message, restart_required: false, restart_keys: [], applied_keys: [] };
+}
+
+/**
+ * Reload configuration from disk. The global config reference and the logger
+ * are updated immediately; long-lived components keep their construction-time
+ * snapshots until restart, so any changed key outside HOT_RELOADABLE_KEYS is
+ * reported as restart-required.
+ */
+async function doReloadConfig(): Promise<ReloadResult> {
     const configPath = findConfigPath();
     if (!configPath) {
-        return {
-            success: false,
-            message: "Could not find config file (tried: " + CONFIG_PATHS.join(", ") + ")"
-        };
+        return reloadFailure("Could not find config file (tried: " + CONFIG_PATHS.join(", ") + ")");
     }
 
     const configResult = read_file_yaml<z.infer<typeof configSchema>>(configPath);
     if (configResult.data === null) {
-        return {
-            success: false,
-            message: "Failed to read config: " + (configResult.error ?? "unknown error")
-        };
+        return reloadFailure("Failed to read config: " + (configResult.error ?? "unknown error"));
     }
 
     // Validate against schema
@@ -74,25 +132,23 @@ async function doReloadConfig(): Promise<{ success: boolean; message: string }> 
     try {
         validatedConfig = validateConfig(configResult.data);
     } catch (err) {
-        return {
-            success: false,
-            message: "Config validation failed: " + ensureError(err).message
-        };
+        return reloadFailure("Config validation failed: " + ensureError(err).message);
     }
 
-    // Update global config
-    setConfig(validatedConfig);
+    // Classify the changes before replacing the running config
+    const { restart_keys, applied_keys } = diffConfigReload(getConfig() ?? null, validatedConfig);
 
-    // Re-create logger with new settings
+    // Update global config reference and re-create the logger — the only
+    // components that pick up new values without a restart
+    setConfig(validatedConfig);
     createLogger(validatedConfig);
 
-    // Note: MQTT networking would need proper shutdown/restart in a full implementation
-    // For now, we just update the config reference
+    const restart_required = restart_keys.length > 0;
+    const message = restart_required
+        ? "Configuration reloaded; restart required for: " + restart_keys.join(", ")
+        : "Configuration reloaded successfully";
 
-    return {
-        success: true,
-        message: "Configuration reloaded successfully"
-    };
+    return { success: true, message, restart_required, restart_keys, applied_keys };
 }
 
 /**
@@ -189,7 +245,12 @@ export async function writeConfig(req: express.Request, res: express.Response): 
     if (result.success) {
         res.status(200).json({
             success: true,
-            message: "Configuration updated successfully"
+            message: result.restart_required
+                ? "Configuration saved; restart required for: " + result.restart_keys.join(", ")
+                : "Configuration updated successfully",
+            restart_required: result.restart_required,
+            restart_keys: result.restart_keys,
+            applied_keys: result.applied_keys
         });
     } else {
         res.status(500).json(result);

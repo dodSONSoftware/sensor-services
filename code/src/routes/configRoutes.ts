@@ -16,11 +16,11 @@ export const __routes: string[] = [
 ];
 
 export const __routesHelp: Record<string, unknown> = {
-    "description": "Application configuration management (hot-reload, read, write).",
+    "description": "Application configuration management (reload, read, write). Logger settings apply immediately; other settings persist and take effect after a restart (see restart_keys in the response).",
     "commands": [
         {
             "route": "/api/reload-config",
-            "description": "GET Reloads the application's YAML configuration from disk and updates the running configuration."
+            "description": "GET Reloads the application's YAML configuration from disk. Logger settings (log-level, loki-url, loki-enabled) apply immediately; other changed keys are reported as restart_required with the list in restart_keys."
         },
         {
             "route": "/api/read-config",
@@ -28,7 +28,7 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/api/write-config",
-            "description": "POST Saves a new configuration to disk and reloads the application. Body must contain the complete valid configuration."
+            "description": "POST Saves a new configuration to disk and reloads it. Logger settings apply immediately; other changed keys are reported as restart_required with the list in restart_keys. Body must contain the complete valid configuration."
         }
     ]
 };
@@ -48,11 +48,18 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          * @swagger
          * /reload-config:
          *   get:
-         *     summary: Hot-reload configuration from disk
-         *     description: Reads the configuration file from disk, validates it, and updates the running configuration. The MQTT client and logger are re-initialized with the new settings.
+         *     summary: Reload configuration from disk
+         *     description: >-
+         *       Reads the configuration file from disk, validates it, and updates the running
+         *       configuration reference. Only the logger settings (log-level, loki-url,
+         *       loki-enabled) take effect immediately — the logger is re-created. Every other
+         *       key is captured at construction time by long-lived components (MQTT client,
+         *       middleware, routes, settings store) and takes effect after a process restart;
+         *       changed keys of that kind are reported in restart_keys with restart_required
+         *       set to true.
          *     responses:
          *       200:
-         *         description: Configuration reloaded successfully
+         *         description: Configuration reloaded (check restart_required)
          *         content:
          *           application/json:
          *             schema:
@@ -63,7 +70,20 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   example: true
          *                 message:
          *                   type: string
-         *                   example: Configuration reloaded successfully
+         *                   example: Configuration reloaded; restart required for: mqtt-broker-ip-address
+         *                 restart_required:
+         *                   type: boolean
+         *                   example: true
+         *                 restart_keys:
+         *                   type: array
+         *                   items:
+         *                     type: string
+         *                   example: [mqtt-broker-ip-address]
+         *                 applied_keys:
+         *                   type: array
+         *                   items:
+         *                     type: string
+         *                   example: [log-level]
          *       500:
          *         description: Failed to reload configuration
          *         content:
@@ -121,7 +141,12 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          * /api/write-config:
          *   post:
          *     summary: Save new configuration and reload
-         *     description: Writes the provided configuration to disk and hot-reloads the application. The entire configuration must be provided (not partial updates).
+         *     description: >-
+         *       Writes the provided configuration to disk and reloads it. Only the logger
+         *       settings (log-level, loki-url, loki-enabled) take effect immediately; every
+         *       other changed key takes effect after a process restart and is reported in
+         *       restart_keys with restart_required set to true. The entire configuration must
+         *       be provided (not partial updates).
          *     requestBody:
          *       required: true
          *       content:
@@ -157,7 +182,7 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                 type: boolean
          *     responses:
          *       200:
-         *         description: Configuration saved and reloaded successfully
+         *         description: Configuration saved and reloaded (check restart_required)
          *         content:
          *           application/json:
          *             schema:
@@ -168,7 +193,20 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   example: true
          *                 message:
          *                   type: string
-         *                   example: Configuration updated successfully
+         *                   example: Configuration saved; restart required for: express-port
+         *                 restart_required:
+         *                   type: boolean
+         *                   example: true
+         *                 restart_keys:
+         *                   type: array
+         *                   items:
+         *                     type: string
+         *                   example: [express-port]
+         *                 applied_keys:
+         *                   type: array
+         *                   items:
+         *                     type: string
+         *                   example: [log-level]
          *       400:
          *         description: Invalid configuration or request body
          *       500:

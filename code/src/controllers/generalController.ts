@@ -132,7 +132,7 @@ export function getDateCurrent(_req: express.Request, res: express.Response) {
     const dt = new Date();
     const t = dt.toTimeString().split(" ")[0];
     const y = dt.getFullYear().toString();
-    const m = dt.getMonth().toString().padStart(2, "0");
+    const m = (dt.getMonth() + 1).toString().padStart(2, "0"); // getMonth() is zero-based
     const d = dt.getDate().toString().padStart(2, "0");
     const final = `${y}-${m}-${d}T${t}`;
 

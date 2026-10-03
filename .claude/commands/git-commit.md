@@ -8,32 +8,13 @@ Analyze all changes in the repository, update CLAUDE.md and README.md to reflect
 
 Run these before making any changes:
 - `git status --porcelain=v1` — check for uncommitted changes
-- `PROJECT_ROOT=$(git rev-parse --show-toplevel) && test -f "$PROJECT_ROOT/code/package.json"` — verify package.json exists at expected path
+- `PROJECT_ROOT=$(git rev-parse --show-toplevel) && test -f "$PROJECT_ROOT/code/package.json"` — verify package.json exists at `code/package.json`
 - `PROJECT_ROOT=$(git rev-parse --show-toplevel) && node -p "try { JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/code/package.json')); true } catch(e) { false }"` — validate package.json syntax
 - `test -f code/src/version.ts && grep -E "^export const APP_(VERSION|NAME) = " code/src/version.ts` — get the current app version and release codename for reference. `code/src/version.ts` is the app version's source of truth (reported by `/about`); `package.json` must stay in sync with it. If `version.ts` is missing or either constant is missing, abort with a clear error.
 
 If checks fail, abort with clear error message.
 
-### 1. UPDATE CLAUDE.md AND README.md IF NEEDED
-
-Check if documentation needs updating based on changes:
-
-**For CLAUDE.md:**
-- **New files/directories** — add entries to directory tree
-- **Modified commands/skills** — update references or descriptions
-- **Removed files** — remove stale entries
-- **Architecture/config changes** — update architecture notes or commands
-
-**For README.md:**
-- **New features** — add feature highlights or usage examples
-- **API changes** — update endpoint tables or request/response examples
-- **Configuration changes** — update config examples or environment variables
-- **Dependency updates** — note major version changes
-- **Breaking changes** — add migration notes or deprecation warnings
-
-Skip if no structural or documentation-relevant changes. Do NOT stage documentation files yet.
-
-### 2. ANALYZE GIT CHANGES
+### 1. ANALYZE GIT CHANGES
 
 Run these commands to understand what changed:
 - `git status --short` — list all modified/added/deleted files
@@ -47,7 +28,7 @@ Classify every changed file:
 - **Deleted** (`D`)
 - **Renamed** (`R`)
 
-### 3. DETERMINE VERSION BUMP AND UPDATE PACKAGE.JSON
+### 2. DETERMINE VERSION BUMP AND UPDATE PACKAGE.JSON
 
 Parse recent commits to determine appropriate version bump:
 
@@ -79,7 +60,7 @@ node -p "require('$PACKAGE_JSON').version"
 
 **Update `APP_VERSION` in `code/src/version.ts`:**
 
-`code/src/version.ts` is the app version's source of truth (`global.ts` imports `APP_VERSION`/`APP_NAME` and `/about` reports them), so it must equal the new package.json version. Apply the same replace-and-verify discipline as the version bump (exactly one assignment):
+`code/src/version.ts` is the app version's source of truth (it imports into `global.ts` and `/about` reports it), so it must equal the new package.json version. Apply the same replace-and-verify discipline as the version bump (exactly one assignment):
 ```js
 const fs = require("fs");
 const VERSION_TS = "code/src/version.ts";
@@ -102,13 +83,9 @@ if (!content.includes(`export const APP_VERSION = "${NEW_VERSION}"`)) {
 fs.writeFileSync(VERSION_TS, content);
 ```
 
-### 3a. UPDATE RELEASE CODENAME (`APP_NAME` in `code/src/version.ts`)
+**Update `APP_NAME` (the release codename) in `code/src/version.ts`:**
 
-Update `APP_NAME` in `code/src/version.ts` — the release codename.
-
-The codename is a deterministic function of the version (see the RELEASE CODENAME SCHEME at the end of this file): look up the final version's `MAJOR` in the Animal table and `MINOR` in the Material table, and name it `<Material> <Animal>`. `PATCH` does not affect the codename — a patch bump on the same major.minor leaves `APP_NAME` unchanged. This runs after the final version is resolved in step 3 (both when the bump is computed and when the version was already bumped in the working tree): unlike a drifted version, which is ambiguous and stops the workflow, the codename can always be recomputed, so an authored version bump whose `APP_NAME` was left stale is corrected here, not reported. If the existing `APP_NAME` already equals the derived name, no edit is needed.
-
-Apply the same replace-and-verify discipline as the version bump (exactly one assignment):
+`APP_NAME` is the release codename. It is a deterministic function of the final version (see the RELEASE CODENAME SCHEME at the end of this file): look up `MAJOR` in the Animal table and `MINOR` in the Material table, and name it `<Material> <Animal>`. `PATCH` does not affect the codename — a patch bump on the same major.minor leaves `APP_NAME` unchanged. Unlike a drifted version, which is ambiguous and stops the workflow, the codename can always be recomputed, so an authored version bump whose `APP_NAME` was left stale is corrected here, not reported. If the existing `APP_NAME` already equals the derived name, no edit is needed. Apply the same replace-and-verify discipline:
 ```js
 const fs = require("fs");
 const VERSION_TS = "code/src/version.ts";
@@ -131,27 +108,50 @@ if (!content.includes(`export const APP_NAME = "${codename}"`)) {
 fs.writeFileSync(VERSION_TS, content);
 ```
 
-**Keep the README release line in sync:** README.md may carry a near-top display line of the form `**Release:** <Codename> — app <X.Y.Z>.` (codename + version, nothing else). After resolving the final version, update that line: the app version to the final committed version on every bump, and the codename to the derived name whenever it changed (a patch-only bump leaves the name intact). If the diff already updated the line, verify it in place instead of re-applying. If README.md is absent or no such line exists yet, add it per the shape above — only if README.md exists at all.
+### 3. UPDATE README.md AND CLAUDE.md
 
-If the codename changed, the CHANGELOG entry (if the project maintains one) may note the new codename alongside the version, matching the shape of recent entries.
+Sync the project documentation to the new state before committing — the version bump from step 2 must be reflected here so the docs never drift from the committed version. These edits are mandatory, not optional.
+
+**README.md — always:**
+- **Release line** — update it to the new version and codename: `**Release:** <Material Animal> — firmware <X.Y.Z>.` Derive the codename from the new version using the release codename scheme at the end of this file; the release line is the codename's home in the README. If the README has no release line, add one near the top.
+
+**README.md — when the change is documentation-relevant:**
+- **New features** — add feature highlights or usage examples
+- **API changes** — update endpoint tables or request/response examples
+- **Configuration changes** — update config examples or environment variables
+- **Dependency updates** — note major version changes
+- **Breaking changes** — add migration notes or deprecation warnings
+
+**CLAUDE.md — always:**
+- **Version** — if CLAUDE.md records the project version, update it to the new version.
+
+**CLAUDE.md — when the change is documentation-relevant:**
+- **New files/directories** — add entries to directory tree
+- **Modified commands/skills** — update references or descriptions
+- **Removed files** — remove stale entries
+- **Architecture/config changes** — update architecture notes or commands
+
+The documentation edits are part of the commit: list them in the commit-message bullets and let `git add .` (step 5) stage them alongside the code changes.
 
 ### 4. GENERATE COMMIT MESSAGE
 
 Format the commit message:
 
 ```
-[X.Y.Z] <type>: <overview>
+[X.Y.Z, <Material Animal>] <type>: <overview>
 
 - <change 1>
 - <change 2>
 ```
 
 Rules:
-- Version in square brackets on first line (e.g., `[4.5.0]`)
+- Version and release codename in square brackets on first line, comma-separated (e.g., `[4.5.0, Brass Falcon]`); derive the codename from the new version using the release codename scheme at the end of this file
 - Conventional commit type (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `perf:`, `ci:`, `build:`, `style:`)
 - Overview is brief summary
 - One-line descriptions per file/group of changes
 - If breaking change, add `BREAKING CHANGE:` footer with migration notes
+- Always add `Authored-By: dodson Software and AI` at the end of the commit message
+- Do NOT include a `Co-Authored-By: Claude Code <noreply@anthropic.com>` line (or any other `Co-Authored-By` tagline)
 
 ### 5. STAGE ALL CHANGES
 
@@ -163,7 +163,7 @@ git add .
 
 ```bash
 git commit -m "$(cat <<'EOF'
-[X.Y.Z] <type>: <overview>
+[X.Y.Z, <Material Animal>] <type>: <overview>
 
 - <change 1>
 - <change 2>
@@ -184,7 +184,7 @@ Run:
 - **Uncommitted changes detected**: Abort with message listing conflicting files
 - **Malformed package.json**: Show parsing error and exit
 - **Git command failure**: Show error output and exit code
-- **Commit failure**: Rollback version bump (restore original package.json)
+- **Commit failure**: Rollback the version bump and documentation edits (restore original code/package.json, code/src/version.ts, README.md, and CLAUDE.md)
 
 ## Output
 
@@ -195,14 +195,14 @@ After successful commit, return:
    ```
    - <file_path>: <description>
    ```
-3. **Documentation updates**: CLAUDE.md and/or README.md (if applicable)
+3. **Documentation updates**: what was synced in README.md (release line at minimum) and CLAUDE.md
 4. **Version bump**: old → new
 5. **Summary** of notable changes
 
 ## EXAMPLE OUTPUT
 
 ```
-[4.5.0] feat: add user authentication
+[4.5.0, Brass Falcon] feat: add user authentication
 
 - src/middleware/auth.ts: implement JWT-based auth middleware
 - src/controllers/userController.ts: add login/register endpoints
@@ -211,23 +211,13 @@ After successful commit, return:
 - README.md: add authentication section with usage examples
 
 Notable changes: Users can now authenticate via JWT tokens. Breaking: /api/* routes require Authorization header.
+
+Authored-By: dodson Software and AI
 ```
-
-## IMPROVEMENTS OVER ORIGINAL
-
-| Original Issue | Fix Applied |
-|----------------|-------------|
-| Version bump ignored `feat:` | Parse conventional commits to determine bump level |
-| No prerelease support | Use `semver` library for proper version manipulation |
-| No rename detection | Add `--diff-filter=R` handling |
-| No error recovery | Try/catch with rollback on failure |
-| Monolithic design | Clear phase separation with pre-flight checks |
-| No breaking change detection | Detect `!` and `BREAKING CHANGE:` footer |
-| Manual version math | Use semver library or validated logic |
 
 ## RELEASE CODENAME SCHEME
 
-The release codename stored in `APP_NAME` in `code/src/version.ts` is derived from `APP_VERSION` (`MAJOR.MINOR.PATCH`). The mapping is deterministic:
+The release codename is derived from the version (`MAJOR.MINOR.PATCH`). It appears in the commit subject (inside the square brackets on the first line) and in the README release line. The mapping is deterministic:
 
 - **MAJOR** selects the **Animal**
 - **MINOR** selects the **Material**

@@ -73,6 +73,45 @@ describe("getDateCurrent", () => {
     const dateStr = sendCalls[0] as string;
     expect(dateStr).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
+
+  // Regression: Date#getMonth() is zero-based (January = 0); the formatter
+  // must emit one-based calendar months. Assert the exact complete response.
+  describe("with frozen time", () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("should return January as month 01, not 00", () => {
+      jest.useFakeTimers();
+      // Local-time construction keeps the assertion TZ-independent
+      jest.setSystemTime(new Date(2026, 0, 15, 12, 34, 56));
+
+      const { res, sendCalls } = createMockRes();
+      getDateCurrent(createMockReq() as Request, res as Response);
+
+      expect(sendCalls[0]).toBe("2026-01-15T12:34:56");
+    });
+
+    it("should return October as month 10, not 09", () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 9, 3, 0, 5, 9));
+
+      const { res, sendCalls } = createMockRes();
+      getDateCurrent(createMockReq() as Request, res as Response);
+
+      expect(sendCalls[0]).toBe("2026-10-03T00:05:09");
+    });
+
+    it("should return December 31 as month 12", () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 11, 31, 23, 59, 59));
+
+      const { res, sendCalls } = createMockRes();
+      getDateCurrent(createMockReq() as Request, res as Response);
+
+      expect(sendCalls[0]).toBe("2026-12-31T23:59:59");
+    });
+  });
 });
 
 describe("getDateUTC", () => {

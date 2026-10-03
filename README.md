@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Titanium Falcon — version 4.10.0
+**Release:** Cobalt Falcon — firmware 4.11.0
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -162,9 +162,9 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/api/reload-config` | Hot-reload configuration from disk |
+| GET | `/api/reload-config` | Reload configuration from disk; reports changed keys that require a restart (`restart_required`, `restart_keys`) |
 | GET | `/api/read-config` | Read current configuration as JSON |
-| POST | `/api/write-config` | Save new configuration and reload |
+| POST | `/api/write-config` | Save new configuration and reload; reports changed keys that require a restart |
 
 ### Swagger
 

@@ -6,7 +6,7 @@
 import { Pool } from "pg";
 import type { z } from "zod";
 import type { configSchema } from "../schemas/config";
-import { DEFAULT_SETTINGS, SETTINGS_SCHEMA, type AppSettings } from "../schemas/settings";
+import { appSettingsSchema, DEFAULT_SETTINGS, SETTINGS_SCHEMA, type AppSettings } from "../schemas/settings";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
 
 let pool: Pool | null = null;
@@ -53,111 +53,150 @@ function migrateThemeValue(value: unknown): unknown {
 }
 
 /**
+ * Resolve a setting key in a parsed settings object. Keys may be flat
+ * (e.g. "theme") or nested paths (e.g. "telemetry.air" → parsed.telemetry.air).
+ * Returns undefined when the key is absent.
+ */
+function getSettingValue(parsed: Record<string, unknown>, key: string): unknown {
+    if (key in parsed) {
+        return parsed[key];
+    }
+    if (key.includes(".")) {
+        let current: unknown = parsed;
+        for (const part of key.split(".")) {
+            if (current == null || typeof current !== "object" || !(part in (current as Record<string, unknown>))) {
+                return undefined;
+            }
+            current = (current as Record<string, unknown>)[part];
+        }
+        return current;
+    }
+    return undefined;
+}
+
+/**
+ * Assign a value at a setting key, creating intermediate objects as needed.
+ * Nested keys (e.g. "telemetry.air") are written to result.telemetry.air.
+ */
+function setSettingValue(result: Record<string, unknown>, key: string, value: unknown): void {
+    const dotIndex = key.indexOf(".");
+    if (dotIndex > 0) {
+        const parentKey = key.substring(0, dotIndex);
+        const childKey = key.substring(dotIndex + 1);
+        if (result[parentKey] == null || typeof result[parentKey] !== "object") {
+            result[parentKey] = {};
+        }
+        (result[parentKey] as Record<string, unknown>)[childKey] = value;
+    } else {
+        result[key] = value;
+    }
+}
+
+/**
  * Validate settings data loaded from database against the schema.
  * Returns validated settings or throws if data is invalid.
+ * Exported for testing.
  */
-function validateSettingsFromDb(data: unknown): AppSettings {
+export function validateSettingsFromDb(data: unknown): AppSettings {
     // Parse JSONB data (may be string or object depending on pg configuration)
     const parsed = parseJsonbData(data);
 
-    // Build a partial schema based on SETTINGS_SCHEMA metadata
-    const entries = Object.entries(SETTINGS_SCHEMA);
+    // Start with a deep clone of DEFAULT_SETTINGS as the base — a shallow
+    // spread would let nested assignments below mutate the shared defaults.
+    const result: Record<string, unknown> = structuredClone(DEFAULT_SETTINGS);
 
-    // Start with DEFAULT_SETTINGS as base
-    const result: Partial<AppSettings> = { ...DEFAULT_SETTINGS };
+    for (const [key, meta] of Object.entries(SETTINGS_SCHEMA)) {
+        // Resolve the key in the persisted data: flat key first, then the
+        // nested path (e.g. "telemetry.air"), then the legacy flat aliases
+        // (e.g. "air_telemetry").
+        let value = getSettingValue(parsed, key);
+        if (value === undefined && key.startsWith("telemetry.")) {
+            value = getSettingValue(parsed, `${key.substring("telemetry.".length)}_telemetry`);
+        }
 
-    for (const [key, meta] of entries) {
-        if (key in parsed) {
-            let value = (parsed as Record<string, unknown>)[key];
+        // Key not present in the persisted data — the base already holds the default
+        if (value === undefined) {
+            continue;
+        }
 
-            // Apply migrations before validation
-            if (key === "theme") {
-                value = migrateThemeValue(value);
+        // Apply migrations before validation
+        if (key === "theme") {
+            value = migrateThemeValue(value);
+        }
+
+        // Type validation and assignment based on schema metadata
+        switch (meta.type) {
+        case "string": {
+            if (typeof value !== "string") {
+                throw new Error(`Setting "${key}" must be a string, got ${typeof value}`);
+            }
+            // Check enum constraints if present
+            if (meta.options && !meta.options.includes(value)) {
+                throw new Error(`Setting "${key}" must be one of ${meta.options.join(", ")}, got "${value}"`);
+            }
+            setSettingValue(result, key, value);
+            break;
+        }
+        case "number": {
+            if (typeof value !== "number") {
+                throw new Error(`Setting "${key}" must be a number, got ${typeof value}`);
+            }
+            // Range checks
+            if (meta.min !== undefined && value < meta.min) {
+                throw new Error(`Setting "${key}" must be >= ${meta.min}, got ${value}`);
+            }
+            if (meta.max !== undefined && value > meta.max) {
+                throw new Error(`Setting "${key}" must be <= ${meta.max}, got ${value}`);
+            }
+            setSettingValue(result, key, value);
+            break;
+        }
+        case "enum": {
+            // Enum types are stored as strings
+            if (typeof value !== "string") {
+                throw new Error(`Setting "${key}" must be a string, got ${typeof value}`);
+            }
+            if (meta.options && !meta.options.includes(value)) {
+                throw new Error(`Setting "${key}" must be one of ${meta.options.join(", ")}, got "${value}"`);
+            }
+            setSettingValue(result, key, value);
+            break;
+        }
+        case "array": {
+            // Array types (like telemetry settings) are stored as JSON
+            if (!Array.isArray(value)) {
+                throw new Error(`Setting "${key}" must be an array, got ${typeof value}`);
             }
 
-            // Type validation and assignment based on schema metadata
-            switch (meta.type) {
-            case "string": {
-                if (typeof value !== "string") {
-                    throw new Error(`Setting "${key}" must be a string, got ${typeof value}`);
-                }
-                // Check enum constraints if present
-                if (meta.options && !meta.options.includes(value as string)) {
-                    throw new Error(`Setting "${key}" must be one of ${meta.options.join(", ")}, got "${value}"`);
-                }
-                (result as Record<string, string>)[key] = value;
-                break;
-            }
-            case "number": {
-                if (typeof value !== "number") {
-                    throw new Error(`Setting "${key}" must be a number, got ${typeof value}`);
-                }
-                // Range checks
-                if (meta.min !== undefined && value < meta.min) {
-                    throw new Error(`Setting "${key}" must be >= ${meta.min}, got ${value}`);
-                }
-                if (meta.max !== undefined && value > meta.max) {
-                    throw new Error(`Setting "${key}" must be <= ${meta.max}, got ${value}`);
-                }
-                (result as Record<string, number>)[key] = value;
-                break;
-            }
-            case "enum": {
-                // Enum types are stored as strings
-                if (typeof value !== "string") {
-                    throw new Error(`Setting "${key}" must be a string, got ${typeof value}`);
-                }
-                if (meta.options && !meta.options.includes(value as string)) {
-                    throw new Error(`Setting "${key}" must be one of ${meta.options.join(", ")}, got "${value}"`);
-                }
-                (result as Record<string, string>)[key] = value;
-                break;
-            }
-            case "array": {
-                // Array types (like telemetry settings) are stored as JSON
-                if (!Array.isArray(value)) {
-                    throw new Error(`Setting "${key}" must be an array, got ${typeof value}`);
-                }
-
-                // Handle telemetry arrays (both flat legacy keys and nested keys)
-                // Legacy keys: air_telemetry, water_telemetry, light_telemetry
-                // New keys: telemetry.air, telemetry.water, telemetry.light
-                const telemetryKeys = ["air", "water", "light"];
-                const isLegacyTelemetryKey = key.startsWith("air_telemetry") || key.startsWith("water_telemetry") || key.startsWith("light_telemetry");
-                const isNestedTelemetryKey = key.startsWith("telemetry.") && telemetryKeys.some(k => key === `telemetry.${k}`);
-
-                if (isLegacyTelemetryKey || isNestedTelemetryKey) {
-                    // Extract the actual telemetry key (either "air", "water", "light")
-                    const telemetryKey = isLegacyTelemetryKey ? key.replace("_telemetry", "") : key.replace("telemetry.", "");
-
-                    // Get the default value for this telemetry type
-                    const defaultValue = DEFAULT_SETTINGS.telemetry[telemetryKey as keyof typeof DEFAULT_SETTINGS.telemetry] as Array<{ value: string }>;
-
-                    // Start with DB values, then add any new items from defaults that aren't in DB
-                    const dbValue = value as Array<{ value: string }>;
-                    const merged = [...dbValue];
-                    for (const defaultItem of defaultValue) {
-                        if (!merged.some(item => item.value === defaultItem.value)) {
-                            merged.push(defaultItem);
-                        }
+            // For telemetry arrays, start with the persisted values, then add
+            // any default items added since, so existing installs pick up
+            // newly added default fields.
+            const telemetryKey = key.startsWith("telemetry.") ? key.substring("telemetry.".length) : undefined;
+            if (telemetryKey !== undefined && telemetryKey in DEFAULT_SETTINGS.telemetry) {
+                const defaults = (DEFAULT_SETTINGS.telemetry as Record<string, Array<{ value: string }>>)[telemetryKey];
+                const dbValue = value as Array<{ value: string }>;
+                const merged = [...dbValue];
+                for (const defaultItem of defaults) {
+                    if (!merged.some(item => item.value === defaultItem.value)) {
+                        merged.push(defaultItem);
                     }
-                    (result as Record<string, unknown[]>)[key] = merged;
-                } else {
-                    (result as Record<string, unknown[]>)[key] = value;
                 }
-                break;
+                setSettingValue(result, key, merged);
+            } else {
+                setSettingValue(result, key, value);
             }
-            default:
-                // Unknown type, skip this entry
-                continue;
-            }
-        } else {
-            // Key not in parsed data, use default from DEFAULT_SETTINGS
-            (result as Record<string, unknown>)[key] = DEFAULT_SETTINGS[key as keyof AppSettings];
+            break;
+        }
+        default:
+            // Unknown type, skip this entry
+            continue;
         }
     }
 
-    return result as AppSettings;
+    // Validate the reconstructed object against the canonical schema — this
+    // strips stray top-level keys (literal "telemetry.air", legacy aliases)
+    // and fills in any missing defaults.
+    return appSettingsSchema.parse(result);
 }
 
 /**
@@ -207,15 +246,17 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
         } finally {
             check.release();
         }
-
-        // Await the pool end to ensure proper cleanup
-        await bootstrapPool.end();
     } catch (err: unknown) {
         // Bootstrap failed — likely no CREATEDB privilege or connection issue.
         // Log a warning so the user knows; we'll still try to connect directly below
         // in case the database already exists but template1 access is restricted.
         // eslint-disable-next-line no-console
         console.warn(`[settingsStore] Could not bootstrap via template1: ${(ensureError(err)).message}. Will attempt direct connection.`);
+    } finally {
+        // Close the bootstrap pool on every path — including when connect,
+        // the existence query, or CREATE DATABASE threw — so a failed
+        // bootstrap never leaks its connections.
+        await bootstrapPool.end();
     }
 
     pool = new Pool({
@@ -249,11 +290,15 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
             try {
                 cache = validateSettingsFromDb(result.rows[0].data);
             } catch (validateErr: unknown) {
-                // Invalid data in DB - log warning and seed with defaults
+                // Invalid data in DB - log warning and repair the row with defaults.
+                // Use UPSERT: the row already exists (that's how we got here), so a
+                // plain INSERT would fail on the primary key and leave the corrupt
+                // row in place.
                 // eslint-disable-next-line no-console
                 console.warn(`[settingsStore] Invalid settings data in database: ${(ensureError(validateErr)).message}. Seeding with defaults.`);
                 await client.query(
-                    "INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW())",
+                    `INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW())
+                     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
                     [JSON.stringify(DEFAULT_SETTINGS)]
                 );
                 cache = structuredClone(DEFAULT_SETTINGS);

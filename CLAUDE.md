@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.10.0)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.0)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -73,11 +73,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── common/
     │       │   └── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
     │       ├── controllers/
+    │       │   ├── configController.test.ts   -- diffConfigReload(), reload-config/write-config restart_required reporting
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
     │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running, hard timeout
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchIt/postIt/fetchItOnly non-OK responses
     │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
     │       ├── routes/
+    │       │   ├── configRoutes.test.ts       -- /api/reload-config, /api/read-config, /api/write-config via supertest
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
     │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501)
     │       │   ├── pingerRoutes.test.ts       -- All /ippinger/* routes via supertest (about, read-config, write-config, restart, ping, ping/:target, analyze-ippinger)
@@ -85,8 +87,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
     │       ├── schemas/
     │       │   ├── config.test.ts     -- Zod v4 config schema validation tests
-    │       │   ├── postBody.test.ts   -- Zod POST body schema tests
-    │       │   └── settings.test.ts   -- AppSettings schema, DEFAULT_SETTINGS, SETTINGS_SCHEMA metadata
+    │       │   └── postBody.test.ts   -- Zod POST body schema tests
+    │       ├── services/
+    │       │   ├── settingsStore.test.ts     -- validateSettingsFromDb: nested/legacy key resolution, migrations, schema validation
+    │       │   └── settingsStoreInit.test.ts -- init(): seeding, corrupt-row repair (UPSERT), bootstrap pool cleanup
     │       └── dodsonlabs/
     │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers)
     │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation)
@@ -243,9 +247,9 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/api/reload-config` | Hot-reloads configuration from disk |
+| GET | `/api/reload-config` | Reloads configuration from disk; only logger settings apply immediately, other changed keys are reported in `restart_keys` |
 | GET | `/api/read-config` | Returns current configuration as JSON |
-| POST | `/api/write-config` | Saves new configuration and hot-reloads |
+| POST | `/api/write-config` | Saves new configuration and reloads; reports changed keys that require a restart |
 
 ### General Routes (no prefix)
 

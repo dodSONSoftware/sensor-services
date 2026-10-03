@@ -134,7 +134,21 @@ db-password: "testpass"
 
             expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
-            expect(res.body.message).toBe("Configuration updated successfully");
+            // newConfig differs from the previously loaded test config in
+            // operational keys, so the reload contract reports them as
+            // restart-required (the log-level change is applied live)
+            expect(res.body.restart_required).toBe(true);
+            expect(res.body.restart_keys).toEqual([
+                "case-sensitive",
+                "db-password",
+                "express-port",
+                "mqtt-broker-ip-address",
+                "mqtt-topic-command",
+                "mqtt-topic-command-response",
+                "mqtt-topic-telemetry",
+            ]);
+            expect(res.body.applied_keys).toEqual(["log-level"]);
+            expect(res.body.message).toContain("restart required for:");
 
             // Verify the config file was written
             const configFileContent = fs.readFileSync(TEST_CONFIG_PATH, "utf8");

@@ -9,7 +9,6 @@ describe("configSchema", () => {
   const baseConfig = {
     "log-level": "info" as const,
     "express-port": 32000,
-    "prometheus-port": 3301,
     "mqtt-broker-ip-address": "127.0.0.1",
     "mqtt-topic-telemetry": "iot/v3/telemetry",
     "mqtt-topic-command": "iot/v3/command",
@@ -29,15 +28,26 @@ describe("configSchema", () => {
     expect(result["fetch-timeout-ms"]).toBeUndefined();
   });
 
-  it("should strip removed V2 info-request/info-response topic keys", () => {
+  it("should reject a typo'd key instead of silently stripping it (strict)", () => {
+    // Regression: "forward-sensor-log" (typo of forward-sensor-logs) used to
+    // be stripped during parsing, leaving the app on the default value.
+    const config = { ...baseConfig, "forward-sensor-log": true };
+    expect(() => validateConfig(config)).toThrow(/Unrecognized key/);
+  });
+
+  it("should reject removed V2 info-request/info-response topic keys (strict)", () => {
     const config = {
       ...baseConfig,
       "mqtt-topic-info-request": "iot/v2/info-request",
       "mqtt-topic-info-response": "iot/v2/info-response",
     };
-    const result = validateConfig(config);
-    expect(result["mqtt-topic-info-request"]).toBeUndefined();
-    expect(result["mqtt-topic-info-response"]).toBeUndefined();
+    expect(() => validateConfig(config)).toThrow(/Unrecognized key/);
+  });
+
+  it("should report every unrecognized key in the error", () => {
+    const config = { ...baseConfig, "bogus-one": 1, "bogus-two": "x" };
+    expect(() => validateConfig(config)).toThrow(/"bogus-one"/);
+    expect(() => validateConfig(config)).toThrow(/"bogus-two"/);
   });
 
   it("should accept config without mqtt-topic-log (optional)", () => {

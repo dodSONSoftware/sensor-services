@@ -7,10 +7,12 @@ import { z } from "zod";
 
 /**
  * Zod schema for config.yml.
- * All keys are required and must match their expected types.
- * Optional keys (swagger-server-url) are added via .partial() at the call site.
+ * All required keys must match their expected types.
+ * Strict: unknown keys are rejected rather than silently stripped, so a typo
+ * (e.g. "forward-sensor-log" instead of "forward-sensor-logs") or a leftover
+ * from an older config format fails validation instead of being ignored.
  */
-export const configSchema = z.object({
+export const configSchema = z.strictObject({
     "log-level": z.enum(["error", "warn", "info", "debug"], {
         error: "log-level must be one of: error, warn, info, debug",
     }),
