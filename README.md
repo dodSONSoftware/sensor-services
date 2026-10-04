@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Carbon Falcon — firmware 4.12.7
+**Release:** Carbon Falcon — firmware 4.12.8
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)

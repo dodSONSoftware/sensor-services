@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.7)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.8)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -83,8 +83,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
     │       │   ├── logController.test.ts      -- /sensors/logs/:source: LogQL injection guard (400), level allowlist, AbortSignal wiring, loki-url never logged verbatim (credential in URL never appears in emitted logs)
     │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running (waiter publishes own command), concurrency (real MqttCommandControl), hard timeout
-    │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchIt/postIt/fetchItOnly non-OK responses
+    │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchItOnly non-OK responses, getAnalyzeIpPinger degradation on malformed upstream bodies (Zod-validated), camelCase ipAddress normalization
     │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
+    │       ├── middleware/
+    │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through)
     │       ├── routes/
     │       │   ├── configRoutes.test.ts       -- /api/reload-config, /api/read-config, /api/write-config via supertest
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
@@ -405,6 +407,7 @@ case-sensitive: true
 - **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list; `validateRoutesHelp()` in `index.ts` checks for drift at startup between `__routesHelp` entries and actual registered routes.
 - **`createAnalyzeResult` spreads its `origin` argument** (no longer mutates in-place).
 - **`pingerController.ts` uses `async/await`** consistently — `fetchIt()`/`postIt()`/`fetchItOnly()` all use async/await. `getAnalyzeIpPinger()` gracefully degrades when the pinger service is unreachable (returns live sensors with a warning).
+- **IP-pinger responses are schema-validated before analysis** — `getAnalyzeIpPinger()` Zod-validates the `/read-config` body (`ippingerConfigSchema`: `devices` array of `{ source, ipAddress | ip-address }`) because `fetchItOnly()` only guarantees 2xx + parseable JSON, not the schema. An HTTP 200 body that fails validation degrades exactly like an unavailable pinger (200 + `warning` + `live_sensors` only) — it must never reach `analyzeIt()` unchecked, since a rejected async handler is not caught by Express 4 and the process-level `unhandledRejection` handler would initiate shutdown. The current ip-pinger's camelCase `ipAddress` is normalized to the internal kebab-case `ip-address` key (older kebab-case builds are also accepted).
 - **`validateIpAddress()`** in pingerController validates IPv4 addresses strictly — rejects private/reserved ranges and URL injection characters. Used by `getPing()`.
 - **`fetchWithTimeout()`** in pingerController wraps native `fetch()` with `AbortSignal.timeout()`.
 - **Command deduplication** — `MqttNetworking` tracks outbound command IDs in `seen_command_ids` map with TTL-based eviction and max size cap to prevent duplicates on reconnect.
@@ -414,7 +417,7 @@ case-sensitive: true
 - **Config writes are atomic** — `/api/write-config` uses `write_file_atomic()` (unique same-directory temp file + rename), so a failure mid-write can never truncate the live `config.yml`; the temp file is removed and the prior config preserved on failure.
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
-- **Body validation** — all POST bodies validated with Zod (`validatePostBody()`). Returns 400 if body is missing or not a JSON object. Replaces `req.body` with the validated object.
+- **Body validation** — a present body is validated as a JSON object with Zod (`validatePostBody()`); returns 400 if a body is present but not a JSON object. A missing body is passed through untouched — "body required" is a route-level concern owned by each controller (e.g. `configController`'s write-config returns its own 400). Replaces `req.body` with the validated object.
 - **API metrics middleware** — `createApiMetricsMiddleware()` (common/metrics.ts) wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`. The route label is the matched route pattern; unmatched requests collapse to the bounded `"unmatched"` sentinel so arbitrary 404 paths cannot grow label cardinality without bound.
 - **Graceful shutdown** — 15-second hard timeout safety net (cleared before exit, so it can never log after the logger closes) plus a re-entrancy guard against double signals. Sequence lives in `common/shutdown.ts` (`runGracefulShutdown()`): stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → emit the final shutdown log → close the active logger exactly once (once-guarded, so buffered transports like the Loki batch timer flush) → caller exits 0. Nothing may log after the close.
 - **Config reload applies only hot-reloadable keys at runtime** — `doReloadConfig()` updates the active in-memory config with only `HOT_RELOADABLE_KEYS` (currently `log-level`) and mutates the log level on the existing logger instance via `Logger.setLevel()`. Restart-required values from the file stay inactive until restart, so `/api/read-config` never reports inactive values as active and long-lived components never hold a closed logger.

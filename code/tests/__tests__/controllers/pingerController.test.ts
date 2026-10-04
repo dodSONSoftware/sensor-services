@@ -365,4 +365,159 @@ describe("getAnalyzeIpPinger", () => {
     expect(res.json).toHaveBeenCalledWith({ error: "MQTT broker unavailable" });
     expect(network.publish_mqtt_message).not.toHaveBeenCalled();
   });
+
+  describe("malformed upstream response", () => {
+    const liveSensors = [
+      { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
+    ];
+
+    function mockPingerResponse(body: unknown) {
+      (globalThis.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(body),
+      });
+    }
+
+    function makeRes() {
+      return {
+        status: jest.fn().mockReturnThis(),
+        contentType: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      };
+    }
+
+    // Each case: a 2xx response whose body does not match the expected schema
+    // must degrade to live-sensors-only (like an unavailable pinger), not
+    // reject the async handler (Express 4 would surface the rejection as an
+    // unhandledRejection, which triggers process shutdown).
+    const malformedBodies: Record<string, unknown> = {
+      "an empty object": {},
+      "a null devices array": { devices: null },
+      "a non-array devices": { devices: "not-an-array" },
+      "a device with a non-string source": { devices: [{ source: 123 }] },
+      "a device missing any ip field": { devices: [{ source: "sensor-1" }] },
+    };
+
+    for (const [label, body] of Object.entries(malformedBodies)) {
+      it(`should return a partial result with a warning when the pinger returns ${label}`, async () => {
+        mockPingerResponse(body);
+
+        const network = createMockNetwork(liveSensors);
+        const res: any = makeRes();
+
+        await getAnalyzeIpPinger(
+          {} as express.Request,
+          res,
+          network,
+          "http://192.168.1.4:3300",
+          true,
+          10_000
+        );
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.contentType).toHaveBeenCalledWith("application/json");
+        expect(res.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            warning: "ip-pinger returned an invalid configuration — analysis incomplete",
+            live_sensors: liveSensors,
+          })
+        );
+      });
+    }
+
+    it("should normalize camelCase ipAddress from current ip-pinger builds and run full analysis", async () => {
+      mockPingerResponse({
+        logLevel: "info",
+        alwaysLogErrors: true,
+        apiPort: 3300,
+        intervalSecs: 60,
+        devices: [
+          { source: "sensor-1", ipAddress: "192.168.1.10", deviceType: "sensor" },
+        ],
+      });
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = makeRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:3300",
+        true,
+        10_000
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const sendArg = (res.send as jest.Mock).mock.calls[0][0];
+      expect(sendArg).not.toHaveProperty("warning");
+      // OK requires the sensor IP to equal the (normalized) config IP — a
+      // failed normalization would surface as "IP Address Mismatch" instead.
+      expect(sendArg).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ state: "OK" }),
+        ])
+      );
+    });
+
+    it("should use the camelCase ipAddress in mismatch results", async () => {
+      mockPingerResponse({
+        devices: [
+          { source: "sensor-1", ipAddress: "192.168.1.99", deviceType: "sensor" },
+        ],
+      });
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = makeRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:3300",
+        true,
+        10_000
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const sendArg = (res.send as jest.Mock).mock.calls[0][0];
+      expect(sendArg).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            state: "IP Address Mismatch",
+            "state-value": { sensor: "192.168.1.10", config: "192.168.1.99" },
+          }),
+        ])
+      );
+    });
+
+    it("should still accept kebab-case ip-address from older ip-pinger builds", async () => {
+      mockPingerResponse({
+        devices: [
+          { source: "sensor-1", "ip-address": "192.168.1.10" },
+        ],
+      });
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = makeRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:3300",
+        true,
+        10_000
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const sendArg = (res.send as jest.Mock).mock.calls[0][0];
+      expect(sendArg).not.toHaveProperty("warning");
+      expect(sendArg).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ state: "OK" }),
+        ])
+      );
+    });
+  });
 });

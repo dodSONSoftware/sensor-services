@@ -7,6 +7,7 @@ import type * as express from "express";
 import { logger } from "../common/global";
 import { InternalServerError, Json, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
+import { z } from "zod";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { MqttBrokerUnavailableError, mqtt_command_get_messages } from "./sensorController";
 
@@ -32,6 +33,28 @@ export interface AnalyzeResultBase {
     state: string;
     "state-value": Record<string, string>;
 }
+
+// Runtime validation for the ip-pinger /read-config response. fetchItOnly()
+// only guarantees a 2xx response that parsed as JSON — not the schema. A
+// partially upgraded or incompatible ip-pinger can return HTTP 200 with a
+// body that lacks `devices` or has malformed entries; that data is treated
+// as "unavailable" by the caller.
+//
+// Current ip-pinger builds return camelCase `ipAddress`; older builds used
+// kebab-case `ip-address`. Accept both and normalize to the internal
+// kebab-case key.
+const ippingerDeviceSchema = z.object({
+    source: z.string(),
+    ipAddress: z.string().optional(),
+    "ip-address": z.string().optional(),
+}).refine(
+    d => d.ipAddress !== undefined || d["ip-address"] !== undefined,
+    { message: "missing ipAddress" }
+);
+
+const ippingerConfigSchema = z.object({
+    devices: z.array(ippingerDeviceSchema),
+});
 
 // ---- private functions
 
@@ -190,8 +213,32 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
     const url = `${ip_pinger_web_api}/read-config`;
     const ippingerConfig = await fetchItOnly("getAnalyzeIpPinger", url, timeoutMs);
 
-    if (ippingerConfig === null) {
-        // IP pinger unreachable — fall back to live sensors only
+    // Validate the upstream response at the boundary instead of casting it.
+    // An unchecked `as { devices: IppingerDevice[] }` let `undefined`/`null`
+    // reach analyzeIt() (TypeError in the async handler), and Express 4 does
+    // not catch handler rejections — the process-level unhandledRejection
+    // handler would then initiate shutdown.
+    let ippinger_devices: IppingerDevice[] | null = null;
+    let invalid_config = false;
+    if (ippingerConfig !== null) {
+        const parsed = ippingerConfigSchema.safeParse(ippingerConfig);
+        if (parsed.success) {
+            // Normalize to the internal kebab-case key (current ip-pinger
+            // builds send camelCase `ipAddress`, older builds `ip-address`).
+            ippinger_devices = parsed.data.devices.map(d => ({
+                source: d.source,
+                "ip-address": d.ipAddress ?? (d["ip-address"] as string),
+            }));
+        } else {
+            invalid_config = true;
+            const issues = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
+            logger()?.write_warn("pingerController.ts/getAnalyzeIpPinger", `IP pinger returned an invalid configuration: ${issues}`);
+        }
+    }
+
+    if (ippinger_devices === null) {
+        // IP pinger unreachable (or returned an invalid configuration) —
+        // fall back to live sensors only
         const sensors = await fetch_live_sensors(network, res);
         if (sensors === null) {
             return;
@@ -199,12 +246,16 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
 
         logger()?.write_warn(
             "pingerController.ts/getAnalyzeIpPinger",
-            "IP pinger service unavailable — returning partial result with live sensors only"
+            invalid_config
+                ? "IP pinger returned an invalid configuration — returning partial result with live sensors only"
+                : "IP pinger service unavailable — returning partial result with live sensors only"
         );
         res.status(OK);
         res.contentType(Json);
         res.send({
-            warning: "ip-pinger service unavailable — analysis incomplete",
+            warning: invalid_config
+                ? "ip-pinger returned an invalid configuration — analysis incomplete"
+                : "ip-pinger service unavailable — analysis incomplete",
             live_sensors: sensors,
         });
         return;
@@ -216,7 +267,6 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
         return;
     }
 
-    const ippinger_devices = (ippingerConfig as { devices: IppingerDevice[] })["devices"];
     const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
 
     res.status(OK);

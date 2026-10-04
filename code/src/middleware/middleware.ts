@@ -63,12 +63,25 @@ export class CreateMiddleware extends RoutesCreatorBase {
     // **** private functions
 
     /**
-     * Validates that the request body is a plain object using Zod.
-     * Returns 400 with an error message if validation fails, otherwise calls next().
+     * Validates that a present request body is a plain object using Zod.
+     *
+     * "A body is required" is a route-level concern owned by each controller
+     * (e.g. configController's writeConfig), so this middleware validates a
+     * body when one is present but never requires one: a request with no body
+     * is passed through untouched. In the production stack `express.json()`
+     * (mounted earlier) already normalizes an empty body to `{}`, so this
+     * no-body branch is a defensive guard for the case where this middleware
+     * is ever mounted without a preceding body-parser.
+     *
+     * When a body IS present it must be a JSON object: returns 400 with an
+     * error message otherwise, and replaces req.body with the validated object
+     * so downstream handlers get clean data.
      */
     private _validateBodyMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
         if (request.body === undefined || request.body === null) {
-            response.status(400).contentType(Json).send({ error: "request body is required" });
+            // No body sent — nothing to validate. Let the route decide whether
+            // one is required.
+            next();
             return;
         }
 
