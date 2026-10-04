@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.2)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.3)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -388,6 +388,7 @@ case-sensitive: true
 - **Sensor command slots are serialized with an atomic `claim()`** — a second concurrent caller of the same command type waits, then publishes its OWN command; results are snapshotted at wait-completion so a caller never responds with another caller's (or stale/empty) results.
 - **MQTT messages on untracked topics are dropped** — the broker is unauthenticated, so `MqttNetworking.on_message()` warns and drops any message whose topic is not one of the subscribed topics (command-response, V3 info-request, and the log topic when forwarding is enabled).
 - **`on_disconnect()` and `on_error()` rely on the mqtt library's auto-reconnect** — manual reconnection was removed (created race conditions). The `reconnectPeriod: 5000` handles reconnection automatically.
+- **`feels_like_c` uses the NOAA/NWS Rothfusz regression** — `MqttNetworking.calculateHeatIndex()` applies the 9-term Rothfusz regression (valid at T >= 80°F) with the low-humidity (RH < 13%) and high-humidity (RH > 85%, T <= 87°F) corrections; below 80°F the preliminary approximation is used, below 20°C the air temperature itself, and missing/non-finite inputs return undefined (enrichment then safely omits `feels_like_c`).
 - **Native `fetch` API is used** (Node 18+ built-in) — `node-fetch` was removed from dependencies.
 - **`swagger-server-url` is configurable** via `config.yml` (falls back to auto-derived from routable IP + port). `routableAddress()` skips loopback and Docker-internal addresses.
 - **`case-sensitive` is configurable** via `config.yml` (used by `analyzeIt()` in pingerController).

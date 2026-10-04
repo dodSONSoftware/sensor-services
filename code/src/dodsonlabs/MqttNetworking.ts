@@ -62,13 +62,20 @@ export class MqttNetworking implements IMqttNetworking {
 
     /**
      * Calculate heat index (feels like temperature) from temperature and humidity.
-     * Uses the Rothfusz regression formula.
+     * Uses the NOAA/NWS Rothfusz regression (valid at T >= 80°F / 26.67°C),
+     * including the standard low-humidity and high-humidity corrections.
+     * Below 80°F the accepted preliminary approximation is used; below
+     * HEAT_INDEX_THRESHOLD_C the air temperature itself is returned.
      * @param tempC Temperature in Celsius
      * @param humidity Relative humidity (0-100)
-     * @returns Heat index in Celsius (4 decimal places), or original temp if conditions are not suitable
+     * @returns Heat index in Celsius, or the original temperature when the
+     * heat index is not applicable, or undefined for missing/non-finite input
      */
     public calculateHeatIndex(tempC: number | undefined, humidity: number | undefined): number | undefined {
         if (tempC === undefined || humidity === undefined) {
+            return undefined;
+        }
+        if (!Number.isFinite(tempC) || !Number.isFinite(humidity)) {
             return undefined;
         }
 
@@ -78,18 +85,38 @@ export class MqttNetworking implements IMqttNetworking {
             return tempC;
         }
 
-        // Convert Celsius to Fahrenheit for the formula
+        // The formulas are defined in Fahrenheit
         const tempF = tempC * 9 / 5 + 32;
 
-        // Rothfusz regression formula
-        let hi = 0.5 * (tempF + 61.0 + ((tempF - 68.0) * 1.2) + (humidity * 0.094));
+        if (tempF >= 80) {
+            // Rothfusz regression (NOAA/NWS): 9 terms in T and RH
+            let hi =
+                -42.379
+                + 2.04901523 * tempF
+                + 10.14333127 * humidity
+                - 0.22475541 * tempF * humidity
+                - 0.00683783 * tempF ** 2
+                - 0.05481717 * humidity ** 2
+                + 0.00122874 * tempF ** 2 * humidity
+                + 0.00085282 * tempF * humidity ** 2
+                - 0.00000199 * tempF ** 2 * humidity ** 2;
 
-        // Apply adjustment for high humidity and high temperature
-        if (hi > 79) {
-            hi += -0.1 * (humidity - 85) * (107 - tempF) * 0.0001;
+            // Low-humidity correction (RH < 13%, 80°F <= T <= 112°F)
+            if (humidity < 13 && tempF <= 112) {
+                hi -= ((13 - humidity) / 4) * Math.sqrt((17 - Math.abs(tempF - 95)) / 17);
+            }
+
+            // High-humidity correction (RH > 85%, T <= 87°F)
+            if (humidity > 85 && tempF <= 87) {
+                hi += ((humidity - 85) / 10) * ((87 - tempF) / 5);
+            }
+
+            return (hi - 32) * 5 / 9;
         }
 
-        // Return result in Celsius
+        // 20°C–26.67°C (68–80°F): below the regression's applicability range —
+        // use the accepted preliminary approximation
+        const hi = 0.5 * (tempF + 61.0 + ((tempF - 68.0) * 1.2) + (humidity * 0.094));
         return (hi - 32) * 5 / 9;
     }
 

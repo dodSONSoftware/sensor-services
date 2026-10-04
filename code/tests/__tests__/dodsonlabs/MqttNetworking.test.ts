@@ -208,6 +208,86 @@ describe("MqttNetworking", () => {
         expect(anyNetworking.mqtt_topic_log).toBe("iot/v3/log");
     });
 
+    // ---- heat index (calculateHeatIndex)
+
+    // Table-driven reference values. Expected outputs are derived from the
+    // published NOAA/NWS Rothfusz regression (9-term fit valid at T >= 80°F)
+    // with the documented low-humidity (RH < 13%, 80°F <= T <= 112°F) and
+    // high-humidity (RH > 85%, T <= 87°F) corrections — NOT from the
+    // implementation. Anchor: the NWS-published example 90°F / 70% RH ->
+    // 106°F (41°C).
+    describe("calculateHeatIndex (Rothfusz regression)", () => {
+        // Explicit absolute tolerance (°C) for floating-point comparison
+        const TOL_C = 0.01;
+
+        const closeTo = (actual: number | undefined, expected: number, tolerance: number = TOL_C) => {
+            expect(typeof actual).toBe("number");
+            expect(Math.abs(actual! - expected)).toBeLessThan(tolerance);
+        };
+
+        it("should return the air temperature below the applicability threshold", () => {
+            // 18°C (64.4°F) < 20°C threshold
+            expect(networking.calculateHeatIndex(18, 80)).toBe(18);
+        });
+
+        it("should use the preliminary approximation in the 68–80°F band", () => {
+            // 24°C (75.2°F), 70% RH — below the regression's 80°F applicability
+            // range, the accepted preliminary formula applies:
+            // HI = 0.5 * (T + 61 + (T-68) * 1.2 + RH * 0.094)
+            closeTo(networking.calculateHeatIndex(24, 70), 24.2833);
+        });
+
+        it("should match the Rothfusz regression at 90°F / 40% RH", () => {
+            // 32.2222°C = 90°F, 40% RH -> 90.6797°F = 32.5998°C
+            closeTo(networking.calculateHeatIndex(32.2222, 40), 32.5998);
+        });
+
+        it("should match the NWS-published example at 90°F / 70% RH", () => {
+            // NWS reference: 90°F (32°C), 70% RH feels like 106°F (41°C).
+            // Formula-exact value: 105.9220°F = 41.0678°C.
+            closeTo(networking.calculateHeatIndex(32.2222, 70), 41.0678, 0.1);
+        });
+
+        it("should handle moderately hot / moderate humidity (105°F / 75% RH)", () => {
+            // 40.5556°C = 105°F, 75% RH -> 176.1350°F = 80.0750°C
+            closeTo(networking.calculateHeatIndex(40.5556, 75), 80.075);
+        });
+
+        it("should handle high temperature / high humidity (110°F / 90% RH)", () => {
+            // 43.3333°C = 110°F, 90% RH -> 246.9977°F = 119.4432°C
+            closeTo(networking.calculateHeatIndex(43.3333, 90), 119.4432);
+        });
+
+        it("should apply the low-humidity correction (RH < 13%, 80°F <= T <= 112°F)", () => {
+            // 35°C = 95°F, 10% RH: regression 90.1996°F minus
+            // ((13-10)/4) * sqrt((17-|95-95|)/17) = 0.75°F -> 89.4496°F = 31.9164°C
+            const hi = networking.calculateHeatIndex(35, 10);
+            closeTo(hi, 31.9164);
+            // The correction must keep the value materially below the uncorrected
+            // regression result at this humidity.
+            expect(hi).toBeLessThan(32.1);
+        });
+
+        it("should apply the high-humidity correction (RH > 85%, T <= 87°F)", () => {
+            // 29.4444°C = 85°F, 90% RH: regression plus
+            // ((90-85)/10) * ((87-85)/5) = +0.2°F -> 101.7808°F = 38.7671°C
+            closeTo(networking.calculateHeatIndex(29.4444, 90), 38.7671);
+        });
+
+        it("should not apply the high-humidity correction above 87°F", () => {
+            // 90°F, 90% RH: T > 87°F, so no correction — plain regression
+            // (121.9012°F = 49.9451°C); with the correction it would differ.
+            closeTo(networking.calculateHeatIndex(32.2222, 90), 49.9451);
+        });
+
+        it("should return undefined for missing or non-finite inputs", () => {
+            expect(networking.calculateHeatIndex(undefined, 50)).toBeUndefined();
+            expect(networking.calculateHeatIndex(30, undefined)).toBeUndefined();
+            expect(networking.calculateHeatIndex(NaN, 50)).toBeUndefined();
+            expect(networking.calculateHeatIndex(30, Number.POSITIVE_INFINITY)).toBeUndefined();
+        });
+    });
+
     it("should disable offline QoS-0 queueing so commands cannot be delivered after the fact", () => {
         // mqtt.js queues QoS-0 publishes while disconnected and flushes them on
         // reconnect — a reboot/write-config issued during an outage must never
