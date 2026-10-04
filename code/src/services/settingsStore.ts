@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import type { z } from "zod";
 import type { configSchema } from "../schemas/config";
 import { appSettingsSchema, DEFAULT_SETTINGS, SETTINGS_SCHEMA, type AppSettings } from "../schemas/settings";
@@ -259,7 +259,12 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
         await bootstrapPool.end();
     }
 
-    pool = new Pool({
+    // Build the pool locally and only assign it to module-level state after
+    // initialization has fully succeeded — `pool !== null` must mean settings
+    // persistence is initialized and usable. On failure the local pool is
+    // closed and `pool` stays null, so the service runs in real in-memory
+    // mode (see patchSettings/getSettings).
+    const newPool = new Pool({
         host: dbHost,
         port: dbPort,
         user: dbUser,
@@ -269,50 +274,76 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
         statement_timeout: 30000,      // 30 second timeout for queries
     });
 
-    // Test connection — fail fast if unreachable or DB still missing.
-    const client = await pool.connect();
+    let client: PoolClient | null = null;
     try {
-        await client.query("SELECT 1");
+        // Test connection — fail fast if unreachable or DB still missing.
+        client = await newPool.connect();
+        try {
+            await runInitQueries(client);
+        } finally {
+            // Always release the client, even when initialization failed after
+            // a connection was obtained.
+            client.release();
+            client = null;
+        }
+        // Initialization succeeded — expose the pool.
+        pool = newPool;
+    } catch (err: unknown) {
+        // Close the partially created pool so no connections are leaked and
+        // later settings operations do not keep hitting a failed database.
+        try {
+            await newPool.end();
+        } catch (endErr: unknown) {
+            // eslint-disable-next-line no-console
+            console.warn(`[settingsStore] Failed to close pool after initialization failure: ${(ensureError(endErr)).message}`);
+        }
+        throw err;
+    }
+}
 
-        // Ensure table exists.
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS app_settings (
-                id SERIAL PRIMARY KEY,
-                data JSONB NOT NULL,
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
+/**
+ * Run the initialization queries against a connected client: verify the
+ * connection, ensure the table exists, and load or seed the settings row.
+ */
+async function runInitQueries(client: PoolClient): Promise<void> {
+    await client.query("SELECT 1");
 
-        // Load existing settings or seed defaults.
-        const result = await client.query("SELECT data FROM app_settings WHERE id = 1");
-        if (result.rows.length > 0 && result.rows[0].data) {
-            // Validate and parse the JSONB data
-            try {
-                cache = validateSettingsFromDb(result.rows[0].data);
-            } catch (validateErr: unknown) {
-                // Invalid data in DB - log warning and repair the row with defaults.
-                // Use UPSERT: the row already exists (that's how we got here), so a
-                // plain INSERT would fail on the primary key and leave the corrupt
-                // row in place.
-                // eslint-disable-next-line no-console
-                console.warn(`[settingsStore] Invalid settings data in database: ${(ensureError(validateErr)).message}. Seeding with defaults.`);
-                await client.query(
-                    `INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW())
-                     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-                    [JSON.stringify(DEFAULT_SETTINGS)]
-                );
-                cache = structuredClone(DEFAULT_SETTINGS);
-            }
-        } else {
-            // Use ON CONFLICT to handle potential race conditions during concurrent init()
+    // Ensure table exists.
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id SERIAL PRIMARY KEY,
+            data JSONB NOT NULL,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+
+    // Load existing settings or seed defaults.
+    const result = await client.query("SELECT data FROM app_settings WHERE id = 1");
+    if (result.rows.length > 0 && result.rows[0].data) {
+        // Validate and parse the JSONB data
+        try {
+            cache = validateSettingsFromDb(result.rows[0].data);
+        } catch (validateErr: unknown) {
+            // Invalid data in DB - log warning and repair the row with defaults.
+            // Use UPSERT: the row already exists (that's how we got here), so a
+            // plain INSERT would fail on the primary key and leave the corrupt
+            // row in place.
+            // eslint-disable-next-line no-console
+            console.warn(`[settingsStore] Invalid settings data in database: ${(ensureError(validateErr)).message}. Seeding with defaults.`);
             await client.query(
-                "INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW()) ON CONFLICT (id) DO NOTHING",
+                `INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW())
+                 ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
                 [JSON.stringify(DEFAULT_SETTINGS)]
             );
             cache = structuredClone(DEFAULT_SETTINGS);
         }
-    } finally {
-        client.release();
+    } else {
+        // Use ON CONFLICT to handle potential race conditions during concurrent init()
+        await client.query(
+            "INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW()) ON CONFLICT (id) DO NOTHING",
+            [JSON.stringify(DEFAULT_SETTINGS)]
+        );
+        cache = structuredClone(DEFAULT_SETTINGS);
     }
 }
 

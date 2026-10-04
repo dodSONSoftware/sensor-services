@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.3)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.4)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -176,6 +176,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 **SettingsStore** (`services/settingsStore.ts`) — PostgreSQL-backed persistence for application settings:
 - Connects to PostgreSQL database, creates target DB/table if needed, seeds defaults on first run
+- `init()` builds the pool in a local variable and only assigns module-level `pool` after full success — `pool !== null` means persistence is initialized and usable. On failure the client is released, the pool is closed, `pool` stays null, and the service runs in real writable in-memory mode
 - `getSettings()` returns deep clone; `patchSettings(updates)` merges partial updates and persists to DB
 - Updates are serialized in-process via a promise queue: concurrent PATCHes each observe the latest committed state (no lost updates), and a failed update rethrows to its own caller without blocking subsequent ones
 - Graceful degradation: DB unavailability falls back to in-memory defaults without crashing

@@ -25,8 +25,18 @@ let mockInsertError: unknown = null;
 /** Artificial delay (ms) on the settings persistence INSERT. */
 let mockInsertDelayMs = 0;
 
+/** When set, connect() on the main (non-template1) pool rejects with this error. */
+let mockConnectError: unknown = null;
+
+/** When set, any query whose text contains this marker rejects with mockQueryError. */
+let mockQueryErrorFor: string | null = null;
+let mockQueryError: unknown = null;
+
 /** Database name of every pool whose end() was called, in call order. */
 const mockPoolEndCalls: string[] = [];
+
+/** Database name of every pool whose client was released, in call order. */
+const mockClientReleaseCalls: string[] = [];
 
 jest.mock("pg", () => {
     class FakePool {
@@ -37,8 +47,14 @@ jest.mock("pg", () => {
         }
 
         async connect() {
+            if (mockConnectError !== null && this.poolConfig.database !== "template1") {
+                throw mockConnectError;
+            }
             return {
                 query: async (text: string, params?: unknown[]) => {
+                    if (mockQueryErrorFor !== null && text.includes(mockQueryErrorFor)) {
+                        throw mockQueryError;
+                    }
                     if (text.includes("pg_database")) {
                         // Report "does not exist" when the failure is armed,
                         // otherwise claim the database exists (skip CREATE DATABASE)
@@ -68,7 +84,7 @@ jest.mock("pg", () => {
                     return { rows: [] };
                 },
                 release: () => {
-                    // no-op
+                    mockClientReleaseCalls.push(this.poolConfig.database ?? "?");
                 },
             };
         }
@@ -170,6 +186,62 @@ describe("init() with an existing persisted row", () => {
         expect(bootstrapEnds).toHaveLength(1);
         // Settings were seeded through the main pool
         expect(store.getSettings()).toEqual(structuredClone(DEFAULT_SETTINGS));
+    });
+});
+
+describe("init() failure cleanup", () => {
+    beforeEach(() => {
+        mockRow = null;
+        mockCreateDatabaseError = null;
+        mockInsertError = null;
+        mockInsertDelayMs = 0;
+        mockConnectError = null;
+        mockQueryErrorFor = null;
+        mockQueryError = null;
+        mockPoolEndCalls.length = 0;
+        mockClientReleaseCalls.length = 0;
+    });
+
+    afterEach(() => {
+        mockConnectError = null;
+        mockQueryErrorFor = null;
+        mockQueryError = null;
+    });
+
+    it("should leave the service in writable in-memory mode when pool.connect() fails (regression)", async () => {
+        const store = freshStore();
+        mockConnectError = new Error("connect ECONNREFUSED");
+
+        await expect(store.init(config)).rejects.toThrow("connect ECONNREFUSED");
+
+        // The failed pool must not be exposed as usable persistence:
+        // getSettings() returns defaults and patchSettings() operates in memory
+        expect(store.getSettings()).toEqual(structuredClone(DEFAULT_SETTINGS));
+        const patched = await store.patchSettings({ theme: "dark" });
+        expect(patched.theme).toBe("dark");
+        expect(store.getSettings().theme).toBe("dark");
+
+        // The partially created pool was closed
+        expect(mockPoolEndCalls).toContain("settings-test");
+    });
+
+    it("should release the client and close the pool when a query fails after connecting (regression)", async () => {
+        const store = freshStore();
+        mockQueryErrorFor = "CREATE TABLE";
+        mockQueryError = new Error("permission denied: CREATE TABLE");
+
+        await expect(store.init(config)).rejects.toThrow("permission denied: CREATE TABLE");
+
+        // The client obtained from the main pool was released
+        expect(mockClientReleaseCalls.filter(db => db === "settings-test")).toHaveLength(1);
+        // The pool was closed
+        expect(mockPoolEndCalls).toContain("settings-test");
+
+        // The service still runs in in-memory mode
+        expect(store.getSettings()).toEqual(structuredClone(DEFAULT_SETTINGS));
+        const patched = await store.patchSettings({ theme: "dark" });
+        expect(patched.theme).toBe("dark");
+        expect(store.getSettings().theme).toBe("dark");
     });
 });
 
