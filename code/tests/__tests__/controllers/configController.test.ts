@@ -197,6 +197,84 @@ describe("reloadConfig (GET /api/reload-config)", () => {
     });
 });
 
+describe("hot reload runtime state (no split-brain config)", () => {
+    // Regression: a reload whose file changed restart-required keys must NOT
+    // install those values into the active in-memory config — long-lived
+    // components (MqttNetworking, pinger routes, the settings store) keep
+    // their construction-time snapshots, and /api/read-config must report
+    // what is actually running. Only HOT_RELOADABLE_KEYS (log-level) may
+    // change, and the log level must change on the existing logger instance,
+    // not by replacing/closing it.
+    const CONFIG_A = {
+        ...BASE_CONFIG,
+        "log-level": "info",
+        "mqtt-broker-ip-address": "10.0.0.11",
+        "loki-url": "http://loki-a:3100",
+        "ip-pinger-web-api": "http://pinger-a:3300",
+    };
+    const CONFIG_B = {
+        ...CONFIG_A,
+        "log-level": "debug",
+        "mqtt-broker-ip-address": "10.0.0.22",
+        "loki-url": "http://loki-b:3100",
+        "ip-pinger-web-api": "http://pinger-b:3300",
+    };
+
+    it("should apply only log-level, keep restart-required values inactive, and keep the logger instance", async () => {
+        const { createLogger, logger, getConfig } = require("../../../src/common/global");
+        setConfig(validateConfig(CONFIG_A));
+        const runningLogger = createLogger(validateConfig(CONFIG_A));
+        const closeSpy = jest.spyOn(runningLogger, "close");
+
+        writeConfigFile(CONFIG_B);
+        const { res, sendCalls } = createMockRes();
+        await reloadConfig(createMockReq() as express.Request, res as express.Response);
+
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body.success).toBe(true);
+        expect(body.applied_keys).toContain("log-level");
+        expect(body.restart_keys).toEqual(expect.arrayContaining([
+            "ip-pinger-web-api",
+            "loki-url",
+            "mqtt-broker-ip-address",
+        ]));
+
+        // Runtime state: log-level applied live, everything else still at CONFIG_A
+        const active = getConfig() as Record<string, unknown>;
+        expect(active["log-level"]).toBe("debug");
+        expect(active["mqtt-broker-ip-address"]).toBe("10.0.0.11");
+        expect(active["loki-url"]).toBe("http://loki-a:3100");
+        expect(active["ip-pinger-web-api"]).toBe("http://pinger-a:3300");
+
+        // Logger identity: same instance, level changed in place, never closed
+        expect(logger()).toBe(runningLogger);
+        expect(runningLogger.global_log_level_string()).toBe("debug");
+        expect(closeSpy).not.toHaveBeenCalled();
+
+        // The old logger is still usable by long-lived components holding it
+        runningLogger.write_info("test", "old logger still functional");
+    });
+
+    it("should make /api/read-config report the effective active configuration", async () => {
+        setConfig(validateConfig(CONFIG_A));
+        require("../../../src/common/global").createLogger(validateConfig(CONFIG_A));
+
+        writeConfigFile(CONFIG_B);
+        await reloadConfig(createMockReq() as express.Request, (createMockRes().res) as express.Response);
+
+        const { res, sendCalls } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+        const body = sendCalls[0] as Record<string, unknown>;
+
+        // Restart-required values are reported as ACTIVE (old) values, not the
+        // new file values; secrets stay masked.
+        expect(body["mqtt-broker-ip-address"]).toBe("10.0.0.11");
+        expect(body["ip-pinger-web-api"]).toBe("http://pinger-a:3300");
+        expect(body["loki-url"]).toBe("********");
+        expect(body["log-level"]).toBe("debug");
+    });
+});
+
 describe("writeConfig (POST /api/write-config)", () => {
     it("should persist the config and report restart_required for operational changes", async () => {
         setConfig(validateConfig(BASE_CONFIG));

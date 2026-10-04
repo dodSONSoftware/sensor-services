@@ -7,7 +7,7 @@ import fs from "fs";
 import { isDeepStrictEqual } from "util";
 import type express from "express";
 import { ensureError, read_file_yaml, write_file_atomic } from "../dodsonlabs/SystemFunctions";
-import { logger, getConfig, setConfig, createLogger } from "../common/global";
+import { logger, getConfig, setConfig } from "../common/global";
 import type { z } from "zod";
 import { redactConfig, validateConfig, type configSchema } from "../schemas/config";
 import type * as yamlModule from "js-yaml";
@@ -16,8 +16,9 @@ import type * as yamlModule from "js-yaml";
 const CONFIG_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
 
 /**
- * Configuration keys that take effect immediately on reload: the logger is
- * re-created and log verbosity is read from it at request time.
+ * Configuration keys that take effect immediately on reload: doReloadConfig()
+ * updates only these in the active in-memory config and mutates the log level
+ * on the existing logger instance (never re-creating it).
  *
  * Note: loki-url/loki-enabled intentionally require a restart. Although the
  * logger is re-created on reload (which would also swap the Loki transport),
@@ -119,10 +120,13 @@ function reloadFailure(message: string): ReloadResult {
 }
 
 /**
- * Reload configuration from disk. The global config reference and the logger
- * are updated immediately; long-lived components keep their construction-time
- * snapshots until restart, so any changed key outside HOT_RELOADABLE_KEYS is
- * reported as restart-required.
+ * Reload configuration from disk. Only keys in HOT_RELOADABLE_KEYS change at
+ * runtime: the active in-memory config is updated with those values alone,
+ * and the log level is mutated on the existing logger instance. Restart-
+ * required values stay in the file (desired state) until a restart; they must
+ * not leak into the active config, because long-lived components keep their
+ * construction-time snapshots and /api/read-config reports what is actually
+ * running.
  */
 async function doReloadConfig(): Promise<ReloadResult> {
     const configPath = findConfigPath();
@@ -143,13 +147,31 @@ async function doReloadConfig(): Promise<ReloadResult> {
         return reloadFailure("Config validation failed: " + ensureError(err).message);
     }
 
-    // Classify the changes before replacing the running config
+    // Classify the changes before updating the running state
     const { restart_keys, applied_keys } = diffConfigReload(getConfig() ?? null, validatedConfig);
 
-    // Update global config reference and re-create the logger — the only
-    // components that pick up new values without a restart
-    setConfig(validatedConfig);
-    createLogger(validatedConfig);
+    // Update the ACTIVE config with only the hot-reloadable keys — everything
+    // else in validatedConfig only becomes active after a restart.
+    const current = getConfig();
+    if (current) {
+        const effectiveConfig = { ...current } as Record<string, unknown>;
+        for (const key of HOT_RELOADABLE_KEYS) {
+            effectiveConfig[key] = (validatedConfig as Record<string, unknown>)[key];
+        }
+        setConfig(effectiveConfig as z.infer<typeof configSchema>);
+    } else {
+        // First load — no running state to preserve
+        setConfig(validatedConfig);
+    }
+
+    // Change the log level on the EXISTING logger instance. Recreating the
+    // logger would close it while MqttNetworking and controllers still hold
+    // references to the old instance. Loki transports are untouched — loki
+    // settings remain restart-required.
+    const activeLogger = logger();
+    if (activeLogger) {
+        activeLogger.setLevel(validatedConfig["log-level"]);
+    }
 
     const restart_required = restart_keys.length > 0;
     const message = restart_required

@@ -22,6 +22,13 @@ const LOG_LEVEL_MAP: Record<LogLevel, string> = {
     [LogLevel.Debug]: "debug",
 };
 
+function logLevelFromString(level: z.infer<typeof configSchema>["log-level"]): LogLevel {
+    return level === "debug" ? LogLevel.Debug
+        : level === "info" ? LogLevel.Info
+            : level === "warn" ? LogLevel.Warn
+                : LogLevel.Error;
+}
+
 /**
  * Structured logger backed by Winston with optional Loki remote transport.
  * Implements the ILogger interface so all existing callers work unchanged.
@@ -31,11 +38,7 @@ export class Logger implements ILogger {
     // ******** ctor
 
     constructor(config: z.infer<typeof configSchema>) {
-        this.global_log_level_value = config["log-level"] === "debug" ? LogLevel.Debug
-            : config["log-level"] === "info" ? LogLevel.Info
-                : config["log-level"] === "warn" ? LogLevel.Warn
-                    : LogLevel.Error;
-
+        this.global_log_level_value = logLevelFromString(config["log-level"]);
         this.global_log_level_name = config["log-level"];
 
         // Build Winston logger with configured transports
@@ -81,9 +84,24 @@ export class Logger implements ILogger {
     // ********
     // ******** private properties
 
-    private readonly global_log_level_value: LogLevel = LogLevel.None;
-    private readonly global_log_level_name: string = "";
+    private global_log_level_value: LogLevel = LogLevel.None;
+    private global_log_level_name: string = "";
     private readonly winston: winston.Logger;
+
+    /**
+     * Change the log level on the EXISTING instance (hot reload of log-level).
+     * Replacing the logger instance on a level change is not safe: long-lived
+     * components (MqttNetworking, controllers, index.ts) hold references to
+     * the original instance, and the replacement would leave them logging
+     * through a closed logger. Transports (console/Loki) are untouched —
+     * loki-url/loki-enabled changes remain restart-required.
+     */
+    setLevel(level: z.infer<typeof configSchema>["log-level"]): void {
+        this.global_log_level_value = logLevelFromString(level);
+        this.global_log_level_name = level;
+
+        this.winston.level = LOG_LEVEL_MAP[this.global_log_level_value];
+    }
 
     // ********
     // ******** ILogger functions
@@ -99,8 +117,9 @@ export class Logger implements ILogger {
     /**
      * Close the underlying Winston logger, flushing pending entries and
      * stopping transport timers (e.g. the Loki batch timer). Must be called
-     * on a replaced logger (config reload) and at shutdown so transports
-     * are not orphaned.
+     * at shutdown so transports are not orphaned. Config reload must not
+     * close the logger — it changes the level in place (setLevel) so
+     * long-lived references stay valid.
      */
     close(): void {
         this.winston.close();

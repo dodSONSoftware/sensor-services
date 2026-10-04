@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.1)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.2)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -413,6 +413,7 @@ case-sensitive: true
 - **Body validation** — all POST bodies validated with Zod (`validatePostBody()`). Returns 400 if body is missing or not a JSON object. Replaces `req.body` with the validated object.
 - **API metrics middleware** — wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`.
 - **Graceful shutdown** — 15-second hard timeout safety net. Steps: stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → exit (gauges are in-memory, no flush needed).
+- **Config reload applies only hot-reloadable keys at runtime** — `doReloadConfig()` updates the active in-memory config with only `HOT_RELOADABLE_KEYS` (currently `log-level`) and mutates the log level on the existing logger instance via `Logger.setLevel()`. Restart-required values from the file stay inactive until restart, so `/api/read-config` never reports inactive values as active and long-lived components never hold a closed logger.
 - **`log-level` enum includes `warn`** — valid values are `error`, `warn`, `info`, `debug`.
 - **Zod v4** — upgraded from Zod v3. Schema uses `z.enum()` with `error` option for custom error messages.
 - **ESLint flat config** — `eslint.config.mjs` uses `@typescript-eslint` v8. Rules: `noUnusedLocals`/`noUnusedParameters` via tsconfig, `@typescript-eslint/no-explicit-any: warn`, `@typescript-eslint/no-non-null-assertion: warn`, `@typescript-eslint/consistent-type-imports: warn`.

@@ -18,13 +18,17 @@ export function setLogger(l: Logger) { _logger = l; }
 export const logger = () => _logger;
 
 export const createLogger = (config: z.infer<typeof configSchema>) => {
-    // Close the previous logger (if any) so its transports — notably the Loki
-    // batch timer — are not orphaned on a config reload.
+    // Startup only — config reload must NOT replace the logger (see
+    // Logger.setLevel): long-lived components hold references to the
+    // instance created here, and closing it on a reload would leave them
+    // logging through a dead logger. Closing the previous instance is a
+    // safety net for any accidental second creation.
     const previous = _logger;
     if (previous) {
         previous.close();
     }
     setLogger(new Logger(config));
+    return _logger;
 };
 
 // **** config storage for hot-reload support
