@@ -130,12 +130,12 @@ describe("General Routes", () => {
       expect(res.body).toHaveProperty("timestamp");
     });
 
-    it("should report unhealthy status when mqtt is not connected", async () => {
+    it("should report unhealthy status with HTTP 503 when mqtt is not connected", async () => {
       const app = createTestApp(false);
 
       const res = await request(app).get("/health");
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(503);
       expect(res.body.status).toBe("unhealthy");
       expect(res.body.mqtt).toBe("disconnected");
       expect(res.body.ipPinger).toBe("healthy");

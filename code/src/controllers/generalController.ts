@@ -4,7 +4,7 @@
  */
 
 import type * as express from "express";
-import { Json, OK, Text } from "../dodsonlabs/HttpConstants";
+import { Json, OK, ServiceUnavailable, Text } from "../dodsonlabs/HttpConstants";
 import { aboutDude, getConfig, logger } from "../common/global";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
@@ -182,7 +182,11 @@ export async function getHealth(req: express.Request, res: express.Response) {
 
     logger()?.write_debug("generalController.ts/getHealth", JSON.stringify(health));
 
-    res.status(OK);
+    // HTTP status mirrors the health contract so orchestration (curl -f
+    // healthchecks) sees critical failures: 200 for healthy/degraded,
+    // 503 for unhealthy.
+    const httpStatus = status === "unhealthy" ? ServiceUnavailable : OK;
+    res.status(httpStatus);
     res.contentType(Json);
     res.send(health);
 }
@@ -194,7 +198,7 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/about",
             verb: "GET",
             requestBody: "None",
-            responseBody: "{ about: {...}, system: { status: \"healthy|degraded\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", bootdate: string }, routes: [...] }",
+            responseBody: "{ about: {...}, system: { status: \"healthy|degraded|unhealthy\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", bootdate: string }, routes: [...] }",
             description: "Returns service information including system health status for MQTT, IP Pinger, and Sensor Telemetry."
         },
         {
@@ -210,8 +214,8 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/health",
             verb: "GET",
             requestBody: "None",
-            responseBody: "{ status: \"healthy|degraded\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", timestamp: \"ISO-date-string\" }",
-            description: "Health check endpoint for container orchestration. Status is 'degraded' if any component is unhealthy."
+            responseBody: "{ status: \"healthy|degraded|unhealthy\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", timestamp: \"ISO-date-string\" }",
+            description: "Health check endpoint for container orchestration. HTTP 200 for healthy/degraded, HTTP 503 for unhealthy. Status is 'degraded' if a non-critical component is down and 'unhealthy' if MQTT is disconnected."
         },
         {
             "name": "Date Local (legacy)",

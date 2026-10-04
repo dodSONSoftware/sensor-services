@@ -243,10 +243,10 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /health:
          *   get:
          *     summary: Retrieve the health status of the API
-         *     description: Returns the current health status including MQTT broker, IP Pinger, and Sensor Telemetry connectivity.
+         *     description: Returns the current health status including MQTT broker, IP Pinger, and Sensor Telemetry connectivity. HTTP 200 for healthy or degraded, HTTP 503 for unhealthy.
          *     responses:
          *       200:
-         *         description: API health status
+         *         description: API health status (healthy or degraded)
          *         content:
          *           application/json:
          *             schema:
@@ -255,6 +255,28 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                 status:
          *                   type: string
          *                   enum: [healthy, degraded]
+         *                 mqtt:
+         *                   type: string
+         *                   enum: [connected, disconnected]
+         *                 ipPinger:
+         *                   type: string
+         *                   enum: [healthy, unreachable]
+         *                 sensorTelemetry:
+         *                   type: string
+         *                   enum: [healthy, unreachable]
+         *                 timestamp:
+         *                   type: string
+         *                   format: date-time
+         *       503:
+         *         description: Service unhealthy (a vital dependency is down)
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 status:
+         *                   type: string
+         *                   enum: [unhealthy]
          *                 mqtt:
          *                   type: string
          *                   enum: [connected, disconnected]

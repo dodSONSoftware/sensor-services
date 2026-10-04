@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.4)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.5)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -267,7 +267,7 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | GET | `/date_local`, `/date-local` | Current local date/time (`yyyy-mm-ddThh:mm:ss`) |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time (`yyyy-mm-ddThh:mm:ssZ`) |
 | GET | `/endpoints` | Detailed information about each API endpoint |
-| GET | `/health` | Health status with MQTT, memory, CPU, uptime |
+| GET | `/health` | Health status with MQTT, memory, CPU, uptime — HTTP 200 for healthy/degraded, HTTP 503 for unhealthy |
 | GET | `/metrics` | Prometheus scrape endpoint for API metrics (requests, duration, errors) |
 
 ### Sensor Routes (`/sensors`) — MQTT-based

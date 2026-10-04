@@ -176,8 +176,8 @@ describe("getHealth", () => {
     expect(body).toHaveProperty("timestamp");
   });
 
-  it("should report unhealthy status when mqtt is not connected", async () => {
-    const { res, sendCalls } = createMockRes();
+  it("should report unhealthy status with HTTP 503 when mqtt is not connected", async () => {
+    const { res, statusCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: false,
     }) as Request & { mqtt_connected: boolean };
@@ -186,6 +186,9 @@ describe("getHealth", () => {
 
     await getHealth(req, res as Response);
 
+    // Unhealthy must surface to orchestration: curl -f healthchecks only
+    // fail on HTTP error status codes
+    expect(statusCalls).toContain(503);
     const body = sendCalls[0] as Record<string, unknown>;
     expect(body.status).toBe("unhealthy");
     expect(body.mqtt).toBe("disconnected");
@@ -194,7 +197,7 @@ describe("getHealth", () => {
   });
 
   it("should mark ipPinger as unreachable when fetch fails", async () => {
-    const { res, sendCalls } = createMockRes();
+    const { res, statusCalls, sendCalls } = createMockRes();
     const req = createMockReq({
       mqtt_connected: true,
     }) as Request & { mqtt_connected: boolean };
@@ -213,6 +216,9 @@ describe("getHealth", () => {
 
     await getHealth(req, res as Response);
 
+    // Degraded stays HTTP 200 — non-critical dependency failures are visible
+    // in the body without failing the container healthcheck
+    expect(statusCalls).toContain(200);
     const body = sendCalls[0] as Record<string, unknown>;
     expect(body.status).toBe("degraded");
     expect(body.mqtt).toBe("connected");
