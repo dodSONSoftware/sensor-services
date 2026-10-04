@@ -4,7 +4,7 @@
  */
 
 import type * as express from "express";
-import { InternalServerError, Json, NotImplemented, OK } from "../dodsonlabs/HttpConstants";
+import { InternalServerError, Json, NotImplemented, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
@@ -34,6 +34,23 @@ const _log = () => logger() ?? _noopLogger;
 const _reboot_command_delay_seconds: number = 5;
 
 
+
+// ****************************************************************
+// **** error types
+
+/**
+ * Thrown before publishing when the MQTT client is not connected.
+ * Callers map this to HTTP 503 — publishing while disconnected would let
+ * mqtt.js queue QoS-0 commands for later delivery, so a state-changing
+ * command (reboot, write-config) could execute long after its HTTP request
+ * finished, and read commands would silently return empty results.
+ */
+export class MqttBrokerUnavailableError extends Error {
+    constructor() {
+        super("MQTT broker unavailable");
+        this.name = "MqttBrokerUnavailableError";
+    }
+}
 
 // ****************************************************************
 // **** private functions
@@ -193,6 +210,14 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
         throw new Error(`Unknown command type: ${command}`);
     }
 
+    // broker gate: never publish (or let mqtt.js queue) a command while the
+    // client is disconnected — must run before the slot is claimed so a
+    // rejected command never holds the slot
+    if (!network.is_connected()) {
+        _log().write_warn("sensorController.ts/mqtt_command_get_messages", `MQTT broker unavailable, rejecting '${command}'`);
+        throw new MqttBrokerUnavailableError();
+    }
+
     // serialize: acquire the command slot (waits for any in-flight command of
     // the same type to finish)
     await mqtt_command_acquire_slot(dude, command);
@@ -229,7 +254,12 @@ async function get_it(_req: express.Request, res: express.Response, network: Mqt
     } catch (err) {
         const error = ensureError(err);
 
-        // send error response
+        // send error response — broker outages are a 503 (Service Unavailable),
+        // not an internal error, so callers can distinguish them from 5xx faults
+        if (error instanceof MqttBrokerUnavailableError) {
+            res.status(ServiceUnavailable).json({ error: error.message });
+            return;
+        }
         res.status(InternalServerError).json({ error: error.message });
     }
 }
@@ -243,6 +273,14 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
         if (dude === null) {
             _log().write_error("sensorController.ts/post_it", `Unknown command type '${command}', rejecting`);
             res.status(InternalServerError).json({ error: `Unknown command type: ${command}` });
+            return;
+        }
+
+        // broker gate: same as mqtt_command_get_messages — run before the slot
+        // is claimed so a rejected command never holds the slot
+        if (!network.is_connected()) {
+            _log().write_warn("sensorController.ts/post_it", `MQTT broker unavailable, rejecting '${command}'`);
+            res.status(ServiceUnavailable).json({ error: "MQTT broker unavailable" });
             return;
         }
 
@@ -263,7 +301,11 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
     } catch (err) {
         const error = ensureError(err);
 
-        // send error response
+        // send error response — broker outages are a 503 (Service Unavailable)
+        if (error instanceof MqttBrokerUnavailableError) {
+            res.status(ServiceUnavailable).json({ error: error.message });
+            return;
+        }
         res.status(InternalServerError).json({ error: error.message });
     }
 }

@@ -122,6 +122,13 @@ export class MqttNetworking implements IMqttNetworking {
             clean: true,
             connectTimeout: 10000,
             reconnectPeriod: 5000,
+            // Defense in depth: mqtt.js queues QoS-0 publishes while
+            // disconnected and delivers them on reconnect. Commands must never
+            // execute after their HTTP request has finished — the controller's
+            // is_connected() gate handles the API semantics; this drops a
+            // publish that loses the race (connected check passes, then the
+            // connection drops before publish() runs).
+            queueQoSZero: false,
         });
 
         // ----

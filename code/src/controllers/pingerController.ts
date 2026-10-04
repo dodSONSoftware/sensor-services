@@ -5,9 +5,10 @@
 
 import type * as express from "express";
 import { logger } from "../common/global";
-import { Json, OK } from "../dodsonlabs/HttpConstants";
+import { InternalServerError, Json, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
+import { ensureError } from "../dodsonlabs/SystemFunctions";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
-import { mqtt_command_get_messages } from "./sensorController";
+import { MqttBrokerUnavailableError, mqtt_command_get_messages } from "./sensorController";
 
 // ---- IP Pinger analysis types
 
@@ -160,18 +161,41 @@ export function analyzeIt(
     return results;
 }
 
+/**
+ * Fetch live sensors via MQTT. Responds directly and returns null when the
+ * broker is unavailable (503 — mqtt_command_get_messages now rejects instead
+ * of publishing into a disconnected client) or on any other failure (500),
+ * so the caller never has to handle a reject this high up the chain.
+ */
+async function fetch_live_sensors(network: MqttNetworking, res: express.Response): Promise<LiveSensor[] | null> {
+    try {
+        const { dude: commandControl, results } = await mqtt_command_get_messages(network, "*", "get-details");
+        commandControl.clear_results();
+        return results as LiveSensor[];
+    } catch (err) {
+        const error = ensureError(err);
+        if (error instanceof MqttBrokerUnavailableError) {
+            logger()?.write_warn("pingerController.ts/getAnalyzeIpPinger", `MQTT broker unavailable — cannot fetch live sensors: ${error.message}`);
+            res.status(ServiceUnavailable).json({ error: error.message });
+        } else {
+            logger()?.write_error("pingerController.ts/getAnalyzeIpPinger", `Failed to fetch live sensors: ${error.message}`);
+            res.status(InternalServerError).json({ error: error.message });
+        }
+        return null;
+    }
+}
+
 export async function getAnalyzeIpPinger(_req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean, timeoutMs: number) {
     // read configuration from ip-pinger first — fast path, fails quickly on error
     const url = `${ip_pinger_web_api}/read-config`;
     const ippingerConfig = await fetchItOnly("getAnalyzeIpPinger", url, timeoutMs);
 
     if (ippingerConfig === null) {
-        // IP pinger unreachable — fall back to live sensors only.
-        // ("get-details" is a known command type, so mqtt_command_get_messages
-        // cannot reject it here.)
-        const { dude: commandControl, results } = await mqtt_command_get_messages(network, "*", "get-details");
-        const sensors = results as LiveSensor[];
-        commandControl.clear_results();
+        // IP pinger unreachable — fall back to live sensors only
+        const sensors = await fetch_live_sensors(network, res);
+        if (sensors === null) {
+            return;
+        }
 
         logger()?.write_warn(
             "pingerController.ts/getAnalyzeIpPinger",
@@ -187,18 +211,16 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
     }
 
     // Both sources available — fetch sensors and run full analysis
-    const { dude: commandControl, results } = await mqtt_command_get_messages(network, "*", "get-details");
-    const sensors = results as LiveSensor[];
-
-    try {
-        const ippinger_devices = (ippingerConfig as { devices: IppingerDevice[] })["devices"];
-        const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
-
-        res.status(OK);
-        res.contentType(Json);
-        res.send(results);
-    } finally {
-        commandControl.clear_results();
+    const sensors = await fetch_live_sensors(network, res);
+    if (sensors === null) {
+        return;
     }
+
+    const ippinger_devices = (ippingerConfig as { devices: IppingerDevice[] })["devices"];
+    const results = analyzeIt(sensors, ippinger_devices, case_sensitive);
+
+    res.status(OK);
+    res.contentType(Json);
+    res.send(results);
 }
 

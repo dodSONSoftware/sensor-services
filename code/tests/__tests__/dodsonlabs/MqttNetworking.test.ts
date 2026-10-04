@@ -208,6 +208,14 @@ describe("MqttNetworking", () => {
         expect(anyNetworking.mqtt_topic_log).toBe("iot/v3/log");
     });
 
+    it("should disable offline QoS-0 queueing so commands cannot be delivered after the fact", () => {
+        // mqtt.js queues QoS-0 publishes while disconnected and flushes them on
+        // reconnect — a reboot/write-config issued during an outage must never
+        // execute late. queueQoSZero: false drops them instead.
+        const anyNetworking = networking as any;
+        expect(anyNetworking.mqtt_client.options.queueQoSZero).toBe(false);
+    });
+
     it("should use a configured mqtt-topic-log when provided", () => {
         const config = {
             "mqtt-broker-ip-address": "127.0.0.1",

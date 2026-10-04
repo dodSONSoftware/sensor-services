@@ -304,4 +304,65 @@ describe("getAnalyzeIpPinger", () => {
       })
     );
   });
+
+  it("should return 503 and publish nothing when the pinger is down and the MQTT broker is unavailable", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    const network = createMockNetwork([]);
+    (network.is_connected as jest.Mock).mockReturnValue(false);
+
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+      json: jest.fn(),
+    };
+
+    await getAnalyzeIpPinger(
+      {} as express.Request,
+      res,
+      network,
+      "http://192.168.1.4:3300",
+      true,
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith({ error: "MQTT broker unavailable" });
+    expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+  });
+
+  it("should return 503 and publish nothing when the pinger is reachable but the MQTT broker is unavailable", async () => {
+    const mockFetch = globalThis.fetch as jest.Mock;
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        devices: [{ source: "sensor-1", "ip-address": "192.168.1.10" }],
+      }),
+    });
+
+    const network = createMockNetwork([]);
+    (network.is_connected as jest.Mock).mockReturnValue(false);
+
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      contentType: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+      json: jest.fn(),
+    };
+
+    await getAnalyzeIpPinger(
+      {} as express.Request,
+      res,
+      network,
+      "http://192.168.1.4:3300",
+      true,
+      10_000
+    );
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith({ error: "MQTT broker unavailable" });
+    expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+  });
 });

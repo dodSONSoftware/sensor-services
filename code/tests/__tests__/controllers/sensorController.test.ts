@@ -265,6 +265,59 @@ describe("sensor controller integration (error paths, already-running)", () => {
     });
   });
 
+  describe("broker unavailable (disconnected MQTT)", () => {
+    // Regression: while the broker is down, mqtt-backed commands must answer
+    // 503 without publishing — mqtt.js would otherwise queue QoS-0 commands
+    // for later delivery, and reads would return 200 [] indistinguishable
+    // from "no sensors exist".
+    function makeDisconnectedNetwork(): MqttNetworking {
+      const network = makeMockNetwork();
+      (network.is_connected as jest.Mock).mockReturnValue(false);
+      return network;
+    }
+
+    it("should return 503 and publish nothing for get-details", async () => {
+      const network = makeDisconnectedNetwork();
+      const res = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res.status).toBe(503);
+      expect(res.body).toHaveProperty("error", "MQTT broker unavailable");
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+    });
+
+    it("should return 503 and publish nothing for read-config", async () => {
+      const network = makeDisconnectedNetwork();
+      const res = await hitGetItRoute(network, "/sensors/read-config");
+      expect(res.status).toBe(503);
+      expect(res.body).toHaveProperty("error", "MQTT broker unavailable");
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+    });
+
+    it("should return 503 and publish nothing for reboot", async () => {
+      const network = makeDisconnectedNetwork();
+      const res = await hitPostItRoute(network, "/sensors/reboot/sensor-1");
+      expect(res.status).toBe(503);
+      expect(res.body).toHaveProperty("error", "MQTT broker unavailable");
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+    });
+
+    it("should return 503 and publish nothing for write-config", async () => {
+      const network = makeDisconnectedNetwork();
+      const res = await hitPostItRoute(network, "/sensors/write-config/sensor-1", { key: "value" });
+      expect(res.status).toBe(503);
+      expect(res.body).toHaveProperty("error", "MQTT broker unavailable");
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+    });
+
+    it("should follow the existing success path when connected", async () => {
+      const network = makeMockNetwork();
+      (network.is_connected as jest.Mock).mockReturnValue(true);
+      const res = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("already-running path", () => {
     // Regression: a second concurrent caller must wait for the in-flight
     // command to finish, then publish its OWN command and respond with its
