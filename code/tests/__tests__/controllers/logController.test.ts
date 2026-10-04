@@ -168,3 +168,111 @@ describe("logController (GET /sensors/logs/:source)", () => {
         expect(res.body.error).toContain("503");
     });
 });
+
+describe("logController (loki-url is never logged verbatim)", () => {
+    // A URL embedding a credential — if it ever reaches a log line, the
+    // regression below catches it
+    const SECRET_URL = "http://loki-user:TOP_SECRET_TEST_VALUE@loki.test:3100";
+
+    // Minimal complete configuration satisfying the required keys of configSchema
+    const BASE_CONFIG = {
+        "log-level": "debug",
+        "express-port": 32000,
+        "mqtt-broker-ip-address": "10.10.10.64",
+        "mqtt-topic-telemetry": "iot/v3/telemetry",
+        "mqtt-topic-command": "iot/v3/command",
+        "mqtt-topic-command-response": "iot/v3/command-response",
+        "ip-pinger-web-api": "http://10.10.10.64:3300",
+        "case-sensitive": true,
+        "db-host": "localhost",
+        "db-port": 5432,
+        "db-name": "sensor_db",
+        "db-user": "sensor_user",
+        "db-password": "sensor_pass",
+    };
+
+    let app: import("express").Application;
+    let fetchMock: jest.Mock;
+    const originalFetch = globalThis.fetch;
+
+    function collectMessages(instance: {
+        write_info: (o: string, m: string) => void;
+        write_warn: (o: string, m: string) => void;
+        write_error: (o: string, m: string) => void;
+        write_debug: (o: string, m: string) => void;
+    }): string[] {
+        const messages: string[] = [];
+        for (const method of ["write_error", "write_warn", "write_info", "write_debug"] as const) {
+            jest.spyOn(instance, method).mockImplementation((_origin: string, message: string) => {
+                messages.push(`${method}: ${message}`);
+            });
+        }
+        return messages;
+    }
+
+    beforeEach(() => {
+        const express = require("express");
+        app = express();
+        app.use(express.json());
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { CreateLogRoutes } = require("../../../src/routes/logRoutes");
+        new CreateLogRoutes(app);
+        fetchMock = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ data: { resultType: "streams", result: [] } }),
+        });
+        (globalThis as any).fetch = fetchMock;
+    });
+
+    afterEach(() => {
+        (globalThis as any).fetch = originalFetch;
+        setConfig(undefined as any);
+        jest.restoreAllMocks();
+    });
+
+    it("should not log the loki-url value on the full fetch path, and still emit the non-sensitive diagnostics", async () => {
+        const { createLogger, setConfig: setCfg } = require("../../../src/common/global");
+        const { validateConfig } = require("../../../src/schemas/config");
+        const config = validateConfig({
+            ...BASE_CONFIG,
+            "loki-url": SECRET_URL,
+            "loki-enabled": true,
+        });
+        setCfg(config);
+        const messages = collectMessages(createLogger(config));
+
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1?level=info");
+        expect(res.status).toBe(200);
+
+        // The credential and the URL must never appear in any emitted log line
+        for (const m of messages) {
+            expect(m).not.toContain("TOP_SECRET_TEST_VALUE");
+            expect(m).not.toContain("loki-user");
+            expect(m).not.toContain("loki.test:3100");
+        }
+
+        // The replacement diagnostics still happen
+        expect(messages.some((m) => m.includes("loki-url is set"))).toBe(true);
+        expect(messages.some((m) => m.includes("Loki URL configured"))).toBe(true);
+        expect(messages.some((m) => m.includes("Loki query_range window:"))).toBe(true);
+    });
+
+    it("should log that loki-url is not set when the key is absent", async () => {
+        const { createLogger, setConfig: setCfg } = require("../../../src/common/global");
+        const { validateConfig } = require("../../../src/schemas/config");
+        const config = validateConfig(BASE_CONFIG);
+        setCfg(config);
+        const messages = collectMessages(createLogger(config));
+
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(500); // not configured
+        expect(res.body).toHaveProperty("error", "Loki logging not configured");
+
+        expect(messages.some((m) => m.includes("loki-url is not set"))).toBe(true);
+        for (const m of messages) {
+            expect(m).not.toContain("TOP_SECRET_TEST_VALUE");
+        }
+    });
+});

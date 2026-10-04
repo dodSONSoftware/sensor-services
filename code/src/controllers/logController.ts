@@ -48,8 +48,9 @@ function getLokiConfig(): LokiConfig | null {
     }
 
     // Debug: log the config keys
+    // loki-url may embed credentials, so only log whether it is set — never its value
     _log().write_debug("getLokiConfig", `Config keys: ${Object.keys(config).join(", ")}`);
-    _log().write_debug("getLokiConfig", `loki-url value: ${(config as Record<string, unknown>)["loki-url"]}`);
+    _log().write_debug("getLokiConfig", `loki-url ${((config as Record<string, unknown>)["loki-url"] ?? undefined) === undefined ? "is not set" : "is set"}`);
     _log().write_debug("getLokiConfig", `loki-enabled value: ${(config as Record<string, unknown>)["loki-enabled"]}`);
 
     // Check for loki configuration - support both nested "loki" object and flat "loki-url"
@@ -60,9 +61,9 @@ function getLokiConfig(): LokiConfig | null {
         url = (lokiConfig as Record<string, unknown>)["url"];
         _log().write_debug("getLokiConfig", "Found nested loki.url");
     } else {
-        // Fall back to flat loki-url setting
+        // Fall back to flat loki-url setting (value not logged — may embed credentials)
         url = (config as Record<string, unknown>)["loki-url"];
-        _log().write_debug("getLokiConfig", `Using flat loki-url: ${url}`);
+        _log().write_debug("getLokiConfig", "Using flat loki-url setting");
     }
 
     if (typeof url !== "string" || !url) {
@@ -77,7 +78,7 @@ function getLokiConfig(): LokiConfig | null {
         return null;
     }
 
-    _log().write_info("getLokiConfig", `Loki URL configured: ${url}`);
+    _log().write_info("getLokiConfig", "Loki URL configured");
     return { url };
 }
 
@@ -163,7 +164,8 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
 
     _log().write_info("logController.ts/fetchLokiLogs", `Fetching logs for source: ${source}`);
     _log().write_info("logController.ts/fetchLokiLogs", `Loki query: ${query}`);
-    _log().write_debug("logController.ts/fetchLokiLogs", `Loki URL: ${url}`);
+    // The base URL is not logged (may embed credentials) — the query window is the useful diagnostic
+    _log().write_debug("logController.ts/fetchLokiLogs", `Loki query_range window: start=${startTime}, end=${actualEndTime}, dir=backward, limit=${limit}`);
 
     try {
         const response = await fetch(url, { signal: AbortSignal.timeout(LOKI_FETCH_TIMEOUT_MS) });
