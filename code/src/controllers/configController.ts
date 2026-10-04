@@ -4,11 +4,12 @@
  */
 
 import fs from "fs";
+import { isDeepStrictEqual } from "util";
 import type express from "express";
 import { ensureError, read_file_yaml, write_file } from "../dodsonlabs/SystemFunctions";
 import { logger, getConfig, setConfig, createLogger } from "../common/global";
 import type { z } from "zod";
-import { validateConfig, type configSchema } from "../schemas/config";
+import { redactConfig, validateConfig, type configSchema } from "../schemas/config";
 import type * as yamlModule from "js-yaml";
 
 // Config file paths to try (in order)
@@ -16,15 +17,20 @@ const CONFIG_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
 
 /**
  * Configuration keys that take effect immediately on reload: the logger is
- * re-created and every log path (including logController's Loki lookup) reads
- * the current logger/config live at request time.
+ * re-created and log verbosity is read from it at request time.
+ *
+ * Note: loki-url/loki-enabled intentionally require a restart. Although the
+ * logger is re-created on reload (which would also swap the Loki transport),
+ * allowing an unauthenticated /api/write-config caller to repoint Loki
+ * immediately would let them stream every log line to an attacker-controlled
+ * host in real time. Restarting makes that change operator-visible.
  *
  * Every other key is captured at construction time by long-lived components
  * (MqttNetworking, middleware, pinger routes, the settings store, and the
  * HTTP servers) and only takes effect after a process restart. Callers must
  * report those keys as restart-required rather than claiming they reloaded.
  */
-export const HOT_RELOADABLE_KEYS: readonly string[] = ["log-level", "loki-url", "loki-enabled"];
+export const HOT_RELOADABLE_KEYS: readonly string[] = ["log-level"];
 
 /**
  * Compare the running config against a newly validated one and classify the
@@ -46,7 +52,9 @@ export function diffConfigReload(
     const prev = previous as Record<string, unknown>;
     const nextCfg = next as Record<string, unknown>;
     for (const key of new Set([...Object.keys(prev), ...Object.keys(nextCfg)])) {
-        if (JSON.stringify(prev[key]) === JSON.stringify(nextCfg[key])) {
+        // Deep compare — JSON.stringify equality would treat key reordering as
+        // a change and report spurious restart-required keys.
+        if (isDeepStrictEqual(prev[key], nextCfg[key])) {
             continue;
         }
         if (HOT_RELOADABLE_KEYS.includes(key)) {
@@ -160,18 +168,11 @@ export async function reloadConfig(_req: express.Request, res: express.Response)
 }
 
 /**
- * GET /read-config: Read and return current configuration (with hot-reload)
+ * GET /read-config: Return the running (in-memory) configuration.
+ * Pure read — no disk reload side effects (that is /reload-config's job).
+ * Secret values (db-password, loki-url) are masked.
  */
-export async function readConfig(_req: express.Request, res: express.Response): Promise<void> {
-    // First reload from disk to get the latest configuration
-    const result = await doReloadConfig();
-
-    if (!result.success) {
-        res.status(500).json({ error: "Failed to reload configuration: " + result.message });
-        return;
-    }
-
-    // Then return the current configuration
+export function readConfig(_req: express.Request, res: express.Response): void {
     const config = getConfig();
 
     if (!config) {
@@ -179,7 +180,7 @@ export async function readConfig(_req: express.Request, res: express.Response): 
         return;
     }
 
-    res.json(config);
+    res.json(redactConfig(config));
 }
 
 /**

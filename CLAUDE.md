@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.0)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.1)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -39,8 +39,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   └── app-request.d.ts -- Express Request augmentation with optional id field
     │   ├── controllers/
     │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load)
-    │   │   ├── sensorController.ts   -- MQTT-based sensor command handlers (event-based completion via waitForCompletion + AbortController, 10s hard cap)
+    │   │   ├── sensorController.ts   -- MQTT-based sensor command handlers (event-based completion via waitForCompletion + AbortController, 10s hard cap, per-type slot serialization via claim(), each request publishes its own command)
     │   │   ├── pingerController.ts   -- IP Pinger proxy + analyze logic (async/await, graceful degradation, validateIpAddress() rejects private/reserved IPs, fetchWithTimeout() via AbortSignal.timeout())
+    │   │   ├── logController.ts      -- GET /sensors/logs/:source (Loki queries; source allowlist-validated against LogQL injection, level allowlist, fetch timeout via AbortSignal)
     │   │   └── settingsController.ts -- GET /ui/settings, GET /ui/settings-schema, PATCH /ui/settings-update
     │   ├── middleware/
     │   │   └── middleware.ts -- CORS, JSON parser (configurable body limit), rate limiting (default 100 req/15min), request ID (X-Request-ID + AsyncLocalStorage), request logger, body validation (Zod)
@@ -49,6 +50,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
     │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable fetch_timeout_ms)
     │   │   ├── settingsRoutes.ts  -- /ui/settings, /ui/settings-schema, /ui/settings-update (PostgreSQL persistence via settingsStore)
+    │   │   ├── logRoutes.ts       -- /sensors/logs/:source (Loki log queries)
     │   │   └── routeNotFound.ts   -- 404 handler (wired into app)
     │   ├── schemas/
     │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn)
@@ -62,20 +64,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── HttpConstants.ts     -- HTTP status codes and MIME types
     │       ├── Logger.ts            -- Console logger with Error/Warn/Info/Debug levels, requestId in output
     │       ├── SystemFunctions.ts   -- File I/O, sleep, timestamps, bash exec, error helpers
-    │       ├── MqttNetworking.ts    -- MQTT client, command-response tracker (telemetry handling moved to sensor-telemetry-service)
-    │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs
+    │       ├── MqttNetworking.ts    -- MQTT client, command-response tracker (drops messages on untracked topics; telemetry handling moved to sensor-telemetry-service)
+    │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs (atomic claim() slot serialization, last_sent_at)
     │       └── version.txt          -- Library version (1.2.8)
     ├── tests/
     │   ├── mocks/
     │   │   ├── express.ts   -- createMockRes(), createMockReq() helpers
     │   │   └── mqtt.ts      -- createMockMqttNetworking() helper (adds waitForCompletion, register_command_id)
     │   └── __tests__/
+    │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc)
     │       ├── common/
     │       │   └── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
     │       ├── controllers/
-    │       │   ├── configController.test.ts   -- diffConfigReload(), reload-config/write-config restart_required reporting
+    │       │   ├── configController.test.ts   -- diffConfigReload(), reload-config/write-config restart_required reporting, readConfig() secret masking
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
-    │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running, hard timeout
+    │       │   ├── logController.test.ts      -- /sensors/logs/:source: LogQL injection guard (400), level allowlist, AbortSignal wiring
+    │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running (waiter publishes own command), concurrency (real MqttCommandControl), hard timeout
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchIt/postIt/fetchItOnly non-OK responses
     │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
     │       ├── routes/
@@ -92,8 +96,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── settingsStore.test.ts     -- validateSettingsFromDb: nested/legacy key resolution, migrations, schema validation
     │       │   └── settingsStoreInit.test.ts -- init(): seeding, corrupt-row repair (UPSERT), bootstrap pool cleanup
     │       └── dodsonlabs/
-    │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers)
-    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation)
+    │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers), claim() slot serialization
+    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop)
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)
     │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters
     └── dist/              -- Compiled output (tsc)
@@ -181,6 +185,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - Default timeout: 1500ms (configurable via `command-silence-timeout-ms`)
 - Event-based completion via `waitForCompletion()` (replaces old 1-second polling loop)
 - 10-second hard safety cap via `AbortController` to prevent infinite hangs
+- `claim()` — atomic synchronous check-and-set slot claim; the controller serializes same-type commands with it, so each HTTP request publishes its own command and responds with its own results (never a concurrent caller's)
 
 **RoutesCreatorBase** (`dodsonlabs/CreatorBase.ts`) — Abstract base class:
 - All route modules extend this: `CreateGeneralRoutes`, `CreateSensorRoutes`, `CreatePingerRoutes`, `CreateSettingsRoutes`
@@ -247,9 +252,9 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/api/reload-config` | Reloads configuration from disk; only logger settings apply immediately, other changed keys are reported in `restart_keys` |
-| GET | `/api/read-config` | Returns current configuration as JSON |
-| POST | `/api/write-config` | Saves new configuration and reloads; reports changed keys that require a restart |
+| GET | `/api/reload-config` | Reloads configuration from disk; only `log-level` applies immediately, other changed keys are reported in `restart_keys` (Loki settings require a restart — hot-reload disabled to prevent live log exfil) |
+| GET | `/api/read-config` | Returns the running (in-memory) configuration as JSON — no disk reload side effects; `db-password` and `loki-url` are masked |
+| POST | `/api/write-config` | Saves new configuration and reloads; only `log-level` applies immediately, other changed keys require a restart |
 
 ### General Routes (no prefix)
 
@@ -274,6 +279,7 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
 | POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor (MQTT command) |
 | POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
+| GET | `/sensors/logs/:source` | Fetch sensor logs from Loki; `:source` is allowlist-validated (LogQL injection guard), optional `level` (debug/info/warn/error) and `limit` (max 100) query params |
 
 ### IP Pinger Routes (`/ippinger`) — Proxy to external service
 
@@ -375,6 +381,8 @@ case-sensitive: true
 - **No CI/CD pipeline** — no GitHub Actions, GitLab CI, or other automation.
 - **All logging goes through Winston** — `error`/`warn`/`info`/`debug` levels, console transport always active, optional Loki transport. `handle_mqtt_message_log()` in MqttNetworking forwards sensor application logs at the appropriate level; controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level, default `debug`) config keys.
 - **Sensor commands use event-based completion** — `MqttCommandControl.waitForCompletion()` with a 10-second hard safety cap via `AbortController`. Replaces the old 1-second polling loop.
+- **Sensor command slots are serialized with an atomic `claim()`** — a second concurrent caller of the same command type waits, then publishes its OWN command; results are snapshotted at wait-completion so a caller never responds with another caller's (or stale/empty) results.
+- **MQTT messages on untracked topics are dropped** — the broker is unauthenticated, so `MqttNetworking.on_message()` warns and drops any message whose topic is not one of the subscribed topics (command-response, V3 info-request, and the log topic when forwarding is enabled).
 - **`on_disconnect()` and `on_error()` rely on the mqtt library's auto-reconnect** — manual reconnection was removed (created race conditions). The `reconnectPeriod: 5000` handles reconnection automatically.
 - **Native `fetch` API is used** (Node 18+ built-in) — `node-fetch` was removed from dependencies.
 - **`swagger-server-url` is configurable** via `config.yml` (falls back to auto-derived from routable IP + port). `routableAddress()` skips loopback and Docker-internal addresses.

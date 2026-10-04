@@ -18,6 +18,12 @@ export function setLogger(l: Logger) { _logger = l; }
 export const logger = () => _logger;
 
 export const createLogger = (config: z.infer<typeof configSchema>) => {
+    // Close the previous logger (if any) so its transports — notably the Loki
+    // batch timer — are not orphaned on a config reload.
+    const previous = _logger;
+    if (previous) {
+        previous.close();
+    }
     setLogger(new Logger(config));
 };
 

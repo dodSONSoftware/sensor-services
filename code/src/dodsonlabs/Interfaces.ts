@@ -64,6 +64,10 @@ export interface IMqttCommandControl {
   is_timed_out: boolean;
   timeout: NodeJS.Timeout | null;
   results: MqttCommandResult[];
+  /** ISO timestamp of when the current command was published (set by the caller right before initialize/publish). */
+  last_sent_at?: string;
+  /** Atomically claim the command slot (true = slot was free and is now held by the caller). */
+  claim(): boolean;
   initialize(): void;
   deinitialize(): void;
   clear_results(): void;

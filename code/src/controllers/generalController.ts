@@ -296,7 +296,7 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
         {
             name: "Sensor Reboot All",
             route: "/sensors/reboot",
-            verb: "POST",
+            verb: "GET",
             requestBody: "None",
             responseBody: "{ success: boolean, message: string }",
             description: "Reboots all sensors."
@@ -304,7 +304,7 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
         {
             name: "Sensor Reboot Single",
             route: "/sensors/reboot/:source",
-            verb: "POST",
+            verb: "GET",
             requestBody: "None",
             responseBody: "{ success: boolean, message: string }",
             description: "Reboots a specific sensor by source ID."

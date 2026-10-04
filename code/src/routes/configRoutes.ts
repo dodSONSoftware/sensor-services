@@ -16,19 +16,19 @@ export const __routes: string[] = [
 ];
 
 export const __routesHelp: Record<string, unknown> = {
-    "description": "Application configuration management (reload, read, write). Logger settings apply immediately; other settings persist and take effect after a restart (see restart_keys in the response).",
+    "description": "Application configuration management (reload, read, write). Only log-level applies immediately; other settings persist and take effect after a restart (see restart_keys in the response).",
     "commands": [
         {
             "route": "/api/reload-config",
-            "description": "GET Reloads the application's YAML configuration from disk. Logger settings (log-level, loki-url, loki-enabled) apply immediately; other changed keys are reported as restart_required with the list in restart_keys."
+            "description": "GET Reloads the application's YAML configuration from disk. Only log-level applies immediately; other changed keys are reported as restart_required with the list in restart_keys."
         },
         {
             "route": "/api/read-config",
-            "description": "GET Reads the current configuration from disk, reloads it, and returns the updated configuration as JSON."
+            "description": "GET Returns the running (in-memory) configuration as JSON. Secret values (db-password, loki-url) are masked."
         },
         {
             "route": "/api/write-config",
-            "description": "POST Saves a new configuration to disk and reloads it. Logger settings apply immediately; other changed keys are reported as restart_required with the list in restart_keys. Body must contain the complete valid configuration."
+            "description": "POST Saves a new configuration to disk and reloads it. Only log-level applies immediately; other changed keys are reported as restart_required with the list in restart_keys. Body must contain the complete valid configuration."
         }
     ]
 };
@@ -46,17 +46,16 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
         // RELOAD CONFIG
         /**
          * @swagger
-         * /reload-config:
+         * /api/reload-config:
          *   get:
          *     summary: Reload configuration from disk
          *     description: >-
          *       Reads the configuration file from disk, validates it, and updates the running
-         *       configuration reference. Only the logger settings (log-level, loki-url,
-         *       loki-enabled) take effect immediately — the logger is re-created. Every other
-         *       key is captured at construction time by long-lived components (MQTT client,
-         *       middleware, routes, settings store) and takes effect after a process restart;
-         *       changed keys of that kind are reported in restart_keys with restart_required
-         *       set to true.
+         *       configuration reference. Only log-level takes effect immediately — the logger
+         *       is re-created. Every other key is captured at construction time by long-lived
+         *       components (MQTT client, middleware, routes, settings store) and takes effect
+         *       after a process restart; changed keys of that kind are reported in restart_keys
+         *       with restart_required set to true.
          *     responses:
          *       200:
          *         description: Configuration reloaded (check restart_required)
@@ -106,7 +105,7 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          * /api/read-config:
          *   get:
          *     summary: Read current configuration
-         *     description: Returns the current application configuration as a JSON object.
+         *     description: Returns the running (in-memory) application configuration as a JSON object. Secret values (db-password, loki-url) are masked.
          *     responses:
          *       200:
          *         description: Current configuration
@@ -142,11 +141,10 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *   post:
          *     summary: Save new configuration and reload
          *     description: >-
-         *       Writes the provided configuration to disk and reloads it. Only the logger
-         *       settings (log-level, loki-url, loki-enabled) take effect immediately; every
-         *       other changed key takes effect after a process restart and is reported in
-         *       restart_keys with restart_required set to true. The entire configuration must
-         *       be provided (not partial updates).
+         *       Writes the provided configuration to disk and reloads it. Only log-level
+         *       takes effect immediately; every other changed key takes effect after a
+         *       process restart and is reported in restart_keys with restart_required set
+         *       to true. The entire configuration must be provided (not partial updates).
          *     requestBody:
          *       required: true
          *       content:

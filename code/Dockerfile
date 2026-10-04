@@ -30,6 +30,7 @@ WORKDIR /app
 
 # Copy only the necessary files from the builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/package*.json ./
 
 # Install only production dependencies
@@ -44,7 +45,6 @@ USER appuser
 
 # Exposed ports
 EXPOSE 32000
-EXPOSE 3301
 
 # Healthcheck: verify the process is alive (liveness)
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \

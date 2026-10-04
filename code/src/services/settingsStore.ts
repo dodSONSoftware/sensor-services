@@ -329,7 +329,9 @@ export function getSettings(): AppSettings {
 
 /**
  * Partially update settings: merge `updates` into the existing cache, persist to PostgreSQL, and return the merged result.
- * If PostgreSQL is unavailable, updates are cached in memory and will be persisted when the database recovers.
+ * If PostgreSQL is unavailable the update is DISCARDED (the cache is left unchanged)
+ * and the error is rethrown so the caller can report 500 — it is not queued for
+ * later persistence.
  */
 export async function patchSettings(updates: Record<string, unknown>): Promise<AppSettings> {
     // Initialize cache if not yet done (e.g., patchSettings called before init completes)

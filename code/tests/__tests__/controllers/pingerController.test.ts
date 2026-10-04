@@ -169,6 +169,7 @@ function createMockNetwork(liveResults: unknown[]): MqttNetworking {
       is_timed_out: true,
       timeout: null,
       results: liveResults,
+      claim: jest.fn().mockReturnValue(true),
       initialize: jest.fn(),
       deinitialize: jest.fn(),
       clear_results: jest.fn(),

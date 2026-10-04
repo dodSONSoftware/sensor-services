@@ -253,6 +253,51 @@ describe("MqttNetworking", () => {
         expect(dictAfter).toEqual(dictBefore); // no new entry created
     });
 
+    // ---- on_message topic filter (broker is unauthenticated — any client on
+    // it can publish to any topic, so untracked topics are treated as forged)
+
+    describe("on_message topic filter", () => {
+        it("should drop a forged command_response arriving on an untracked topic", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize();
+
+            // The same payload that routes fine on the subscribed topic must be
+            // ignored on a topic this client never subscribed to
+            await anyNetworking.on_message(
+                "iot/v3/telemetry",
+                Buffer.from(JSON.stringify(CAPTURED_GET_DETAILS_RESPONSE)),
+                {}
+            );
+            // on_message dispatches handle_mqtt_message asynchronously
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(dude.results).toHaveLength(0);
+            expect(logger.write_warn).toHaveBeenCalledWith(
+                "networking",
+                expect.stringContaining("Dropping message on untracked topic")
+            );
+            dude.deinitialize();
+        });
+
+        it("should still route the same response on the subscribed command-response topic", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize();
+
+            await anyNetworking.on_message(
+                "iot/v3/command-response",
+                Buffer.from(JSON.stringify(CAPTURED_GET_DETAILS_RESPONSE)),
+                {}
+            );
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(dude.results).toHaveLength(1);
+            expect(dude.results[0].source).toBe("Soil-1");
+            dude.deinitialize();
+        });
+    });
+
     // ---- V3 command-response handling (fixtures from the live capture)
 
     describe("V3 command_response handling", () => {

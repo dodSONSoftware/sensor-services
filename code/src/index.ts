@@ -27,7 +27,7 @@ import {
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
 import { ensureError, formatElapsedTime, read_file_yaml } from "./dodsonlabs/SystemFunctions";
-import { validateConfig, type configSchema } from "./schemas/config";
+import { redactConfig, validateConfig, type configSchema } from "./schemas/config";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 import * as settingsStore from "./services/settingsStore";
@@ -88,8 +88,8 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     // createLogger(config) above guarantees logger() returns a defined Logger
     const appLogger = logger() as Logger;
 
-    // display configuration
-    appLogger.write_info("index.ts", `CONFIGURATION:\n${JSON.stringify(config, null, 2)}`);
+    // display configuration (secrets masked — this line also goes to Loki when enabled)
+    appLogger.write_info("index.ts", `CONFIGURATION:\n${JSON.stringify(redactConfig(config), null, 2)}`);
 
     // log it
     const dude = aboutDude();

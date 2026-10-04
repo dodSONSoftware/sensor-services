@@ -46,10 +46,8 @@ const swaggerOptions = {
             },
         ],
     },
-    apis: [] as string[], // Set at startup via setupSwagger(srcDir)
+    apis: [] as string[], // Set via setupSwagger(srcDir)
 };
-
-const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
 export const setupSwagger = (app: Express, port: number, srcDir: string, serverUrl?: string) => {
     swaggerOptions.apis = buildApisArray(srcDir);
@@ -58,6 +56,11 @@ export const setupSwagger = (app: Express, port: number, srcDir: string, serverU
     if (server) {
         server.url = serverUrl ?? `http://${routableAddress()}:${port}/`;
     }
+
+    // Scan the route files here, after apis is populated — calling
+    // swaggerJsDoc() at module load (before apis was set) produced a spec with
+    // no paths, and swagger-ui served that stale empty document.
+    const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
     app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 };

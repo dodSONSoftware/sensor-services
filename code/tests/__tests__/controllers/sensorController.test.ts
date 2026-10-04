@@ -5,6 +5,7 @@
 
 import { create_mqtt_command_message, getDetails } from "../../../src/controllers/sensorController";
 import type { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
+import { MqttCommandControl } from "../../../src/dodsonlabs/MqttCommandControl";
 import type { IMqttCommandControl } from "../../../src/dodsonlabs/Interfaces";
 
 describe("enrichResultsWithMetadata", () => {
@@ -142,6 +143,14 @@ describe("sensor controller integration (error paths, already-running)", () => {
       is_timed_out: true,
       timeout: null,
       results: [{ source: "test", payload: {} }],
+      // Mirrors MqttCommandControl.claim(): synchronous check-and-set
+      claim: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+        if (this.is_running) {
+          return false;
+        }
+        this.is_running = true;
+        return true;
+      }),
       initialize: jest.fn(),
       deinitialize: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
         this.is_running = false;
@@ -199,6 +208,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_timed_out: true,
         timeout: null,
         results: [{ source: "test", payload: {} }],
+        claim: jest.fn().mockReturnValue(true),
         initialize: jest.fn().mockImplementation(() => { throw new Error("init failed"); }),
         deinitialize: jest.fn(),
         clear_results: jest.fn(),
@@ -229,6 +239,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_timed_out: true,
         timeout: null,
         results: [{ source: "test", payload: {} }],
+        claim: jest.fn().mockReturnValue(true),
         initialize: jest.fn().mockImplementation(() => { throw new Error("init failed"); }),
         deinitialize: jest.fn(),
         clear_results: jest.fn(),
@@ -255,19 +266,88 @@ describe("sensor controller integration (error paths, already-running)", () => {
   });
 
   describe("already-running path", () => {
-    it("should wait for completion when command is already running (get path)", async () => {
+    // Regression: a second concurrent caller must wait for the in-flight
+    // command to finish, then publish its OWN command and respond with its
+    // own results — it must never return the first caller's (cleared) results.
+    it("should wait, then publish its own command (get path)", async () => {
       const network = makeMockNetwork({ is_running: true });
       const res = await hitGetItRoute(network, "/sensors/get-details");
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+      // The waiter published its own command after the wait
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      const published = (network.publish_mqtt_message as jest.Mock).mock.calls[0];
+      expect(published[0]).toBe("iot/v3/command");
+      expect(published[1]).toMatchObject({
+        "message_type": "command",
+        "message_schema_version": 3,
+        "command": "get-details",
+        "target": "*",
+        "payload": {},
+      });
     });
 
-    it("should wait for completion when command is already running (post path)", async () => {
+    it("should wait, then publish its own command (post path)", async () => {
       const network = makeMockNetwork({ is_running: true });
       const res = await hitPostItRoute(network, "/sensors/write-config/sensor-1", { key: "value" });
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      const published = (network.publish_mqtt_message as jest.Mock).mock.calls[0];
+      expect(published[1]).toMatchObject({
+        "command": "write-config",
+        "target": "sensor-1",
+        "payload": { config: { key: "value" } },
+      });
     });
+  });
+
+  describe("concurrent requests (real MqttCommandControl)", () => {
+    // End-to-end regression for the concurrent-command race: two GETs arriving
+    // at once must be serialized — the first publishes, the second waits — and
+    // each must respond with its own results, not the other's or stale data.
+    it("should give each concurrent caller its own results", async () => {
+      const express = require("express");
+      const request = require("supertest");
+      const app = express();
+      app.use(express.json());
+
+      const control = new MqttCommandControl(50); // 50ms silence timeout
+      let seq = 0;
+      const network: MqttNetworking = {
+        mqtt_topic_command: "iot/v3/command",
+        mqtt_topic_command_response: "iot/v3/command-response",
+        is_connected: jest.fn().mockReturnValue(true),
+        prometheus_server_ready: jest.fn().mockReturnValue(true),
+        publish_mqtt_message: jest.fn().mockImplementation(() => {
+          seq += 1;
+          const mySeq = seq;
+          // Simulate the sensor responding 10ms after the command is published
+          setTimeout(() => {
+            control.results.push({ source: `sensor-${mySeq}`, payload: { seq: mySeq } });
+            control.restart_clock();
+          }, 10);
+        }),
+        register_command_id: jest.fn(),
+        close: jest.fn(),
+        get_cr_dude: jest.fn().mockReturnValue(control),
+      } as unknown as MqttNetworking;
+
+      const { CreateSensorRoutes } = require("../../../src/routes/sensorRoutes");
+      new CreateSensorRoutes(app, network);
+
+      const [r1, r2] = await Promise.all([
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+      ]);
+
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      // Two commands published (one per request), each caller got its own result
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(2);
+      expect(r1.body).toEqual([{ source: "sensor-1", payload: { seq: 1 } }]);
+      expect(r2.body).toEqual([{ source: "sensor-2", payload: { seq: 2 } }]);
+    }, 10000);
   });
 
   describe("reboot command message", () => {
@@ -332,6 +412,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_timed_out: true,
         timeout: null,
         results: [{ source: "test", payload: {} }],
+        claim: jest.fn().mockReturnValue(true),
         initialize: jest.fn(),
         deinitialize: jest.fn(),
         clear_results: jest.fn(),
@@ -358,6 +439,13 @@ describe("sensor controller integration (error paths, already-running)", () => {
       };
 
       const idPromise = getDetails({} as any, res, network);
+
+      // Drain microtasks so the handler reaches the wait and arms the 10s
+      // hard-timeout timer before we advance the fake clock (the acquire-slot
+      // await yields once before the timer is registered)
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
 
       jest.advanceTimersByTime(10_001);
 

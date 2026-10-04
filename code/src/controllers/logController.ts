@@ -25,6 +25,20 @@ interface LokiConfig {
     url: string;
 }
 
+// Source names are interpolated into the LogQL query, so they must match a
+// strict allowlist — anything else (quotes, pipes, spaces) would allow LogQL
+// injection. The special "ip-pinger" value is covered by this character set.
+const SOURCE_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
+// Only these log levels are accepted; anything else is dropped before it can
+// reach the LogQL regex literal.
+const ALLOWED_LEVELS: ReadonlySet<string> = new Set(["debug", "info", "warn", "error"]);
+
+// Timeout for the Loki query_range fetch — a hung Loki must not hang the
+// request handler forever (matches the AbortSignal.timeout pattern used for
+// the external health checks in generalController.ts).
+const LOKI_FETCH_TIMEOUT_MS = 10_000;
+
 // Get Loki config from global config
 function getLokiConfig(): LokiConfig | null {
     const config = require("../common/global").getConfig();
@@ -152,7 +166,7 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
     _log().write_debug("logController.ts/fetchLokiLogs", `Loki URL: ${url}`);
 
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(LOKI_FETCH_TIMEOUT_MS) });
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -241,6 +255,13 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
 export async function getLogs(req: express.Request, res: express.Response): Promise<void> {
     const source = req.params.source;
 
+    // Validate the source before it is interpolated into the LogQL query
+    // (LogQL injection guard — see SOURCE_PATTERN).
+    if (!SOURCE_PATTERN.test(source)) {
+        res.status(400).contentType(Json).json({ error: "invalid sensor source" });
+        return;
+    }
+
     // Get query parameters
     const levelsParam = req.query.level;
     const limitParam = req.query.limit;
@@ -254,6 +275,15 @@ export async function getLogs(req: express.Request, res: express.Response): Prom
             levels = levelsParam.filter((l): l is string => typeof l === "string");
         } else if (typeof levelsParam === "string") {
             levels = [levelsParam];
+        }
+    }
+
+    // Drop unknown levels before they can reach the LogQL regex literal
+    if (levels.length > 0) {
+        levels = levels.map((l) => l.toLowerCase()).filter((l) => ALLOWED_LEVELS.has(l));
+        if (levels.length === 0) {
+            res.status(400).contentType(Json).json({ error: "invalid log level(s); allowed: debug, info, warn, error" });
+            return;
         }
     }
 

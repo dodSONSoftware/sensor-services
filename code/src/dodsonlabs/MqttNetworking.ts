@@ -222,11 +222,37 @@ export class MqttNetworking implements IMqttNetworking {
     // When it does, the 'connect' event fires on_connect() which resubscribes.
     }
 
+    /**
+     * Topics this client subscribes to. The broker is unauthenticated, so any
+     * client on it could publish to any topic — messages on topics we did not
+     * subscribe to are forged (e.g. a spoofed command_response) and are
+     * dropped before dispatching on message_type.
+     */
+    private tracked_topics(): string[] {
+        const topics = [
+            this.mqtt_topic_command_response,
+            MqttNetworking.MQTT_TOPIC_INFO_REQUEST_V3,
+        ];
+        if (this.forward_sensor_logs) {
+            topics.push(this.mqtt_topic_log);
+        }
+        return topics;
+    }
+
     private on_message(
-        _topic: string,
+        topic: string,
         payload: Buffer,
         _packet: mqtt.IPublishPacket
     ): void {
+        // drop messages on topics this client never subscribed to
+        if (!this.tracked_topics().includes(topic)) {
+            this.logger.write_warn(
+                this.originator,
+                `<on_message> => Dropping message on untracked topic '${topic}'`
+            );
+            return;
+        }
+
         try {
             const json_doc = JSON.parse(payload.toString());
             this.handle_mqtt_message(json_doc).catch((error) => {

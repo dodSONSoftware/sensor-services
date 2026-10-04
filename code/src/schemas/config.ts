@@ -103,3 +103,21 @@ export function validateConfig(raw: unknown): z.infer<typeof configSchema> {
     }
     return result.data;
 }
+
+// Config keys whose values are secrets — never log or return these verbatim.
+const SENSITIVE_CONFIG_KEYS = ["db-password", "loki-url"] as const;
+
+/**
+ * Return a shallow copy of the config with secret values masked.
+ * Used before logging the configuration or returning it over HTTP so that
+ * credentials (e.g. db-password) never reach logs, Loki, or API clients.
+ */
+export function redactConfig<T extends Record<string, unknown>>(config: T): T {
+    const redacted: Record<string, unknown> = { ...config };
+    for (const key of SENSITIVE_CONFIG_KEYS) {
+        if (key in redacted) {
+            redacted[key] = "********";
+        }
+    }
+    return redacted as T;
+}

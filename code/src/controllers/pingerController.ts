@@ -5,7 +5,7 @@
 
 import type * as express from "express";
 import { logger } from "../common/global";
-import { Json, OK, InternalServerError } from "../dodsonlabs/HttpConstants";
+import { Json, OK } from "../dodsonlabs/HttpConstants";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { mqtt_command_get_messages } from "./sensorController";
 
@@ -167,13 +167,10 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
 
     if (ippingerConfig === null) {
         // IP pinger unreachable — fall back to live sensors only.
-        // Start the MQTT get-details in parallel so we don't block on the slow path.
-        const commandControl = await mqtt_command_get_messages(network, "*", "get-details");
-        if (commandControl === null) {
-            res.status(InternalServerError).json({ error: "Unknown command type received from sensor" });
-            return;
-        }
-        const sensors = commandControl.results as LiveSensor[];
+        // ("get-details" is a known command type, so mqtt_command_get_messages
+        // cannot reject it here.)
+        const { dude: commandControl, results } = await mqtt_command_get_messages(network, "*", "get-details");
+        const sensors = results as LiveSensor[];
         commandControl.clear_results();
 
         logger()?.write_warn(
@@ -190,12 +187,8 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
     }
 
     // Both sources available — fetch sensors and run full analysis
-    const commandControl = await mqtt_command_get_messages(network, "*", "get-details");
-    if (commandControl === null) {
-        res.status(InternalServerError).json({ error: "Unknown command type received from sensor" });
-        return;
-    }
-    const sensors = commandControl.results as LiveSensor[];
+    const { dude: commandControl, results } = await mqtt_command_get_messages(network, "*", "get-details");
+    const sensors = results as LiveSensor[];
 
     try {
         const ippinger_devices = (ippingerConfig as { devices: IppingerDevice[] })["devices"];

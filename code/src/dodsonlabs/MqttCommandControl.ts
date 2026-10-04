@@ -13,6 +13,7 @@ export class MqttCommandControl implements IMqttCommandControl {
     timeout: NodeJS.Timeout | null = null;
     results: MqttCommandResult[] = [];
     timeout_duration_ms = __default_timeout_duration_ms;
+    last_sent_at: string | undefined = undefined;
 
     // Event-based completion signaling (replaces polling)
     private completion_resolver: (() => void) | null = null;
@@ -26,7 +27,22 @@ export class MqttCommandControl implements IMqttCommandControl {
         this.is_running = true;
         this.is_timed_out = false;
         this.results = [];
+        this.last_sent_at = undefined;
         this.restart_clock();
+    }
+
+    /**
+     * Atomically claim the command slot. Synchronous check-and-set (no await
+     * between check and set), so on the single-threaded event loop exactly one
+     * concurrent caller can win — this is what serializes same-type commands.
+     * Returns true when the slot was free and is now held by the caller.
+     */
+    public claim(): boolean {
+        if (this.is_running) {
+            return false;
+        }
+        this.is_running = true;
+        return true;
     }
 
     public deinitialize() {

@@ -12,6 +12,14 @@ export function createMockMqttNetworking(overrides: Partial<MqttNetworking> = {}
     is_timed_out: true,
     timeout: null,
     results: [{ source: "test", payload: {} }],
+    // Mirrors MqttCommandControl.claim(): synchronous check-and-set
+    claim: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+      if (this.is_running) {
+        return false;
+      }
+      this.is_running = true;
+      return true;
+    }),
     initialize: jest.fn(),
     deinitialize: jest.fn(),
     clear_results: jest.fn(),

@@ -96,6 +96,16 @@ export class Logger implements ILogger {
         return this.global_log_level_name;
     }
 
+    /**
+     * Close the underlying Winston logger, flushing pending entries and
+     * stopping transport timers (e.g. the Loki batch timer). Must be called
+     * on a replaced logger (config reload) and at shutdown so transports
+     * are not orphaned.
+     */
+    close(): void {
+        this.winston.close();
+    }
+
     write_debug(
         originator: string,
         message: string,

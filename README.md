@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Cobalt Falcon — firmware 4.11.0
+**Release:** Cobalt Falcon — firmware 4.11.1
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -132,6 +132,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
 | POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor |
 | POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
+| GET | `/sensors/logs/:source` | Fetch sensor logs from Loki (source is allowlist-validated; `level` filter: debug/info/warn/error, `limit` max 100) |
 
 ### IP Pinger Routes (`/ippinger/*`)
 
@@ -162,9 +163,9 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/api/reload-config` | Reload configuration from disk; reports changed keys that require a restart (`restart_required`, `restart_keys`) |
-| GET | `/api/read-config` | Read current configuration as JSON |
-| POST | `/api/write-config` | Save new configuration and reload; reports changed keys that require a restart |
+| GET | `/api/reload-config` | Reload configuration from disk; only `log-level` applies immediately — other changed keys are reported as restart-required (`restart_required`, `restart_keys`) |
+| GET | `/api/read-config` | Read the running (in-memory) configuration as JSON; secrets (`db-password`, `loki-url`) are masked |
+| POST | `/api/write-config` | Save new configuration and reload; only `log-level` applies immediately, other changed keys are reported as restart-required |
 
 ### Swagger
 

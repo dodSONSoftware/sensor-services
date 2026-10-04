@@ -310,4 +310,42 @@ describe("MqttCommandControl", () => {
       expect(mcc.is_timed_out).toBe(true);
     });
   });
+
+  describe("claim", () => {
+    it("should claim a free slot atomically (returns true, sets is_running)", () => {
+      const mcc = new MqttCommandControl();
+      expect(mcc.is_running).toBe(false);
+      expect(mcc.claim()).toBe(true);
+      expect(mcc.is_running).toBe(true);
+    });
+
+    it("should refuse a second claim while the slot is held", () => {
+      const mcc = new MqttCommandControl();
+      expect(mcc.claim()).toBe(true);
+      // A concurrent caller must lose the race — this is what serializes
+      // same-type commands
+      expect(mcc.claim()).toBe(false);
+      expect(mcc.claim()).toBe(false);
+    });
+
+    it("should allow re-claiming after deinitialize releases the slot", () => {
+      const mcc = new MqttCommandControl();
+      mcc.claim();
+      mcc.deinitialize();
+      expect(mcc.is_running).toBe(false);
+      expect(mcc.claim()).toBe(true);
+      mcc.deinitialize();
+    });
+
+    it("should not clear results or reset the clock (pure slot claim)", () => {
+      const mcc = new MqttCommandControl(1000);
+      mcc.initialize();
+      mcc.results.push({ source: "test", payload: {} });
+      mcc.claim();
+      expect(mcc.results).toHaveLength(1);
+      // original clock still armed — fires at the original deadline
+      jest.advanceTimersByTime(1000);
+      expect(mcc.is_timed_out).toBe(true);
+    });
+  });
 });

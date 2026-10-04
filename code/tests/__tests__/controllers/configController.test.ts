@@ -9,6 +9,7 @@ import path from "path";
 import type express from "express";
 import {
     diffConfigReload,
+    readConfig,
     reloadConfig,
     setTestConfigPath,
     writeConfig,
@@ -93,7 +94,26 @@ describe("diffConfigReload", () => {
     it("should count an optional key removed from the config as a change", () => {
         const previous = validateConfig({ ...BASE_CONFIG, "loki-url": "http://loki:3100" });
         const next = validateConfig(BASE_CONFIG);
-        expect(diffConfigReload(previous, next).applied_keys).toEqual(["loki-url"]);
+        // loki-url is not hot-reloadable — removing it requires a restart
+        const { restart_keys, applied_keys } = diffConfigReload(previous, next);
+        expect(restart_keys).toEqual(["loki-url"]);
+        expect(applied_keys).toEqual([]);
+    });
+
+    it("should report loki settings as restart-required, not applied", () => {
+        const previous = validateConfig(BASE_CONFIG);
+        const next = validateConfig({
+            ...BASE_CONFIG,
+            "loki-url": "http://loki:3100",
+            "loki-enabled": true,
+        });
+
+        const { restart_keys, applied_keys } = diffConfigReload(previous, next);
+
+        // Hot-reloading loki-url would repoint the log transport live, letting
+        // an unauthenticated caller stream logs to an attacker host instantly.
+        expect(applied_keys).toEqual([]);
+        expect(restart_keys).toEqual(["loki-enabled", "loki-url"]);
     });
 });
 
@@ -200,7 +220,7 @@ describe("writeConfig (POST /api/write-config)", () => {
         expect(onDisk["db-port"]).toBe(5433);
     });
 
-    it("should report restart_required false when only logger settings change", async () => {
+    it("should report restart_required when loki settings change (hot-reload disabled for loki)", async () => {
         setConfig(validateConfig(BASE_CONFIG));
         // loki-enabled stays false on purpose: enabling it would make createLogger
         // open a real Loki transport and keep Jest's event loop alive.
@@ -212,10 +232,9 @@ describe("writeConfig (POST /api/write-config)", () => {
         expect(statusCalls).toContain(200);
         const response = sendCalls[0] as Record<string, unknown>;
         expect(response.success).toBe(true);
-        expect(response.restart_required).toBe(false);
-        expect(response.restart_keys).toEqual([]);
-        expect(response.applied_keys).toEqual(["log-level", "loki-url"]);
-        expect(response.message).toBe("Configuration updated successfully");
+        expect(response.restart_required).toBe(true);
+        expect(response.restart_keys).toEqual(["loki-url"]);
+        expect(response.applied_keys).toEqual(["log-level"]);
     });
 
     it("should reject an invalid body with 400 without writing to disk", async () => {
@@ -233,5 +252,44 @@ describe("writeConfig (POST /api/write-config)", () => {
         expect(response.success).toBe(false);
         const after = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : null;
         expect(after).toBe(before);
+    });
+});
+
+describe("readConfig (GET /api/read-config)", () => {
+    it("should mask db-password and loki-url in the response", () => {
+        setConfig(validateConfig({
+            ...BASE_CONFIG,
+            "loki-url": "http://loki:3100",
+        }));
+
+        const { res, sendCalls } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+
+        // res.json() without an explicit status — Express defaults to 200
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body["db-password"]).toBe("********");
+        expect(body["loki-url"]).toBe("********");
+        // non-secret values are returned as-is
+        expect(body["db-host"]).toBe("localhost");
+        expect(body["mqtt-broker-ip-address"]).toBe("10.10.10.64");
+    });
+
+    it("should not mutate the running config", () => {
+        setConfig(validateConfig(BASE_CONFIG));
+
+        const { res } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+
+        const { getConfig } = require("../../../src/common/global");
+        expect(getConfig()["db-password"]).toBe("sensor_pass");
+    });
+
+    it("should return 500 when the config is not initialized", () => {
+        setConfig(undefined);
+
+        const { res, statusCalls } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+
+        expect(statusCalls).toContain(500);
     });
 });

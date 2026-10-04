@@ -8,7 +8,7 @@ import { InternalServerError, Json, NotImplemented, OK } from "../dodsonlabs/Htt
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
-import type { IMqttCommandControl, ILogger } from "../dodsonlabs/Interfaces";
+import type { IMqttCommandControl, ILogger, MqttCommandResult } from "../dodsonlabs/Interfaces";
 import { randomUUID } from "crypto";
 
 // Null-safe logger: falls back to no-op methods when logger() is undefined
@@ -68,18 +68,22 @@ const __max_wait_ms = 10_000;
 /**
  * Enriches command results with metadata about the command execution.
  * Adds command_id, command_sent_at, and expected_delay_seconds to each result.
+ * `sentAt` should be the time the command was actually published (see
+ * IMqttCommandControl.last_sent_at) — falling back to "now" keeps the function
+ * usable from tests.
  */
 export function enrichResultsWithMetadata(
     results: IMqttCommandControl["results"],
     commandId: string,
-    expectedDelaySeconds?: number
+    expectedDelaySeconds?: number,
+    sentAt?: string
 ): Record<string, unknown>[] {
-    const now = new Date().toISOString();
+    const sent_at = sentAt ?? new Date().toISOString();
     return results.map((result) => ({
         ...result,
         command_metadata: {
             command_id: commandId,
-            command_sent_at: now,
+            command_sent_at: sent_at,
             expected_delay_seconds: expectedDelaySeconds ?? _reboot_command_delay_seconds,
         },
     }));
@@ -111,7 +115,69 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     dude.deinitialize();
 }
 
-export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, commandId?: string): Promise<IMqttCommandControl | null> {
+/**
+ * Publish the command (initialize + publish) and wait for its responses.
+ * Caller must hold the slot (see mqtt_command_acquire_slot); the wait
+ * releases it via deinitialize().
+ *
+ * Returns a snapshot of the results: once the wait releases the slot, a
+ * waiting caller can immediately start its own command, whose initialize()
+ * REASSIGNS dude.results — the array captured here stays intact.
+ */
+async function mqtt_command_start_and_wait(
+    dude: IMqttCommandControl,
+    mqtt_request: Record<string, unknown>,
+    network: MqttNetworking,
+    command: string
+): Promise<MqttCommandResult[]> {
+    // start-it (initialize() clears last_sent_at — set it afterwards)
+    mqtt_command_start(dude, mqtt_request, network);
+
+    // record when the command was actually sent (for response metadata)
+    dude.last_sent_at = new Date().toISOString();
+
+    // log-it
+    _log().write_debug("sensorController.ts/mqtt_command_start_and_wait", `${command}: Started...`);
+
+    // wait-for-it
+    await mqtt_command_wait_for_command_completion(dude);
+
+    // snapshot before the slot can be claimed by the next caller
+    return dude.results;
+}
+
+/**
+ * Wait until the command slot is free and claim it, so that only one command
+ * per type is ever outstanding. Each HTTP request then publishes its OWN
+ * command and responds with its OWN results — sharing results with the
+ * in-flight request would hand one caller another caller's data, or empty data
+ * once that caller clears results.
+ *
+ * The claim is a synchronous check-and-set, so two requests arriving in the
+ * same tick cannot both win the slot.
+ */
+async function mqtt_command_acquire_slot(dude: IMqttCommandControl, command: string): Promise<void> {
+    for (;;) {
+        if (dude.claim()) {
+            return;
+        }
+
+        _log().write_debug("sensorController.ts/mqtt_command_acquire_slot", `${command}: Request made while previous request still running, waiting for it to complete...`);
+        await mqtt_command_wait_for_command_completion(dude);
+    }
+}
+
+/**
+ * Outcome of a command round-trip: the control that ran it plus a snapshot
+ * of its results (safe to read after the slot is released — see
+ * mqtt_command_start_and_wait).
+ */
+export interface MqttCommandOutcome {
+    dude: IMqttCommandControl;
+    results: MqttCommandResult[];
+}
+
+export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, commandId?: string): Promise<MqttCommandOutcome> {
     // get-it
     const start_date = new Date();
     const cmdId = commandId ?? randomUUID();
@@ -121,42 +187,26 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
         throw new Error(`Unknown command type: ${command}`);
     }
 
-    // check if the request is already running
-    if (dude.is_running) {
-        // log-it
-        _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Request made while previous request still running...`);
+    // serialize: acquire the command slot (waits for any in-flight command of
+    // the same type to finish)
+    await mqtt_command_acquire_slot(dude, command);
 
-        // wait-for-it
-        await mqtt_command_wait_for_command_completion(dude);
-
-    } else {
-        // create mqtt request
-        const mqtt_request = create_mqtt_command_message(target, command, null, cmdId);
-
-        // start-it
-        mqtt_command_start(dude, mqtt_request, network);
-
-        // log-it
-        _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}: Started...`);
-
-        // wait-for-it
-        await mqtt_command_wait_for_command_completion(dude);
-    }
+    // create mqtt request and run our own command
+    const mqtt_request = create_mqtt_command_message(target, command, null, cmdId);
+    const results = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
 
     // log-it
     _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
 
     // ----
-    return dude;
+    return { dude, results };
 }
 
 async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, commandId?: string) {
     try {
-        // log-it
-        const dude = await mqtt_command_get_messages(network, target, command, commandId);
-        if (dude === null) {
-            return; // error already sent by mqtt_command_get_messages
-        }
+        // mqtt_command_get_messages throws on unknown command types — it never
+        // returns null, so there is nothing extra to handle here.
+        const { dude, results } = await mqtt_command_get_messages(network, target, command, commandId);
 
         // send response
         res.status(OK);
@@ -164,9 +214,9 @@ async function get_it(_req: express.Request, res: express.Response, network: Mqt
 
         // Enrich results with metadata if commandId is provided
         if (commandId && command === "reboot") {
-            res.send(enrichResultsWithMetadata(dude.results, commandId));
+            res.send(enrichResultsWithMetadata(results, commandId, undefined, dude.last_sent_at));
         } else {
-            res.send(dude.results);
+            res.send(results);
         }
         dude.clear_results();
 
@@ -190,32 +240,18 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
             return;
         }
 
-        // check if the request is already running
-        if (dude.is_running) {
-            // log-it
-            _log().write_debug("sensorController.ts/post_it", `${command}: Request made while previous request still running...`);
+        // serialize: acquire the command slot, then run our own command so
+        // this request responds with its own results
+        await mqtt_command_acquire_slot(dude, command);
 
-            // wait-for-it
-            await mqtt_command_wait_for_command_completion(dude);
-
-        } else {
-            // create mqtt request
-            const mqtt_request = create_mqtt_command_message(target, command, payload, commandId);
-
-            // start-it
-            mqtt_command_start(dude, mqtt_request, network);
-
-            // log-it
-            logger()?.write_debug("sensorController.ts/post_it", `${command}: Started...`);
-
-            // wait-for-it
-            await mqtt_command_wait_for_command_completion(dude);
-        }
+        // create mqtt request
+        const mqtt_request = create_mqtt_command_message(target, command, payload, commandId);
+        const results = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
 
         // send response
         res.status(OK);
         res.contentType(Json);
-        res.send(dude.results);
+        res.send(results);
         dude.clear_results();
 
     } catch (err) {
