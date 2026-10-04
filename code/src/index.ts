@@ -17,12 +17,7 @@ import * as configRoutes from "./routes/configRoutes";
 import * as logRoutes from "./routes/logRoutes";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
-import { InternalServerError } from "./dodsonlabs/HttpConstants";
-import {
-    httpRequestsTotal,
-    httpRequestDuration,
-    httpErrorsTotal,
-} from "./common/metrics";
+import { createApiMetricsMiddleware } from "./common/metrics";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
@@ -127,44 +122,10 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         new middleware.CreateMiddleware(app, config);
 
         // **** API Prometheus metrics (separate registry, exposed at /metrics)
-        // Registry and metrics are imported from common/metrics.ts so they can
-        // also be used by route handlers (e.g. generalRoutes.ts).
-
-        // Track request duration and status, record metrics after response is sent
-        app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-            const start = process.hrtime();
-
-            // Wrap res.end to capture the final status code
-            const originalEnd = res.end;
-            const trackedRes = res as express.Response & { _ended?: boolean };
-            trackedRes._ended = false;
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            res.end = function (this: any, ...args: any[]) {
-                if (!trackedRes._ended) {
-                    trackedRes._ended = true;
-
-                    const [sec, nsec] = process.hrtime(start);
-                    const duration = sec + nsec / 1e9;
-
-                    const method = req.method;
-                    // Use the matched route pattern (e.g., /sensors/get-details/:source)
-                    const route = req.route ? req.route.path : req.path;
-                    const status = res.statusCode;
-
-                    httpRequestsTotal.labels({ method, route, status }).inc();
-                    httpRequestDuration.labels({ method, route }).observe(duration);
-
-                    if (status >= InternalServerError) {
-                        httpErrorsTotal.labels({ method, route }).inc();
-                    }
-                }
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                return (originalEnd as any).apply(this, args);
-            } as typeof res.end;
-
-            next();
-        });
+        // Registry and metrics live in common/metrics.ts so they can also be
+        // used by route handlers (e.g. generalRoutes.ts). Unmatched requests
+        // are recorded under the bounded "unmatched" route label.
+        app.use(createApiMetricsMiddleware());
 
         // create routes
         const ip_pinger_web_api = config["ip-pinger-web-api"];
