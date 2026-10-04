@@ -328,12 +328,35 @@ export function getSettings(): AppSettings {
 }
 
 /**
+ * Serialize settings updates within this process. patchSettings performs a
+ * read-modify-write on the shared in-memory cache, and persistence crosses
+ * async boundaries — without serialization, two concurrent patches can clone
+ * the same committed state, persist different fields independently, and
+ * overwrite one another (both callers report success, one update is lost).
+ */
+let settingsUpdateQueue: Promise<unknown> = Promise.resolve();
+
+/**
  * Partially update settings: merge `updates` into the existing cache, persist to PostgreSQL, and return the merged result.
  * If PostgreSQL is unavailable the update is DISCARDED (the cache is left unchanged)
  * and the error is rethrown so the caller can report 500 — it is not queued for
  * later persistence.
+ *
+ * Updates are serialized: each patch observes the latest committed in-memory
+ * state. A failed update rethrows to its own caller without breaking the
+ * queue for subsequent updates.
  */
-export async function patchSettings(updates: Record<string, unknown>): Promise<AppSettings> {
+export function patchSettings(updates: Record<string, unknown>): Promise<AppSettings> {
+    const operation = settingsUpdateQueue.then(() => doPatchSettings(updates));
+
+    // A failed update must not permanently break the chain — swallow the
+    // rejection for the queue while each caller still receives its own result.
+    settingsUpdateQueue = operation.catch(() => undefined);
+
+    return operation;
+}
+
+async function doPatchSettings(updates: Record<string, unknown>): Promise<AppSettings> {
     // Initialize cache if not yet done (e.g., patchSettings called before init completes)
     if (!cache) {
         cache = structuredClone(DEFAULT_SETTINGS);

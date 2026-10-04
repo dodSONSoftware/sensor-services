@@ -19,6 +19,12 @@ let mockRow: unknown = null;
  */
 let mockCreateDatabaseError: unknown = null;
 
+/** When set, the settings persistence INSERT rejects with this error. */
+let mockInsertError: unknown = null;
+
+/** Artificial delay (ms) on the settings persistence INSERT. */
+let mockInsertDelayMs = 0;
+
 /** Database name of every pool whose end() was called, in call order. */
 const mockPoolEndCalls: string[] = [];
 
@@ -48,6 +54,12 @@ jest.mock("pg", () => {
                         return { rows: mockRow === null ? [] : [{ data: mockRow }] };
                     }
                     if (text.includes("INSERT INTO app_settings")) {
+                        if (mockInsertDelayMs > 0) {
+                            await new Promise(r => setTimeout(r, mockInsertDelayMs));
+                        }
+                        if (mockInsertError !== null) {
+                            throw mockInsertError;
+                        }
                         // Emulate the table: the row is the stringified JSON payload
                         mockRow = JSON.parse(params?.[0] as string);
                         return { rows: [] };
@@ -158,5 +170,69 @@ describe("init() with an existing persisted row", () => {
         expect(bootstrapEnds).toHaveLength(1);
         // Settings were seeded through the main pool
         expect(store.getSettings()).toEqual(structuredClone(DEFAULT_SETTINGS));
+    });
+});
+
+describe("patchSettings() serialization", () => {
+    beforeEach(() => {
+        mockRow = null;
+        mockCreateDatabaseError = null;
+        mockInsertError = null;
+        mockInsertDelayMs = 0;
+        mockPoolEndCalls.length = 0;
+    });
+
+    afterEach(() => {
+        mockInsertError = null;
+        mockInsertDelayMs = 0;
+    });
+
+    it("should not lose updates when two patches race (regression)", async () => {
+        const store = freshStore();
+        await store.init(config);
+
+        // Artificially slow persistence so both patches would interleave
+        // under an unsynchronized read-modify-write
+        mockInsertDelayMs = 50;
+
+        const [a, b] = await Promise.all([
+            store.patchSettings({ theme: "dark" }),
+            store.patchSettings({ time_range_hours: 72 }),
+        ]);
+
+        // Each caller sees its own change committed
+        expect(a.theme).toBe("dark");
+        expect(b.time_range_hours).toBe(72);
+
+        // Final state — in memory AND persisted — must contain BOTH changes
+        const final = store.getSettings();
+        expect(final.theme).toBe("dark");
+        expect(final.time_range_hours).toBe(72);
+
+        const persisted = JSON.parse(JSON.stringify(mockRow)) as Record<string, unknown>;
+        expect(persisted["theme"]).toBe("dark");
+        expect(persisted["time_range_hours"]).toBe(72);
+    });
+
+    it("should let a following patch proceed after a persistence failure (regression)", async () => {
+        const store = freshStore();
+        await store.init(config);
+
+        // Request A fails during persistence
+        mockInsertError = new Error("db connection lost");
+        await expect(store.patchSettings({ theme: "dark" })).rejects.toThrow("db connection lost");
+        // The failed update is discarded — the cache keeps the committed state
+        expect(store.getSettings().theme).toBe(DEFAULT_SETTINGS.theme);
+
+        // Request B must still execute — the serialization chain is not left
+        // permanently blocked by A's failure
+        mockInsertError = null;
+        const b = await store.patchSettings({ time_range_hours: 72 });
+
+        expect(b.time_range_hours).toBe(72);
+        expect(b.theme).toBe(DEFAULT_SETTINGS.theme);
+        const final = store.getSettings();
+        expect(final.time_range_hours).toBe(72);
+        expect(final.theme).toBe(DEFAULT_SETTINGS.theme);
     });
 });
