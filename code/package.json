@@ -1,6 +1,6 @@
 {
   "name": "sensor-services",
-  "version": "4.12.4",
+  "version": "4.12.5",
   "description": "A RESTful web service connecting to the sensor net and the observability stack.",
   "author": "dodson labs",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "blt": "bash ../.claude/commands/ci.sh"
+    "blt": "npm run build && npm run lint && npm run test:coverage"
   },
   "dependencies": {
     "cors": "^2.8.5",

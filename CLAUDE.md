@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.4)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.5)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -115,7 +115,7 @@ npm run lint:fix       # ESLint auto-fix
 npm test               # Jest test runner
 npm run test:watch     # Jest watch mode
 npm run test:coverage  # Jest with coverage report
-npm run blt            # CI check: build + lint + test with coverage (runs `.claude/commands/ci.sh`, exit 1 if any step fails or coverage < 70%)
+npm run blt            # CI check: build + lint + test with coverage (`npm run build && npm run lint && npm run test:coverage`, exit 1 if any step fails or coverage < 70%)
 
 ### Docker
 
