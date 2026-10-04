@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Cobalt Falcon — firmware 4.11.6
+**Release:** Cobalt Falcon — firmware 4.11.7
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -117,7 +117,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/date_local`, `/date-local` | Current local date/time |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time |
 | GET | `/endpoints` | Detailed information about each API endpoint |
-| GET | `/health` | Health status with MQTT, memory, CPU, uptime |
+| GET | `/health` | Health status with MQTT, memory, CPU, uptime — HTTP 200 for healthy/degraded, HTTP 503 for unhealthy |
 | GET | `/metrics` | Prometheus scrape endpoint for API metrics |
 
 ### Sensor Routes (`/sensors/*`)
@@ -247,6 +247,29 @@ npm run lint:fix    # Auto-fix where possible
 ```
 
 Uses ESLint 9.x with @typescript-eslint v8.
+
+---
+
+## Security and Deployment Assumptions
+
+> The configuration API does not implement application-level authentication. This service is designed for deployment only on a trusted, private LAN and must not be exposed directly to the public Internet. Network segmentation and firewall rules are the security boundary for access to configuration endpoints.
+
+### Accepted risk
+
+Endpoints such as `POST /api/write-config`, `GET /api/reload-config`, and `GET /api/read-config` are reachable by any client that can reach the service on the trusted LAN. A compromised trusted-LAN host, an incorrect firewall rule, or accidental network exposure could allow configuration reads or modification. This is an accepted risk for the current deployment.
+
+### Operators must not
+
+- Expose port 32000 directly to the Internet
+- Create WAN port-forwarding to the service
+- Publish the configuration API through an Internet-facing reverse proxy
+- Allow untrusted Guest or IoT networks to access the service unintentionally
+
+The deployment model assumes no WAN/public Internet exposure, trusted LAN clients only, and firewall/VLAN policy enforcing the intended network boundary.
+
+### When to reconsider
+
+Application-level authentication should be added if the service becomes Internet-accessible, remote access is added, access from untrusted VLANs is required, multiple users with different trust levels use the service, a reverse proxy exposes the API outside the trusted LAN, or the service moves to a zero-trust network model. If authentication is added, prefer a minimal administrative token or equivalent mechanism over broad authentication architecture.
 
 ---
 
