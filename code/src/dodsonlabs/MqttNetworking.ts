@@ -521,6 +521,37 @@ export class MqttNetworking implements IMqttNetworking {
     // ********
     // ******** HANDLE RESPONSE MESSAGE
 
+    /**
+     * Correlate a command response with the active request. One active
+     * command_id may receive responses from multiple sensors, but a response
+     * carrying any other command_id — or arriving when no command is active —
+     * must not enter the active result set or restart its silence timer
+     * (a delayed response from a previous command must not resurrect it).
+     */
+    private accepts_command_response(
+        dude: IMqttCommandControl,
+        source: string,
+        command_id?: string
+    ): boolean {
+        const normalized = command_id !== undefined && command_id !== null ? String(command_id) : undefined;
+
+        if (!dude.is_running) {
+            this.logger.write_debug(
+                this.originator,
+                `<command_response> => Ignoring response from '${source}': no active command`
+            );
+            return false;
+        }
+        if (normalized === undefined || dude.active_command_id === undefined || normalized !== dude.active_command_id) {
+            this.logger.write_debug(
+                this.originator,
+                `<command_response> => Ignoring response from '${source}': command_id '${normalized}' does not match active command_id '${dude.active_command_id}'`
+            );
+            return false;
+        }
+        return true;
+    }
+
     private handle_mqtt_command_response_message(
         dude: IMqttCommandControl,
         source: string,
@@ -528,6 +559,10 @@ export class MqttNetworking implements IMqttNetworking {
         json_doc: Record<string, any>,
         command_id?: string
     ): void {
+        if (!this.accepts_command_response(dude, source, command_id)) {
+            return;
+        }
+
         // create the result and record it
         dude.results.push(this.create_command_result(source, payload, json_doc, command_id));
 
@@ -673,6 +708,10 @@ export class MqttNetworking implements IMqttNetworking {
         json_doc: Record<string, any>,
         command_id?: string
     ): void {
+        if (!this.accepts_command_response(dude, source, command_id)) {
+            return;
+        }
+
         // create the result and record it
         dude.results.push(this.create_command_result(source, payload, json_doc, command_id));
 

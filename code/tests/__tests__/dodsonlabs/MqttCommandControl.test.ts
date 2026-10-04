@@ -66,6 +66,48 @@ describe("MqttCommandControl", () => {
       mcc.initialize();
       expect(mcc.timeout).not.toBeNull();
     });
+
+    it("should record the active command id when initialized with one", () => {
+      const mcc = new MqttCommandControl();
+      mcc.initialize("cmd-123");
+      expect(mcc.active_command_id).toBe("cmd-123");
+    });
+
+    it("should leave the active command id unset when initialized without one", () => {
+      const mcc = new MqttCommandControl();
+      mcc.initialize();
+      expect(mcc.active_command_id).toBeUndefined();
+    });
+  });
+
+  describe("active_command_id lifecycle", () => {
+    it("should clear the active command id on deinitialize", () => {
+      const mcc = new MqttCommandControl();
+      mcc.initialize("cmd-123");
+      mcc.deinitialize();
+      expect(mcc.active_command_id).toBeUndefined();
+    });
+
+    it("should not retain a previous command id after re-initialization", () => {
+      const mcc = new MqttCommandControl();
+      mcc.initialize("cmd-A");
+      mcc.deinitialize();
+
+      mcc.initialize("cmd-B");
+      expect(mcc.active_command_id).toBe("cmd-B");
+      mcc.deinitialize();
+
+      // A fresh command must start with the new id, never a stale one
+      mcc.initialize("cmd-C");
+      expect(mcc.active_command_id).toBe("cmd-C");
+      mcc.deinitialize();
+      expect(mcc.active_command_id).toBeUndefined();
+    });
+
+    it("should start with no active command id", () => {
+      const mcc = new MqttCommandControl();
+      expect(mcc.active_command_id).toBeUndefined();
+    });
   });
 
   describe("deinitialize", () => {

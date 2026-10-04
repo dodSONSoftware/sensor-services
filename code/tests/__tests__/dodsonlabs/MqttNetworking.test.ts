@@ -283,7 +283,7 @@ describe("MqttNetworking", () => {
         it("should still route the same response on the subscribed command-response topic", async () => {
             const anyNetworking = networking as any;
             const dude = networking.get_cr_dude("get-details")!;
-            dude.initialize();
+            dude.initialize(CAPTURED_GET_DETAILS_RESPONSE["payload"]["command_id"]);
 
             await anyNetworking.on_message(
                 "iot/v3/command-response",
@@ -304,7 +304,7 @@ describe("MqttNetworking", () => {
         it("should route a captured get-details response into the get-details control", async () => {
             const anyNetworking = networking as any;
             const dude = networking.get_cr_dude("get-details")!;
-            dude.initialize();
+            dude.initialize(CAPTURED_GET_DETAILS_RESPONSE["payload"]["command_id"]);
 
             await anyNetworking.handle_mqtt_message(CAPTURED_GET_DETAILS_RESPONSE);
 
@@ -330,7 +330,7 @@ describe("MqttNetworking", () => {
         it("should route a captured read-config response into the read-config control", async () => {
             const anyNetworking = networking as any;
             const dude = networking.get_cr_dude("read-config")!;
-            dude.initialize();
+            dude.initialize(CAPTURED_READ_CONFIG_RESPONSE["payload"]["command_id"]);
 
             await anyNetworking.handle_mqtt_message(CAPTURED_READ_CONFIG_RESPONSE);
 
@@ -350,7 +350,7 @@ describe("MqttNetworking", () => {
         it("should route a captured reboot response into the reboot control", async () => {
             const anyNetworking = networking as any;
             const dude = networking.get_cr_dude("reboot")!;
-            dude.initialize();
+            dude.initialize(CAPTURED_REBOOT_RESPONSE["payload"]["command_id"]);
 
             await anyNetworking.handle_mqtt_message(CAPTURED_REBOOT_RESPONSE);
 
@@ -367,7 +367,7 @@ describe("MqttNetworking", () => {
         it("should pass error responses through inside payload", async () => {
             const anyNetworking = networking as any;
             const dude = networking.get_cr_dude("get-details")!;
-            dude.initialize();
+            dude.initialize("err-0001");
 
             const errorResponse = {
                 "message_type": "command_response",
@@ -475,6 +475,143 @@ describe("MqttNetworking", () => {
             const serialized = JSON.stringify(writeDebugCalls);
             expect(serialized).not.toContain("hunter2");
             expect(serialized).not.toContain("hunter3");
+        });
+    });
+
+    // ---- command_id correlation (stale-response race)
+
+    describe("command_id correlation", () => {
+        // Build a command_response with the given command_id and source
+        function responseFor(commandId: string, source: string = "Air-1"): Record<string, any> {
+            return {
+                "message_type": "command_response",
+                "payload": {
+                    "command_id": commandId,
+                    "targeted": false,
+                    "command": "get-details",
+                    "success": true,
+                    "data": { "source": source },
+                },
+                "message_schema_version": 3,
+                "source": source,
+            };
+        }
+
+        it("should accept a late response only for the active command_id", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+
+            // Request A: starts and completes
+            dude.initialize("cmd-A");
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-A", "Air-1"));
+            expect(dude.results).toHaveLength(1);
+            dude.deinitialize();
+
+            // Request B starts with a fresh command id
+            dude.initialize("cmd-B");
+            const timerBefore = dude.timeout;
+
+            // Late response from request A arrives while B is active — it must
+            // not enter B's result set or restart B's silence timer
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-A", "Air-1"));
+            expect(dude.results).toHaveLength(0);
+            expect(dude.is_timed_out).toBe(false);
+            expect(dude.timeout).toBe(timerBefore);
+
+            // A valid response for B arrives
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-B", "Air-1"));
+            expect(dude.results).toHaveLength(1);
+            expect(dude.results[0].command_id).toBe("cmd-B");
+
+            dude.deinitialize();
+        });
+
+        it("should accept multiple responses from different sensors using the same active command_id", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize("cmd-B");
+
+            // Multiple sensors answering one broadcast command is valid — all
+            // responses carrying the active command_id must be retained
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-B", "Air-1"));
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-B", "Air-2"));
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-B", "Air-3"));
+
+            expect(dude.results).toHaveLength(3);
+            expect(dude.results.map(r => r.source)).toEqual(["Air-1", "Air-2", "Air-3"]);
+            dude.results.forEach(r => expect(r.command_id).toBe("cmd-B"));
+
+            dude.deinitialize();
+        });
+
+        it("should ignore a response when no command is active", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+
+            expect(dude.is_running).toBe(false);
+
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-orphan"));
+
+            expect(dude.results).toHaveLength(0);
+            // No timer started or restarted
+            expect(dude.is_timed_out).toBe(false);
+            expect(dude.timeout).toBeNull();
+        });
+
+        it("should ignore a response carrying a different command_id during an active request", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize("cmd-B");
+            const timerBefore = dude.timeout;
+
+            await anyNetworking.handle_mqtt_message(responseFor("cmd-C", "Air-1"));
+
+            expect(dude.results).toHaveLength(0);
+            expect(dude.is_timed_out).toBe(false);
+            expect(dude.timeout).toBe(timerBefore);
+
+            dude.deinitialize();
+        });
+
+        it("should ignore a response with no command_id during an active request", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize("cmd-B");
+
+            const doc = responseFor("cmd-B", "Air-1");
+            delete doc["payload"]["command_id"];
+            await anyNetworking.handle_mqtt_message(doc);
+
+            expect(dude.results).toHaveLength(0);
+            dude.deinitialize();
+        });
+
+        it("should also correlate reboot responses with the active command_id", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("reboot")!;
+            dude.initialize("cmd-reboot-B");
+
+            const rebootResponse = {
+                "message_type": "command_response",
+                "payload": {
+                    "command_id": "cmd-reboot-A", // stale id from a previous reboot
+                    "targeted": true,
+                    "command": "reboot",
+                    "success": true,
+                    "data": { "rebooting": true },
+                },
+                "message_schema_version": 3,
+                "source": "Air-1",
+            };
+            await anyNetworking.handle_mqtt_message(rebootResponse);
+            expect(dude.results).toHaveLength(0);
+
+            const validResponse = { ...rebootResponse, "payload": { ...rebootResponse["payload"], "command_id": "cmd-reboot-B" } };
+            await anyNetworking.handle_mqtt_message(validResponse);
+            expect(dude.results).toHaveLength(1);
+            expect(dude.results[0].command_id).toBe("cmd-reboot-B");
+
+            dude.deinitialize();
         });
     });
 

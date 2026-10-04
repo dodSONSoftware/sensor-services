@@ -14,6 +14,10 @@ export class MqttCommandControl implements IMqttCommandControl {
     results: MqttCommandResult[] = [];
     timeout_duration_ms = __default_timeout_duration_ms;
     last_sent_at: string | undefined = undefined;
+    // The command_id of the currently active request — command responses must
+    // carry this id to be accepted (see MqttNetworking). Cleared on
+    // deinitialize so a completed command never retains a stale id.
+    active_command_id: string | undefined = undefined;
 
     // Event-based completion signaling (replaces polling)
     private completion_resolver: (() => void) | null = null;
@@ -23,11 +27,12 @@ export class MqttCommandControl implements IMqttCommandControl {
         this.timeout_duration_ms = timeout_dur_ms;
     }
 
-    public initialize() {
+    public initialize(commandId?: string) {
         this.is_running = true;
         this.is_timed_out = false;
         this.results = [];
         this.last_sent_at = undefined;
+        this.active_command_id = commandId;
         this.restart_clock();
     }
 
@@ -49,6 +54,7 @@ export class MqttCommandControl implements IMqttCommandControl {
         this.is_running = false;
         this.is_timed_out = true;
         this.cancel_clock();
+        this.active_command_id = undefined;
         this.resolve_completion();
     }
 

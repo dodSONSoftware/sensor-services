@@ -53,8 +53,14 @@ export function create_mqtt_command_message(target: string, command: string, pay
 }
 
 function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
+    // Record the command id so incoming responses can be correlated with this
+    // request — MqttNetworking ignores responses carrying any other id
+    const command_id = mqtt_request["command_id"] !== undefined && mqtt_request["command_id"] !== null
+        ? String(mqtt_request["command_id"])
+        : undefined;
+
     // initialize timer
-    dude.initialize();
+    dude.initialize(command_id);
 
     // publish mqtt request (dedup handled inline by publish_mqtt_message)
     network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);

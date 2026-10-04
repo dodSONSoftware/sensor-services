@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Cobalt Falcon — firmware 4.11.1
+**Release:** Cobalt Falcon — firmware 4.11.2
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)

@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.1)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.2)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -186,6 +186,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 - Event-based completion via `waitForCompletion()` (replaces old 1-second polling loop)
 - 10-second hard safety cap via `AbortController` to prevent infinite hangs
 - `claim()` — atomic synchronous check-and-set slot claim; the controller serializes same-type commands with it, so each HTTP request publishes its own command and responds with its own results (never a concurrent caller's)
+- `active_command_id` — `initialize(commandId)` records the active request's `command_id`; `MqttNetworking` accepts command responses only when the response's `command_id` matches it (one active id may receive responses from multiple sensors). Stale responses from a previous command are dropped at debug level and never restart the silence timer
 
 **RoutesCreatorBase** (`dodsonlabs/CreatorBase.ts`) — Abstract base class:
 - All route modules extend this: `CreateGeneralRoutes`, `CreateSensorRoutes`, `CreatePingerRoutes`, `CreateSettingsRoutes`
