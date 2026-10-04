@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.5)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.6)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -29,13 +29,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     ├── .dockerignore      -- Docker build exclusions (node_modules, tests, coverage, etc.)
     ├── .editorconfig      -- Editor config (indentation, charset, line endings)
     ├── src/
-    │   ├── index.ts       -- Entry point: config load, Zod validation, logger init, MQTT init, Swagger, middleware, API metrics, routes, listen, graceful shutdown (15s hard timeout)
+    │   ├── index.ts       -- Entry point: config load, Zod validation, logger init, MQTT init, Swagger, middleware, API metrics, routes, listen, graceful shutdown (15s hard timeout, re-entrancy guard, exits after runGracefulShutdown)
     │   ├── version.ts     -- App version source of truth: APP_VERSION + APP_NAME (release codename, derived per the codename scheme in .claude/commands/git-commit.md); package.json version kept in sync
     │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, rate limiting, YAML format)
     │   ├── swagger.ts     -- Swagger UI setup at /swagger (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
     │   ├── common/
     │   │   ├── global.ts  -- Global logger singleton, AsyncLocalStorage request ID propagation, aboutDude() metadata (system_info now populated)
     │   │   ├── metrics.ts -- API Prometheus metrics: http_requests_total (Counter), http_request_duration_seconds (Histogram), http_errors_total (Counter) — separate registry from sensor gauges
+    │   │   ├── shutdown.ts -- runGracefulShutdown(): closes HTTP server, MQTT client, settings store; emits final shutdown log; closes the active logger exactly once (buffered transports flush); process exit owned by caller
     │   │   └── app-request.d.ts -- Express Request augmentation with optional id field
     │   ├── controllers/
     │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load)
@@ -74,7 +75,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   └── __tests__/
     │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc)
     │       ├── common/
-    │       │   └── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
+    │       │   ├── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
+    │       │   ├── metrics.test.ts -- API metrics middleware: unmatched routes collapse to the "unmatched" label sentinel
+    │       │   └── shutdown.test.ts -- runGracefulShutdown(): resource close order, final log before close, logger close exactly once
     │       ├── controllers/
     │       │   ├── configController.test.ts   -- diffConfigReload(), reload-config/write-config restart_required reporting, readConfig() secret masking
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
@@ -161,7 +164,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 11. Validate `__routesHelp` entries match actual registered routes (drift detection)
 12. Listen on configured port
 13. Register `uncaughtException`/`unhandledRejection` handlers — call `shutdown()` to trigger graceful shutdown
-14. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, closes HTTP server, then closes MQTT client (gauges are in-memory, no flush needed)
+14. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, re-entrancy guard; `runGracefulShutdown()` (common/shutdown.ts) closes HTTP server → MQTT client → settings store → final log → active logger (exactly once), then the caller exits 0
 
 ### Core Components
 
@@ -413,7 +416,7 @@ case-sensitive: true
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
 - **Body validation** — all POST bodies validated with Zod (`validatePostBody()`). Returns 400 if body is missing or not a JSON object. Replaces `req.body` with the validated object.
 - **API metrics middleware** — `createApiMetricsMiddleware()` (common/metrics.ts) wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`. The route label is the matched route pattern; unmatched requests collapse to the bounded `"unmatched"` sentinel so arbitrary 404 paths cannot grow label cardinality without bound.
-- **Graceful shutdown** — 15-second hard timeout safety net. Steps: stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → exit (gauges are in-memory, no flush needed).
+- **Graceful shutdown** — 15-second hard timeout safety net (cleared before exit, so it can never log after the logger closes) plus a re-entrancy guard against double signals. Sequence lives in `common/shutdown.ts` (`runGracefulShutdown()`): stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → emit the final shutdown log → close the active logger exactly once (once-guarded, so buffered transports like the Loki batch timer flush) → caller exits 0. Nothing may log after the close.
 - **Config reload applies only hot-reloadable keys at runtime** — `doReloadConfig()` updates the active in-memory config with only `HOT_RELOADABLE_KEYS` (currently `log-level`) and mutates the log level on the existing logger instance via `Logger.setLevel()`. Restart-required values from the file stay inactive until restart, so `/api/read-config` never reports inactive values as active and long-lived components never hold a closed logger.
 - **`log-level` enum includes `warn`** — valid values are `error`, `warn`, `info`, `debug`.
 - **Zod v4** — upgraded from Zod v3. Schema uses `z.enum()` with `error` option for custom error messages.

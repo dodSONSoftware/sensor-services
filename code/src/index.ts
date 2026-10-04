@@ -18,10 +18,11 @@ import * as logRoutes from "./routes/logRoutes";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { createApiMetricsMiddleware } from "./common/metrics";
+import { runGracefulShutdown } from "./common/shutdown";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
-import { ensureError, formatElapsedTime, read_file_yaml } from "./dodsonlabs/SystemFunctions";
+import { ensureError, read_file_yaml } from "./dodsonlabs/SystemFunctions";
 import { redactConfig, validateConfig, type configSchema } from "./schemas/config";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
@@ -168,10 +169,21 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     // Hard shutdown timeout — if graceful shutdown hangs, force exit.
     const __hard_shutdown_timeout_ms = 15_000;
 
+    // Re-entrancy guard: a second signal or fatal error mid-shutdown must not
+    // re-run the sequence (which would duplicate the logger close).
+    let shutting_down = false;
+
     async function shutdown(signal: string): Promise<void> {
+        if (shutting_down) {
+            return;
+        }
+        shutting_down = true;
+
         appLogger.write_info("index.ts", `Received ${signal}. Starting graceful shutdown...`);
 
         // Set a hard timeout as a safety net to prevent hanging forever.
+        // It is cleared before the exit so it can never fire after the logger
+        // has been closed by runGracefulShutdown().
         const hardTimeout = setTimeout(() => {
             appLogger.write_error("index.ts", `Hard shutdown timeout reached (${__hard_shutdown_timeout_ms}ms). Forcing exit.`);
             process.exit(1);
@@ -179,24 +191,22 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         hardTimeout.unref();
 
         try {
-            // 1. Stop accepting new HTTP requests
-            await new Promise<void>((resolve) => {
-                server.close(() => {
-                    appLogger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
-                    resolve();
-                });
-            });
-
-            // 2. Close MQTT client with a timeout
-            await networking.close(5000);
-
-            // 3. Clean up persistence resources
-            await settingsStore.shutdown();
-
-            // 4. Shutdown complete — gauges are in-memory and always available via /metrics
-            appLogger.write_info("index.ts", `Graceful shutdown complete. Uptime: ${formatElapsedTime(Date.now() - start_time)}.`);
-        } catch (err) {
-            appLogger.write_error("index.ts", `Error during graceful shutdown: ${(err as Error).message}`);
+            // 1-4: close the HTTP server, MQTT client, and settings store,
+            // then the active logger exactly once (see common/shutdown.ts)
+            await runGracefulShutdown(
+                {
+                    closeHttpServer: () => new Promise<void>((resolve) => {
+                        server.close(() => {
+                            appLogger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
+                            resolve();
+                        });
+                    }),
+                    closeNetworking: (timeoutMs: number) => networking.close(timeoutMs),
+                    closeSettingsStore: () => settingsStore.shutdown(),
+                },
+                appLogger,
+                start_time
+            );
         } finally {
             clearTimeout(hardTimeout);
             process.exit(0);
