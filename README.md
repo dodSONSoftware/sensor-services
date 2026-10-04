@@ -2,7 +2,7 @@
 
 Series 1 - SensorNET Services
 
-**Release:** Cobalt Falcon — firmware 4.11.7
+**Release:** Carbon Falcon — firmware 4.12.0
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -126,8 +126,8 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 |--------|-------|-------------|
 | GET | `/sensors/get-details` | Get details for all sensors |
 | GET | `/sensors/get-details/:source` | Get details for a specific sensor |
-| POST | `/sensors/reboot` | Reboot all sensors (returns command metadata; firmware resets ~5s after responding) |
-| POST | `/sensors/reboot/:source` | Reboot a specific sensor (returns command metadata) |
+| POST | `/sensors/reboot` | Reboot all sensors (returns command metadata; firmware resets ~5s after responding). POST is canonical; GET is accepted during the compatibility period |
+| POST | `/sensors/reboot/:source` | Reboot a specific sensor (returns command metadata). POST is canonical; GET is accepted during the compatibility period |
 | GET | `/sensors/read-config` | Read config from all sensors |
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
 | POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor |

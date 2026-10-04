@@ -101,6 +101,46 @@ describe("Sensor Routes", () => {
     });
   });
 
+  describe("POST /sensors/reboot", () => {
+    it("should return 200, publish exactly one reboot command targeted at all sensors", async () => {
+      const networking = createMockMqttNetworking();
+      const app = express();
+      app.use(express.json());
+      new CreateSensorRoutes(app, networking);
+
+      const res = await request(app).post("/sensors/reboot");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+      expect(Array.isArray(res.body)).toBe(true);
+      // Exactly one MQTT command, with the correct command and target
+      expect(networking.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      const [topic, message] = (networking.publish_mqtt_message as jest.Mock).mock.calls[0];
+      expect(topic).toBe(networking.mqtt_topic_command);
+      expect(message).toMatchObject({ command: "reboot", target: "*" });
+    });
+  });
+
+  describe("POST /sensors/reboot/:source", () => {
+    it("should return 200, publish exactly one reboot command targeted at the source", async () => {
+      const networking = createMockMqttNetworking();
+      const app = express();
+      app.use(express.json());
+      new CreateSensorRoutes(app, networking);
+
+      const res = await request(app).post("/sensors/reboot/air-temp-1");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+      expect(Array.isArray(res.body)).toBe(true);
+      // Exactly one MQTT command, with the correct command and target
+      expect(networking.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      const [topic, message] = (networking.publish_mqtt_message as jest.Mock).mock.calls[0];
+      expect(topic).toBe(networking.mqtt_topic_command);
+      expect(message).toMatchObject({ command: "reboot", target: "air-temp-1" });
+    });
+  });
+
   describe("GET /sensors/read-config", () => {
     it("should return 200 and delegate to sensor controller", async () => {
       const app = createTestApp();

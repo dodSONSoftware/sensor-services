@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.7)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.0)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -276,8 +276,8 @@ HTTP request → middleware (request ID, rate limit, body validation)
 |--------|-------|-------------|
 | GET | `/sensors/get-details` | Get details for all sensors |
 | GET | `/sensors/get-details/:source` | Get details for a specific sensor |
-| POST | `/sensors/reboot` | Reboot all sensors via MQTT (firmware resets ~5s after responding) |
-| POST | `/sensors/reboot/:source` | Reboot a specific sensor |
+| POST | `/sensors/reboot` | Reboot all sensors via MQTT (firmware resets ~5s after responding). POST is canonical; GET is accepted during the compatibility period |
+| POST | `/sensors/reboot/:source` | Reboot a specific sensor. POST is canonical; GET is accepted during the compatibility period |
 | GET | `/sensors/read-config` | Read config from all sensors |
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
 | POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor (MQTT command) |

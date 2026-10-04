@@ -151,12 +151,15 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
         this.app.route("/sensors/get-details/:source").get((req: express.Request, res: express.Response) => sensor_controller.getDetailsBySource(req, res, this.network, req.params.source));
 
         // REBOOT
+        // POST is the canonical method (reboot is a state-changing operation).
+        // GET is still accepted during the compatibility period for callers
+        // that predate the POST contract.
         /**
          * @swagger
          * /sensors/reboot:
-         *   get:
+         *   post:
          *     summary: Instructs all sensors to reboot
-         *     description: Sends a reboot command to all sensors via MQTT.
+         *     description: Sends a reboot command to all sensors via MQTT. GET is also accepted during the compatibility period.
          *     responses:
          *       200:
          *         description: Reboot command results for all sensors
@@ -181,15 +184,16 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/sensors/reboot").get((req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network));
+        const rebootAllHandler = (req: express.Request, res: express.Response) => sensor_controller.postReboot(req, res, this.network);
+        this.app.route("/sensors/reboot").post(rebootAllHandler).get(rebootAllHandler);
 
         // REBOOT
         /**
          * @swagger
          * /sensors/reboot/{source}:
-         *   get:
+         *   post:
          *     summary: Instructs a specific sensor to reboot
-         *     description: Sends a reboot command to the sensor identified by source via MQTT.
+         *     description: Sends a reboot command to the sensor identified by source via MQTT. GET is also accepted during the compatibility period.
          *     parameters:
          *       - name: source
          *         in: path
@@ -221,7 +225,8 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                 error:
          *                   type: string
          */
-        this.app.route("/sensors/reboot/:source").get((req: express.Request, res: express.Response) => sensor_controller.postRebootBySource(req, res, this.network, req.params.source));
+        const rebootSourceHandler = (req: express.Request, res: express.Response) => sensor_controller.postRebootBySource(req, res, this.network, req.params.source);
+        this.app.route("/sensors/reboot/:source").post(rebootSourceHandler).get(rebootSourceHandler);
 
 
         // READ-CONFIG
