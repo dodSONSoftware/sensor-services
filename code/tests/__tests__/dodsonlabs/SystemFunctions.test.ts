@@ -3,10 +3,14 @@
  * SPDX-License-Identifier: MIT
  */
 
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import {
   ensureError,
   formatElapsedTime,
   convert_from_log_level_string_to_enum,
+  write_file_atomic,
 } from "../../../src/dodsonlabs/SystemFunctions";
 import { LogLevel } from "../../../src/dodsonlabs/Interfaces";
 
@@ -55,6 +59,57 @@ describe("formatElapsedTime", () => {
 
   it("should format large values correctly", () => {
     expect(formatElapsedTime(90061000)).toBe("25:01:01.000");
+  });
+});
+
+describe("write_file_atomic", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "write-atomic-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should replace the live file with the complete new content and leave no temp file behind", () => {
+    const target = path.join(tmpDir, "config.yml");
+    fs.writeFileSync(target, "old: config\n");
+
+    const ok = write_file_atomic(target, "new: complete\nconfig\n");
+
+    expect(ok).toBe(true);
+    expect(fs.readFileSync(target, "utf8")).toBe("new: complete\nconfig\n");
+    // No temporary files remain in the directory
+    expect(fs.readdirSync(tmpDir)).toEqual(["config.yml"]);
+  });
+
+  it("should fail cleanly without touching the live file when the temp write cannot succeed", () => {
+    // A path inside a nonexistent directory: the temp write fails before any
+    // rename can happen
+    const target = path.join(tmpDir, "does-not-exist", "config.yml");
+
+    const ok = write_file_atomic(target, "new content");
+
+    expect(ok).toBe(false);
+    // Nothing was created anywhere under the temp dir
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
+  it("should preserve the live file and clean up the temp file when the rename fails", () => {
+    // A directory with the target name makes the rename fail (ENOTDIR/EISDIR)
+    const target = path.join(tmpDir, "config.yml");
+    fs.mkdirSync(target);
+
+    const ok = write_file_atomic(target, "new content");
+
+    expect(ok).toBe(false);
+    // The original live path is untouched
+    expect(fs.statSync(target).isDirectory()).toBe(true);
+    // The temporary file was cleaned up
+    expect(fs.readdirSync(tmpDir)).toEqual(["config.yml"]);
   });
 });
 

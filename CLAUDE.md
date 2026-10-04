@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.5)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.11.6)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -406,6 +406,7 @@ case-sensitive: true
 - **Command latency tracking** — `MqttNetworking` records publish timestamps in `__command_publish_times` and observes `mqtt_command_latency_seconds` histogram on response.
 - **`uncaughtException`/`unhandledRejection`** — top-level handlers in `index.ts` call `shutdown()` to trigger graceful shutdown on fatal errors.
 - **Config migrated from JSON to YAML** — `config.yml` is loaded via `read_file_yaml()` and validated with Zod v4 schemas in `src/schemas/config.ts`. The old `config.json` was replaced.
+- **Config writes are atomic** — `/api/write-config` uses `write_file_atomic()` (unique same-directory temp file + rename), so a failure mid-write can never truncate the live `config.yml`; the temp file is removed and the prior config preserved on failure.
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
 - **Body validation** — all POST bodies validated with Zod (`validatePostBody()`). Returns 400 if body is missing or not a JSON object. Replaces `req.body` with the validated object.

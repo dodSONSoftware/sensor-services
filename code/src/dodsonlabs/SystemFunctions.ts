@@ -4,6 +4,7 @@
  */
 
 import fs from "fs";
+import { randomUUID } from "crypto";
 import { ILogger, LogLevel } from "./Interfaces";
 
 // **** error functions
@@ -46,6 +47,44 @@ export function write_file(
         const msg = `write_file: failed to write '${filename}': ${(error as Error).message}`;
         if (logger) {
             logger.write_error("SystemFunctions.write_file", msg);
+        } else {
+            console.error(msg);
+        }
+        return false;
+    }
+}
+
+/**
+ * Atomically replace a file: write the complete content to a temporary file
+ * in the SAME DIRECTORY as the live file, then rename it over the live file.
+ * A same-filesystem POSIX rename is atomic, so a crash mid-write can never
+ * leave the live file truncated or partially written.
+ *
+ * On any failure the temporary file is removed (best effort) and the live
+ * file is left untouched; returns false so the caller can report the error.
+ */
+export function write_file_atomic(
+    filename: string,
+    content: string,
+    logger?: ILogger
+): boolean {
+    // Unique temp name in the same directory — concurrent writers can never
+    // clobber each other's temporary files, and rename stays same-filesystem
+    const tempPath = `${filename}.${randomUUID()}.tmp`;
+    try {
+        fs.writeFileSync(tempPath, content);
+        fs.renameSync(tempPath, filename);
+        return true;
+    } catch (error) {
+        // Best-effort temp cleanup; a missing temp file has nothing to clean
+        try {
+            fs.unlinkSync(tempPath);
+        } catch {
+            // ignore — temp file may never have been created
+        }
+        const msg = `write_file_atomic: failed to atomically replace '${filename}': ${(error as Error).message}`;
+        if (logger) {
+            logger.write_error("SystemFunctions.write_file_atomic", msg);
         } else {
             console.error(msg);
         }

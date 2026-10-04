@@ -6,7 +6,7 @@
 import fs from "fs";
 import { isDeepStrictEqual } from "util";
 import type express from "express";
-import { ensureError, read_file_yaml, write_file } from "../dodsonlabs/SystemFunctions";
+import { ensureError, read_file_yaml, write_file_atomic } from "../dodsonlabs/SystemFunctions";
 import { logger, getConfig, setConfig, createLogger } from "../common/global";
 import type { z } from "zod";
 import { redactConfig, validateConfig, type configSchema } from "../schemas/config";
@@ -229,11 +229,13 @@ export async function writeConfig(req: express.Request, res: express.Response): 
         return;
     }
 
-    // Write to file
+    // Write to file — atomically (same-directory temp file + rename) so a
+    // failure mid-write can never truncate the live config the service
+    // restarts from
     const yaml = require("js-yaml") as typeof yamlModule;
     const yamlContent = yaml.dump(validatedConfig);
 
-    if (!write_file(configPath, yamlContent, loggerInstance)) {
+    if (!write_file_atomic(configPath, yamlContent, loggerInstance)) {
         res.status(500).json({
             success: false,
             message: "Failed to write config file"
