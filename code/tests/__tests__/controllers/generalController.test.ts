@@ -226,6 +226,43 @@ describe("getHealth", () => {
     expect(body.sensorTelemetry).toBe("healthy");
   });
 
+  it("P2-3: a wedged dependency cannot push /health past Docker's 5s deadline", async () => {
+    const { res, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+    }) as Request & { mqtt_connected: boolean };
+
+    // Simulate a dependency that accepts the connection but never responds:
+    // the mock rejects ONLY when the AbortSignal aborts, so the only thing that
+    // can end the wait is HEALTH_CHECK_TIMEOUT_MS. If that timeout were (still)
+    // ~5000ms, this test would take ~5s and fail the < 4000ms bound below.
+    const mockFetch = jest.fn((_url: string, opts?: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        const signal = opts?.signal;
+        if (!signal) {
+          return; // never settles — should be aborted by the timeout
+        }
+        signal.addEventListener(
+          "abort",
+          () => reject(new Error("health probe timed out")),
+          { once: true }
+        );
+      });
+    });
+    jest.spyOn(global, "fetch").mockImplementation(mockFetch as unknown as typeof fetch);
+
+    const start = Date.now();
+    await getHealth(req, res as Response);
+    const elapsed = Date.now() - start;
+
+    // Well under Docker's 5s healthcheck --timeout (with margin), and the
+    // wedged dependency is reported as unreachable (degraded), not fatal.
+    expect(elapsed).toBeLessThan(4000);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.ipPinger).toBe("unreachable");
+    expect(body.status).toBe("degraded");
+  });
+
   it("should handle missing config gracefully", async () => {
     const { res, sendCalls } = createMockRes();
     const req = createMockReq({

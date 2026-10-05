@@ -16,8 +16,17 @@ import { __routesHelp as logRoutesHelp } from "../routes/logRoutes";
 
 const startTime = Date.now();
 
-// Default timeout for health checks (ms)
-const HEALTH_CHECK_TIMEOUT_MS = 5000;
+// Timeout for each dependency probe in the /health check (ms).
+//
+// This must be materially SHORTER than Docker's healthcheck `--timeout=5s`
+// (see code/Dockerfile). The IP-pinger and sensor-telemetry probes run
+// concurrently, so the worst-case /health latency is roughly this value plus
+// small overhead. Keeping it at 2500ms leaves a comfortable margin so a slow
+// or wedged dependency cannot push /health past Docker's 5s deadline and make
+// the container appear down when it is actually up-but-degraded. (A probe that
+// times out is treated as "unreachable" -> the status is already classified as
+// "degraded"/"unhealthy" below; only the deadline here changes.)
+const HEALTH_CHECK_TIMEOUT_MS = 2500;
 
 /**
  * Health check response from external services.
