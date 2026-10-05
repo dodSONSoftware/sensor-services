@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.14)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.15)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -76,6 +76,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   └── mqtt.ts      -- createMockMqttNetworking() helper (adds waitForCompletion, register_command_id)
     │   └── __tests__/
     │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc), including /api/reload-config and /api/write-config
+    │       ├── exitCodes.test.ts -- P2-2 integration: spawns dist/index.js and asserts exit codes (SIGTERM/SIGINT→0, invalid config→1, EADDRINUSE→1); skipped if dist/ is not built
     │       ├── common/
     │       │   ├── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
     │       │   ├── metrics.test.ts -- API metrics middleware: unmatched routes collapse to the "unmatched" label sentinel
@@ -170,7 +171,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 11. Validate `__routesHelp` entries match actual registered routes (drift detection)
 12. Listen on configured port
 13. Register `uncaughtException`/`unhandledRejection` handlers — call `shutdown()` to trigger graceful shutdown
-14. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, re-entrancy guard; `runGracefulShutdown()` (common/shutdown.ts) closes HTTP server → MQTT client → settings store → final log → active logger (exactly once), then the caller exits 0
+14. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, re-entrancy guard; `runGracefulShutdown()` (common/shutdown.ts) closes HTTP server → MQTT client → settings store → final log → active logger (exactly once), then the caller exits with the signal's exit code (0 for SIGINT/SIGTERM; 1 for uncaughtException/unhandledRejection)
 
 ### Core Components
 
@@ -429,7 +430,8 @@ case-sensitive: true
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
 - **Body validation** — a present body is validated as a JSON object with Zod (`validatePostBody()`); returns 400 if a body is present but not a JSON object. A missing body is passed through untouched — "body required" is a route-level concern owned by each controller (e.g. `configController`'s write-config returns its own 400). Replaces `req.body` with the validated object.
 - **API metrics middleware** — `createApiMetricsMiddleware()` (common/metrics.ts) wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`. The route label is the matched route pattern; unmatched requests collapse to the bounded `"unmatched"` sentinel so arbitrary 404 paths cannot grow label cardinality without bound.
-- **Graceful shutdown** — 15-second hard timeout safety net (cleared before exit, so it can never log after the logger closes) plus a re-entrancy guard against double signals. Sequence lives in `common/shutdown.ts` (`runGracefulShutdown()`): stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → emit the final shutdown log → close the active logger exactly once (once-guarded, so buffered transports like the Loki batch timer flush) → caller exits 0. Nothing may log after the close.
+- **Graceful shutdown** — 15-second hard timeout safety net (cleared before exit, so it can never log after the logger closes) plus a re-entrancy guard against double signals. Sequence lives in `common/shutdown.ts` (`runGracefulShutdown()`): stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → emit the final shutdown log → close the active logger exactly once (once-guarded, so buffered transports like the Loki batch timer flush). Nothing may log after the close.
+- **Process exit-code contract (P2-2)** — the caller (index.ts) chooses the exit code: SIGINT/SIGTERM → `0` (clean, operator-requested stop); uncaughtException/unhandledRejection → `1` (a crash, so a supervisor can distinguish it from a deliberate stop); fatal startup errors (invalid config, HTTP bind failure such as EADDRINUSE) → `1`; hard shutdown timeout → `1`. A `server.on("error")` handler turns a bind failure into a logged fatal startup error.
 - **Config reload applies only hot-reloadable keys at runtime** — `doReloadConfig()` updates the active in-memory config with only `HOT_RELOADABLE_KEYS` (currently `log-level`) and mutates the log level on the existing logger instance via `Logger.setLevel()`. Restart-required values from the file stay inactive until restart, so `/api/read-config` never reports inactive values as active and long-lived components never hold a closed logger.
 - **`log-level` enum includes `warn`** — valid values are `error`, `warn`, `info`, `debug`.
 - **Zod v4** — upgraded from Zod v3. Schema uses `z.enum()` with `error` option for custom error messages.

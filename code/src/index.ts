@@ -187,7 +187,10 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     // re-run the sequence (which would duplicate the logger close).
     let shutting_down = false;
 
-    async function shutdown(signal: string): Promise<void> {
+    // exitCode: 0 for a clean, operator-requested stop (SIGINT/SIGTERM); 1 for a
+    // fatal fault (uncaughtException / unhandledRejection) so a supervisor or
+    // Docker can tell a crash from a deliberate stop.
+    async function shutdown(signal: string, exitCode: number = 0): Promise<void> {
         if (shutting_down) {
             return;
         }
@@ -223,19 +226,29 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
             );
         } finally {
             clearTimeout(hardTimeout);
-            process.exit(0);
+            process.exit(exitCode);
         }
     }
 
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
+    // A bind failure (e.g. EADDRINUSE) means the HTTP server never started — a
+    // fatal startup error. Log it and exit non-zero so a supervisor restarts us
+    // rather than leaving a process alive that serves nothing.
+    server.on("error", (err: NodeJS.ErrnoException) => {
+        appLogger.write_error("index.ts", `HTTP server error: ${ensureError(err).message}${err.code ? ` (${err.code})` : ""}`);
+        process.exit(1);
+    });
+
+    // Clean, operator-requested stop -> exit 0
+    process.on("SIGTERM", () => shutdown("SIGTERM", 0));
+    process.on("SIGINT", () => shutdown("SIGINT", 0));
+    // Fatal faults -> exit 1 (so a crash is distinguishable from a clean stop)
     process.on("uncaughtException", (err) => {
         appLogger.write_error("index.ts/uncaughtException", `Uncaught exception: ${(err as Error).message}\n${(err as Error).stack ?? ""}`);
-        shutdown("uncaughtException");
+        shutdown("uncaughtException", 1);
     });
     process.on("unhandledRejection", (reason, _promise) => {
         const message = ensureError(reason).message;
         appLogger.write_error("index.ts/unhandledRejection", `Unhandled rejection: ${message}`);
-        shutdown("unhandledRejection");
+        shutdown("unhandledRejection", 1);
     });
 })();
