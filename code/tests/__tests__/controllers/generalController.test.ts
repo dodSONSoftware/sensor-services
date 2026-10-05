@@ -4,7 +4,7 @@
  */
 
 import type { Request, Response } from "express";
-import { getAbout, getDateCurrent, getDateUTC, getHealth } from "../../../src/controllers/generalController";
+import { getAbout, getDateCurrent, getDateUTC, getEndpoints, getHealth } from "../../../src/controllers/generalController";
 import { createMockRes, createMockReq } from "../../mocks/express";
 import { setConfig } from "../../../src/common/global";
 
@@ -282,5 +282,40 @@ describe("getHealth", () => {
     expect(body.mqtt).toBe("connected");
     expect(body.ipPinger).toBe("healthy");
     expect(body.sensorTelemetry).toBe("healthy");
+  });
+});
+
+describe("getEndpoints", () => {
+  // P3-1: the /endpoints discovery metadata must match the handlers — the
+  // deprecated update-config route must advertise its 501 contract (not a
+  // working partial update), and the reboot routes must describe the real
+  // command-result array (not a { success, message } object).
+  function getEndpoint(route: string): Record<string, unknown> {
+    const { res, sendCalls } = createMockRes();
+    getEndpoints(createMockReq() as Request, res as Response);
+    const body = sendCalls[0] as { endpoints: Record<string, unknown>[] };
+    const entry = body.endpoints.find((e) => e["route"] === route);
+    expect(entry).toBeDefined();
+    return entry as Record<string, unknown>;
+  }
+
+  it("marks update-config deprecated/unsupported with 501 and the write-config replacement", () => {
+    const updateConfig = getEndpoint("/sensors/update-config/:source");
+    expect(String(updateConfig["description"])).toMatch(/deprecated/i);
+    expect(String(updateConfig["description"])).toMatch(/501/);
+    expect(String(updateConfig["description"])).toMatch(/write-config/);
+    // Must not advertise a partial-update success object or request body
+    expect(String(updateConfig["responseBody"])).not.toMatch(/success:\s*boolean/i);
+    expect(String(updateConfig["requestBody"])).not.toMatch(/partial/i);
+  });
+
+  it("describes the reboot endpoints as a command-result array (not success/message)", () => {
+    const rebootAll = getEndpoint("/sensors/reboot");
+    const rebootSingle = getEndpoint("/sensors/reboot/:source");
+    for (const entry of [rebootAll, rebootSingle]) {
+      expect(String(entry["responseBody"])).toMatch(/array/i);
+      expect(String(entry["responseBody"])).toMatch(/command_metadata/);
+      expect(String(entry["responseBody"])).not.toMatch(/success:\s*boolean/i);
+    }
   });
 });

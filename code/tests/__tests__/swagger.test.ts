@@ -40,4 +40,25 @@ describe("setupSwagger", () => {
         // The server URL is populated from the explicit override
         expect(res.text).toContain("http://127.0.0.1:32000/");
     });
+
+    // P3-1: the API discovery docs must match the handlers. The reboot response
+    // now documents the real command-result shape (including command_metadata),
+    // and the deprecated update-config route documents its actual 501 contract
+    // instead of the stale 200 partial-update success.
+    it("documents reboot as a command-result array and update-config as 501 (P3-1)", async () => {
+        const express = require("express");
+        const request = require("supertest");
+        const app: express.Application = express();
+        const codeRoot = join(__dirname, "..", "..");
+        setupSwagger(app, 32000, codeRoot, "http://127.0.0.1:32000/");
+
+        const res = await request(app).get("/swagger/swagger-ui-init.js");
+        expect(res.status).toBe(200);
+        // reboot response documents command_metadata (the real response shape)
+        expect(res.text).toContain("command_metadata");
+        // update-config documents its 501 contract, not a partial-update success
+        expect(res.text).toContain("has no partial configuration update");
+        // the stale 200 "Configuration update result" schema is gone
+        expect(res.text).not.toContain("Configuration update result");
+    });
 });

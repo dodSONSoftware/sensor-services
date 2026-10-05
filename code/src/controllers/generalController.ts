@@ -313,16 +313,16 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/sensors/reboot",
             verb: "POST",
             requestBody: "None",
-            responseBody: "{ success: boolean, message: string }",
-            description: "Reboots all sensors."
+            responseBody: "Array of reboot command results; each entry has source, payload, and command_metadata (command_id, command_sent_at, expected_delay_seconds)",
+            description: "Reboots all sensors. Returns the MQTT command-result array, not a success/message object. GET is also accepted during the compatibility period."
         },
         {
             name: "Sensor Reboot Single",
             route: "/sensors/reboot/:source",
             verb: "POST",
             requestBody: "None",
-            responseBody: "{ success: boolean, message: string }",
-            description: "Reboots a specific sensor by source ID."
+            responseBody: "Array of reboot command results; each entry has source, payload, and command_metadata (command_id, command_sent_at, expected_delay_seconds)",
+            description: "Reboots a specific sensor by source ID. Returns the MQTT command-result array, not a success/message object."
         },
         {
             name: "Sensor Read Config",
@@ -344,17 +344,17 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             name: "Sensor Write Config",
             route: "/sensors/write-config/:source",
             verb: "POST",
-            requestBody: "JSON object with sensor configuration values",
-            responseBody: "{ success: boolean, message: string }",
-            description: "Writes configuration to a specific sensor."
+            requestBody: "JSON object with the sensor's complete configuration values",
+            responseBody: "Array of write-config command results; each entry has source and payload",
+            description: "Writes the complete configuration to a specific sensor. Returns the MQTT command-result array, not a success/message object."
         },
         {
             name: "Sensor Update Config",
             route: "/sensors/update-config/:source",
             verb: "POST",
-            requestBody: "JSON object with partial sensor configuration values",
-            responseBody: "{ success: boolean, message: string }",
-            description: "Updates configuration on a specific sensor."
+            requestBody: "Ignored — the endpoint is deprecated and returns 501 without processing the body",
+            responseBody: "501 { error: string }",
+            description: "Deprecated and unsupported: firmware v4 has no partial configuration update. Always returns 501 Not Implemented; use POST /sensors/write-config/:source with a complete config instead."
         },
         {
             name: "Sensor Logs",

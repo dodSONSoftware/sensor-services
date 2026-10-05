@@ -169,6 +169,15 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                     type: string
          *                   payload:
          *                     type: object
+         *                   command_metadata:
+         *                     type: object
+         *                     properties:
+         *                       command_id:
+         *                         type: string
+         *                       command_sent_at:
+         *                         type: string
+         *                       expected_delay_seconds:
+         *                         type: integer
          *       500:
          *         description: Internal error
          *         content:
@@ -210,6 +219,15 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *                     type: string
          *                   payload:
          *                     type: object
+         *                   command_metadata:
+         *                     type: object
+         *                     properties:
+         *                       command_id:
+         *                         type: string
+         *                       command_sent_at:
+         *                         type: string
+         *                       expected_delay_seconds:
+         *                         type: integer
          *       500:
          *         description: Internal error
          *         content:
@@ -355,7 +373,8 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          * /sensors/update-config/{source}:
          *   post:
          *     summary: Deprecated — partial config updates are not supported by firmware v4
-         *     description: Returns 501. Firmware v4 has no partial update; use write-config with the sensor's complete config.
+         *     description: Deprecated and unsupported. Firmware v4 has no partial configuration update, so this endpoint always returns 501 Not Implemented. Use POST /sensors/write-config/{source} with the sensor's complete config instead.
+         *     deprecated: true
          *     parameters:
          *       - name: source
          *         in: path
@@ -365,27 +384,14 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *           type: string
          *     requestBody:
          *       required: true
-         *       description: The configuration update to apply.
+         *       description: The configuration update to apply. Ignored — the endpoint is deprecated and returns 501 without processing the body.
          *       content:
          *         application/json:
          *           schema:
          *             type: object
          *     responses:
-         *       200:
-         *         description: Configuration update result
-         *         content:
-         *           application/json:
-         *             schema:
-         *               type: array
-         *               items:
-         *                 type: object
-         *                 properties:
-         *                   source:
-         *                     type: string
-         *                   payload:
-         *                     type: object
-         *       500:
-         *         description: Internal error
+         *       501:
+         *         description: Not Implemented — firmware v4 has no partial configuration update
          *         content:
          *           application/json:
          *             schema:
