@@ -87,6 +87,16 @@ export const configSchema = z.strictObject({
         .positive("sensor-source-max-length must be greater than 0")
         .optional(),
     "sensor-source-valid-chars-regex": z.string().optional(),
+    // IP-pinger fetch timeout (Optional-2): renamed fetch-timeout-ms ->
+    // ippinger-fetch-timeout-ms because it only bounds the pinger proxy /
+    // analyze fetches, not all outbound fetches. The old key stays a
+    // deprecated alias so existing deployment configs keep working — see
+    // resolveIppingerFetchTimeoutMs() for the precedence rule.
+    "ippinger-fetch-timeout-ms": z.number({
+        error: "ippinger-fetch-timeout-ms must be a number",
+    }).int("ippinger-fetch-timeout-ms must be an integer")
+        .positive("ippinger-fetch-timeout-ms must be greater than 0")
+        .optional(),
     "fetch-timeout-ms": z.number({
         error: "fetch-timeout-ms must be a number",
     }).int("fetch-timeout-ms must be an integer")
@@ -127,6 +137,19 @@ export function validateConfig(raw: unknown): z.infer<typeof configSchema> {
         throw new Error(`Config validation failed: ${messages}`);
     }
     return result.data;
+}
+
+/**
+ * Resolve the IP-pinger fetch timeout in milliseconds (Optional-2).
+ *
+ * The key was renamed fetch-timeout-ms -> ippinger-fetch-timeout-ms to match
+ * its real scope (only the pinger proxy / analyze fetches). Existing
+ * deployment configs still use the old key, so it remains a deprecated
+ * alias: if both are present the new key wins, otherwise the old key is
+ * used, otherwise the 10-second default.
+ */
+export function resolveIppingerFetchTimeoutMs(config: z.infer<typeof configSchema>): number {
+    return config["ippinger-fetch-timeout-ms"] ?? config["fetch-timeout-ms"] ?? 10_000;
 }
 
 // Config keys whose values are secrets — never log or return these verbatim.

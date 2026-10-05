@@ -19,6 +19,22 @@ export interface ShutdownResources {
 }
 
 /**
+ * Normalize an arbitrary fatal-error value into a diagnostic log message
+ * (Optional-1). The values reaching the `uncaughtException` /
+ * `unhandledRejection` handlers are not guaranteed to be Error instances, so
+ * both fatal handlers in index.ts route through here — a non-Error value can
+ * never log as "undefined". Error values keep their stack; everything else is
+ * normalized through ensureError().
+ */
+export function formatFatalError(prefix: string, value: unknown): string {
+    const err = ensureError(value);
+    // Only a genuine Error input carries a meaningful stack — ensureError()
+    // wraps non-Error values in a fresh Error whose stack just points into
+    // the normalizer itself, so appending it would be noise.
+    return `${prefix}: ${err.message}${value instanceof Error && err.stack ? `\n${err.stack}` : ""}`;
+}
+
+/**
  * Run the graceful shutdown sequence: close the HTTP server, the MQTT client,
  * and the settings store; emit the final shutdown log message; then close the
  * active logger exactly once so buffered transports (e.g. the Loki batch

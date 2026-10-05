@@ -145,6 +145,79 @@ describe("logController (GET /sensors/logs/:source)", () => {
         expect(url).toContain("|level=~\"^(debug|info|warn|error)$\"");
     });
 
+    // ---- limit and end-time handling (Optional-5)
+
+    function urlParams(url: string): Record<string, string> {
+        const out: Record<string, string> = {};
+        new URL(url).searchParams.forEach((v, k) => { out[k] = v; });
+        return out;
+    }
+
+    it("should use the default limit (50) when no limit param is given", async () => {
+        const request = require("supertest");
+        await request(app).get("/sensors/logs/Air-1");
+        const params = urlParams(fetchMock.mock.calls[0][0] as string);
+        expect(params.limit).toBe("50");
+    });
+
+    it("should clamp limit to the maximum of 100", async () => {
+        const request = require("supertest");
+        await request(app).get("/sensors/logs/Air-1?limit=500");
+        const params = urlParams(fetchMock.mock.calls[0][0] as string);
+        expect(params.limit).toBe("100");
+    });
+
+    it("should fall back to the default limit for invalid values", async () => {
+        const request = require("supertest");
+        for (const bad of ["0", "-5", "abc"]) {
+            fetchMock.mockClear();
+            await request(app).get(`/sensors/logs/Air-1?limit=${bad}`);
+            const params = urlParams(fetchMock.mock.calls[0][0] as string);
+            expect(params.limit).toBe("50");
+        }
+    });
+
+    it("should slice the returned entries to the requested limit", async () => {
+        // Loki's limit parameter limits streams, not individual entries — the
+        // controller must slice the parsed entries itself.
+        const values = Array.from({ length: 5 }, (_, i) => [
+            String((1_700_000_000_000 + i * 1_000_000) * 1_000_000),
+            JSON.stringify({ level: "info", message: `entry ${i}` }),
+        ]);
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ data: { resultType: "streams", result: [{ stream: {}, values }] } }),
+        });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1?limit=2");
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveLength(2);
+        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["entry 0", "entry 1"]);
+    });
+
+    it("should use the provided end timestamp with the wider 2-hour pagination window", async () => {
+        const request = require("supertest");
+        const endIso = "2024-01-02T03:04:05.000Z"; // 1704164645 epoch seconds
+        await request(app).get(`/sensors/logs/Air-1?end=${encodeURIComponent(endIso)}`);
+        const params = urlParams(fetchMock.mock.calls[0][0] as string);
+        const end = Number(params.end);
+        expect(end).toBe(1_704_164_645);
+        // Pagination widens the query window to 2 hours
+        expect(Number(params.start)).toBe(end - 2 * 3600);
+    });
+
+    it("should fall back to the current time (1-hour window) when end is unparseable", async () => {
+        const request = require("supertest");
+        const before = Math.floor(Date.now() / 1000);
+        await request(app).get("/sensors/logs/Air-1?end=not-a-timestamp");
+        const params = urlParams(fetchMock.mock.calls[0][0] as string);
+        const end = Number(params.end);
+        expect(end).toBeGreaterThanOrEqual(before);
+        expect(end).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+        // Fresh (non-paginated) fetches use the 1-hour window
+        expect(Number(params.start)).toBe(end - 1 * 3600);
+    });
+
     // ---- Loki unavailable / unconfigured
 
     it("should return 500 when Loki is not configured", async () => {

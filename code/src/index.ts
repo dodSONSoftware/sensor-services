@@ -19,12 +19,12 @@ import { assertRoutesMatchDeclared } from "./routes/routeDrift";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { createApiMetricsMiddleware } from "./common/metrics";
-import { runGracefulShutdown } from "./common/shutdown";
+import { formatFatalError, runGracefulShutdown } from "./common/shutdown";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
 import { ensureError } from "./dodsonlabs/SystemFunctions";
-import { redactConfig, validateConfig, type configSchema } from "./schemas/config";
+import { redactConfig, resolveIppingerFetchTimeoutMs, validateConfig, type configSchema } from "./schemas/config";
 import { readConfigWithSecrets } from "./schemas/configLoader";
 import fs from "fs";
 import type { z } from "zod";
@@ -150,7 +150,9 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
         new generalRoutes.CreateGeneralRoutes(app, networking);
         new sensorRoutes.CreateSensorRoutes(app, networking);
-        new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, config["fetch-timeout-ms"] ?? 10_000);
+        // ippinger-fetch-timeout-ms (Optional-2) with the deprecated
+        // fetch-timeout-ms alias and the 10-second default.
+        new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, resolveIppingerFetchTimeoutMs(config));
 
         new settingsRoutes.CreateSettingsRoutes(app);
         new configRoutes.CreateConfigRoutes(app);
@@ -258,14 +260,15 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     // Clean, operator-requested stop -> exit 0
     process.on("SIGTERM", () => shutdown("SIGTERM", 0));
     process.on("SIGINT", () => shutdown("SIGINT", 0));
-    // Fatal faults -> exit 1 (so a crash is distinguishable from a clean stop)
+    // Fatal faults -> exit 1 (so a crash is distinguishable from a clean stop).
+    // Both values are normalized through formatFatalError (Optional-1): a
+    // non-Error thrown/rejected value can never log as "undefined".
     process.on("uncaughtException", (err) => {
-        appLogger.write_error("index.ts/uncaughtException", `Uncaught exception: ${(err as Error).message}\n${(err as Error).stack ?? ""}`);
+        appLogger.write_error("index.ts/uncaughtException", formatFatalError("Uncaught exception", err));
         shutdown("uncaughtException", 1);
     });
-    process.on("unhandledRejection", (reason, _promise) => {
-        const message = ensureError(reason).message;
-        appLogger.write_error("index.ts/unhandledRejection", `Unhandled rejection: ${message}`);
+    process.on("unhandledRejection", (reason) => {
+        appLogger.write_error("index.ts/unhandledRejection", formatFatalError("Unhandled rejection", reason));
         shutdown("unhandledRejection", 1);
     });
 })();

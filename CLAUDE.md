@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.26)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.27)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -37,7 +37,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   ├── common/
     │   │   ├── global.ts  -- Global logger singleton, AsyncLocalStorage request ID propagation, aboutDude() metadata (system_info now populated)
     │   │   ├── metrics.ts -- API Prometheus metrics: http_requests_total (Counter), http_request_duration_seconds (Histogram), http_errors_total (Counter) — separate registry from sensor gauges
-    │   │   ├── shutdown.ts -- runGracefulShutdown(): closes HTTP server, MQTT client, settings store; emits final shutdown log; closes the active logger exactly once (buffered transports flush); process exit owned by caller
+    │   │   ├── shutdown.ts -- runGracefulShutdown(): closes HTTP server, MQTT client, settings store; emits final shutdown log; closes the active logger exactly once (buffered transports flush); process exit owned by caller. formatFatalError() (Optional-1): normalizes arbitrary thrown/rejected values through ensureError() for the fatal handlers — non-Error values never log as "undefined"; stacks are kept only for genuine Error inputs
     │   │   └── app-request.d.ts -- Express Request augmentation with optional id field
     │   ├── controllers/
     │   │   ├── generalController.ts  -- /about, /date_local, /date_utc, /health (includes memory/CPU/uptime, cpu.load)
@@ -87,10 +87,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── controllers/
     │       │   ├── configController.test.ts   -- diffConfigReload(), reload-config/write-config restart_required reporting, readConfig() secret masking
     │       │   ├── generalController.test.ts  -- /about, /date_local, /date_utc, /health
-    │       │   ├── logController.test.ts      -- /sensors/logs/:source: LogQL injection guard (400), level allowlist, AbortSignal wiring, loki-url never logged verbatim (credential in URL never appears in emitted logs)
+    │       │   ├── logController.test.ts      -- /sensors/logs/:source: LogQL injection guard (400), level allowlist, AbortSignal wiring, loki-url never logged verbatim (credential in URL never appears in emitted logs), limit default 50 / clamp 100 / invalid→default, response sliced to limit, end-time: valid ISO → 2h pagination window, unparseable → current time + 1h window (Optional-5)
     │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running (waiter publishes own command), concurrency (real MqttCommandControl), hard timeout
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchItOnly non-OK responses, getAnalyzeIpPinger degradation on malformed upstream bodies (Zod-validated), camelCase ipAddress normalization
-    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings + X-Settings-Persisted header true/false (degraded mode still applies in-memory), strict update schema: unknown key → 400, known+unknown → 400, nested telemetry key accepted (P3-6, P3-7)
+    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings + X-Settings-Persisted header true/false (degraded mode still applies in-memory), strict update schema: unknown key → 400, known+unknown → 400, nested telemetry key accepted (P3-6, P3-7), persistence-layer failure → 500 with reason and nothing applied (Optional-5)
     │       ├── middleware/
     │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through) + rate-limit exemption for /health and /metrics (P2-4) + middleware ordering: 429 carries X-Request-ID, 429 counted by metrics, Swagger passes through the pipeline, rate limiting precedes the JSON parser (P3-2) + CORS origin restriction: allowed/unknown/no-origin, preflight for mutating endpoint, secure default when unset (P3-5)
     │       ├── routes/
@@ -102,7 +102,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest + X-Settings-Persisted header, unknown key → 400 (P3-6, P3-7)
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger) + unmatched routes log at warn, never error (P3-3)
     │       ├── schemas/
-    │       │   ├── config.test.ts     -- Zod v4 config schema validation tests (incl. cors-allowed-origins origin validation: well-formed accepted, path/credentials/non-http/bare-host/non-array/non-string rejected, P3-5)
+    │       │   ├── config.test.ts     -- Zod v4 config schema validation tests (incl. cors-allowed-origins origin validation: well-formed accepted, path/credentials/non-http/bare-host/non-array/non-string rejected, P3-5; missing required key rejected, Optional-5; ippinger-fetch-timeout-ms rename: new key accepted/validated, old fetch-timeout-ms still accepted as deprecated alias, resolveIppingerFetchTimeoutMs precedence — new key wins, Optional-2)
     │       │   ├── configLoader.test.ts -- readConfigWithSecrets(): merge/override, absent/empty/corrupt secrets, missing-required-secret fails validation
     │       │   └── postBody.test.ts   -- Zod POST body schema tests
     │       ├── services/
@@ -111,7 +111,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── dodsonlabs/
     │           ├── Logger.test.ts               -- Loki shutdown ownership: transport constructed with gracefulShutdown:false, bounded flush/close on logger close (mocked winston-loki, no real HTTP/DNS)
     │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers), claim() slot serialization
-    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop, outbound publish secret redaction, close() timeout clearing: graceful-wins vs timeout-wins)
+    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop, outbound publish secret redaction, close() timeout clearing: graceful-wins vs timeout-wins, uptime_ms truncation contract pinned — "upTIME" matches the time/millis truncation pattern, Optional-3). Tests construct real mqtt clients against 127.0.0.1 (no external DNS/network); a registry force-closes any client a test orphans by swapping in a mock, so no reconnect timer fires into jest teardown (Optional-4)
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)
     │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters, redactSecrets()
     │       └── docker/
@@ -169,7 +169,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 ### Startup Flow (`src/index.ts`)
 
 1. Read config from `/app/configs/config.yml` (falls back to `./dist/config.yml`) via `readConfigWithSecrets()` — merges the base file with an optional sibling `config-secrets.yml` (credentials), then validates the merged result
-2. Validate config with Zod v4: required keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `express-port`, `prometheus-port`, `case-sensitive`, `log-level`), MQTT topic strings must be non-empty, ports must be positive integers, `case-sensitive` must be boolean, `log-level` must be one of `error`/`warn`/`info`/`debug`. Optional keys: `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length`, `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`
+2. Validate config with Zod v4: required keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `express-port`, `prometheus-port`, `case-sensitive`, `log-level`), MQTT topic strings must be non-empty, ports must be positive integers, `case-sensitive` must be boolean, `log-level` must be one of `error`/`warn`/`info`/`debug`. Optional keys: `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length`, `sensor-source-valid-chars-regex`, `ippinger-fetch-timeout-ms` (deprecated alias: `fetch-timeout-ms`), `command-silence-timeout-ms`
 3. Create global `Logger` instance via `createLogger(config)` — Winston-backed with `error`/`warn`/`info`/`debug` levels, optional Loki transport
 4. Create `MqttNetworking` instance (connects to MQTT broker, subscribes to command-response topic)
 5. Get port from config `express-port`
@@ -401,7 +401,7 @@ case-sensitive: true
 
 **Required config keys:** `express-port` (positive int), `log-level` (error/warn/info/debug), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
-**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`, `cors-allowed-origins` (list of http(s) origins; empty/absent = no cross-origin browser origin authorized).
+**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `ippinger-fetch-timeout-ms` (default 10000; bounds only the IP pinger proxy/analyze fetches — the old key `fetch-timeout-ms` is still accepted as a deprecated alias, and if both are set the new key wins; see `resolveIppingerFetchTimeoutMs()`), `command-silence-timeout-ms`, `cors-allowed-origins` (list of http(s) origins; empty/absent = no cross-origin browser origin authorized).
 
 **Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml` (falling back to `./dist/config.yml`), merging an optional sibling `config-secrets.yml` for credentials. The mounted config must supply the required `db-password` — see the "Docker configuration strategy (P3-8)" note. Settings persistence stores to PostgreSQL database.
 
@@ -441,7 +441,7 @@ case-sensitive: true
 - **`fetchWithTimeout()`** in pingerController wraps native `fetch()` with `AbortSignal.timeout()`.
 - **Command deduplication** — `MqttNetworking` tracks outbound command IDs in `seen_command_ids` map with TTL-based eviction and max size cap to prevent duplicates on reconnect.
 - **Command latency tracking** — `MqttNetworking` records publish timestamps in `__command_publish_times` and observes `mqtt_command_latency_seconds` histogram on response.
-- **`uncaughtException`/`unhandledRejection`** — top-level handlers in `index.ts` call `shutdown()` to trigger graceful shutdown on fatal errors.
+- **`uncaughtException`/`unhandledRejection`** — top-level handlers in `index.ts` call `shutdown()` to trigger graceful shutdown on fatal errors. Both format their diagnostic through `formatFatalError()` (common/shutdown.ts, Optional-1), which normalizes the value with `ensureError()` — a non-Error thrown/rejected value (string, number, object, `undefined`) logs its normalized content instead of "undefined", and a stack is appended only when the value is a genuine Error (the wrapper stack of a normalized value is dropped as noise).
 - **Config migrated from JSON to YAML** — `config.yml` is loaded via `read_file_yaml()` and validated with Zod v4 schemas in `src/schemas/config.ts`. The old `config.json` was replaced.
 - **Config writes are atomic** — `/api/write-config` uses `write_file_atomic()` (unique same-directory temp file + rename), so a failure mid-write can never truncate the live `config.yml`; the temp file is removed and the prior config preserved on failure.
 - **Secrets never reach the logs** — `redactSecrets()` (SystemFunctions.ts) recursively masks `SENSITIVE_SECRET_KEYS` (`wifi-password`, `password`, `db-password`, matched case-insensitively at any nesting depth) without mutating the input. `MqttNetworking.publish_mqtt_message()` logs a sanitized copy only: a `write-config` publish logs metadata (`{command, target, command_id}`) and every other command logs a redacted copy of the message. The MQTT message that is actually published is never touched. Incoming command-response configs are redacted with the same helper before logging.

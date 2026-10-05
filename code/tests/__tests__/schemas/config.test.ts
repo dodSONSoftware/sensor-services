@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { validateConfig } from "../../../src/schemas/config";
+import { resolveIppingerFetchTimeoutMs, validateConfig } from "../../../src/schemas/config";
 
 describe("configSchema", () => {
   const baseConfig = {
@@ -26,6 +26,13 @@ describe("configSchema", () => {
     const result = validateConfig(baseConfig);
     expect(result).toBeDefined();
     expect(result["fetch-timeout-ms"]).toBeUndefined();
+  });
+
+  it("should reject a config missing a required key (Optional-5)", () => {
+    // The companion exitCodes integration test proves the same omission makes
+    // the compiled process exit 1 at startup; this pins the schema-level check.
+    const { "db-password": _password, ...withoutPassword } = baseConfig;
+    expect(() => validateConfig(withoutPassword)).toThrow();
   });
 
   it("should reject a typo'd key instead of silently stripping it (strict)", () => {
@@ -92,6 +99,32 @@ describe("configSchema", () => {
   it("should reject string fetch-timeout-ms", () => {
     const config = { ...baseConfig, "fetch-timeout-ms": "10000" };
     expect(() => validateConfig(config)).toThrow("fetch-timeout-ms must be a number");
+  });
+
+  // Optional-2: the key was renamed fetch-timeout-ms -> ippinger-fetch-timeout-ms
+  // (its scope is only the pinger proxy/analyze fetches). The old key remains a
+  // deprecated alias so existing deployment configs keep validating.
+  it("should accept config with ippinger-fetch-timeout-ms", () => {
+    const config = { ...baseConfig, "ippinger-fetch-timeout-ms": 8000 };
+    const result = validateConfig(config);
+    expect(result["ippinger-fetch-timeout-ms"]).toBe(8000);
+  });
+
+  it("should accept the old and new fetch-timeout keys together", () => {
+    const config = { ...baseConfig, "ippinger-fetch-timeout-ms": 8000, "fetch-timeout-ms": 10_000 };
+    const result = validateConfig(config);
+    expect(result["ippinger-fetch-timeout-ms"]).toBe(8000);
+    expect(result["fetch-timeout-ms"]).toBe(10_000);
+  });
+
+  it("should reject ippinger-fetch-timeout-ms of 0", () => {
+    const config = { ...baseConfig, "ippinger-fetch-timeout-ms": 0 };
+    expect(() => validateConfig(config)).toThrow("ippinger-fetch-timeout-ms must be greater than 0");
+  });
+
+  it("should reject non-integer ippinger-fetch-timeout-ms", () => {
+    const config = { ...baseConfig, "ippinger-fetch-timeout-ms": 10.5 };
+    expect(() => validateConfig(config)).toThrow("ippinger-fetch-timeout-ms must be an integer");
   });
 
   it("should accept config without command-silence-timeout-ms (optional)", () => {
@@ -186,5 +219,46 @@ describe("configSchema", () => {
   it("should reject a non-string entry in cors-allowed-origins", () => {
     const config = { ...baseConfig, "cors-allowed-origins": [4200] };
     expect(() => validateConfig(config)).toThrow();
+  });
+});
+
+describe("resolveIppingerFetchTimeoutMs (Optional-2 key rename precedence)", () => {
+  const baseConfig = {
+    "log-level": "info" as const,
+    "express-port": 32000,
+    "mqtt-broker-ip-address": "127.0.0.1",
+    "mqtt-topic-telemetry": "iot/v3/telemetry",
+    "mqtt-topic-command": "iot/v3/command",
+    "mqtt-topic-command-response": "iot/v3/command-response",
+    "ip-pinger-web-api": "http://127.0.0.1:3300",
+    "case-sensitive": true,
+    "db-host": "localhost",
+    "db-port": 5432,
+    "db-name": "sensor_web_services",
+    "db-user": "sensor_user",
+    "db-password": "secret",
+  };
+
+  it("falls back to the 10-second default when neither key is set", () => {
+    expect(resolveIppingerFetchTimeoutMs(validateConfig(baseConfig))).toBe(10_000);
+  });
+
+  it("honors the new key (ippinger-fetch-timeout-ms)", () => {
+    const config = validateConfig({ ...baseConfig, "ippinger-fetch-timeout-ms": 8000 });
+    expect(resolveIppingerFetchTimeoutMs(config)).toBe(8000);
+  });
+
+  it("honors the deprecated old key (fetch-timeout-ms) when the new key is absent", () => {
+    const config = validateConfig({ ...baseConfig, "fetch-timeout-ms": 12_000 });
+    expect(resolveIppingerFetchTimeoutMs(config)).toBe(12_000);
+  });
+
+  it("prefers the new key over the old key when both are set", () => {
+    const config = validateConfig({
+      ...baseConfig,
+      "ippinger-fetch-timeout-ms": 8000,
+      "fetch-timeout-ms": 12_000,
+    });
+    expect(resolveIppingerFetchTimeoutMs(config)).toBe(8000);
   });
 });

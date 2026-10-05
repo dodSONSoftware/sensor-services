@@ -333,6 +333,23 @@ describe("updateSettings - persistence reporting (P3-6)", () => {
         expect(statusCalls).toContain(400);
         expect(headerCalls["X-Settings-Persisted"]).toBeUndefined();
     });
+
+    // Optional-5: a persistence failure must surface as an explicit 500 with
+    // the failure reason, and must not report success or apply the update.
+    it("responds 500 when the persistence layer rejects the update (Optional-5)", async () => {
+        (settingsStore.patchSettings as jest.Mock).mockRejectedValueOnce(new Error("db connection lost"));
+        const { res, statusCalls, headerCalls, sendCalls } = createMockRes();
+        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(500);
+        expect(headerCalls["X-Settings-Persisted"]).toBeUndefined();
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(String(body.error)).toContain("db connection lost");
+        // The failed update must not have been applied in-memory either.
+        expect(currentMockCache.theme).toBe("light");
+    });
 });
 
 /**

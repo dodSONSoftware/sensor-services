@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { runGracefulShutdown, type ShutdownResources } from "../../../src/common/shutdown";
+import { formatFatalError, runGracefulShutdown, type ShutdownResources } from "../../../src/common/shutdown";
 
 /**
  * Fakes the Logger surface runGracefulShutdown() uses, recording call order.
@@ -99,5 +99,32 @@ describe("runGracefulShutdown (logger close lifecycle)", () => {
         expect(logger.write_error).toHaveBeenCalledTimes(1);
         expect(logger.close).toHaveBeenCalledTimes(1);
         expect(calls).toEqual(["error:Error during graceful shutdown: log transport failure", "close"]);
+    });
+});
+
+// Optional-1: both fatal handlers in index.ts (uncaughtException /
+// unhandledRejection) format their diagnostic through formatFatalError, so a
+// non-Error thrown/rejected value must never log as "undefined".
+describe("formatFatalError (fatal error normalization, Optional-1)", () => {
+    it("normalizes a non-Error thrown value into a meaningful message", () => {
+        // ensureError() JSON-stringifies non-Error values — a thrown string
+        // keeps its content instead of collapsing to "undefined".
+        expect(formatFatalError("Uncaught exception", "boom")).toBe('Uncaught exception: "boom"');
+        expect(formatFatalError("Uncaught exception", 42)).toBe("Uncaught exception: 42");
+        expect(formatFatalError("Uncaught exception", { code: "ECONNRESET" })).toBe('Uncaught exception: {"code":"ECONNRESET"}');
+    });
+
+    it("never reports a non-Error value as undefined", () => {
+        const out = formatFatalError("Uncaught exception", "boom");
+        expect(out).not.toContain("undefined");
+    });
+
+    it("uses the sentinel message for an undefined value", () => {
+        expect(formatFatalError("Uncaught exception", undefined)).toBe("Uncaught exception: <<< Error is undefined >>>");
+    });
+
+    it("keeps the message and stack for Error values", () => {
+        const err = new Error("kaboom");
+        expect(formatFatalError("Unhandled rejection", err)).toBe(`Unhandled rejection: kaboom\n${err.stack}`);
     });
 });

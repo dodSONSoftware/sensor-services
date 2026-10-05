@@ -182,6 +182,13 @@ describe("MqttNetworking", () => {
     let networking: MqttNetworking;
     let logger: TestLogger;
 
+    // Real mqtt clients constructed by the MqttNetworking instances in this
+    // suite. A test that swaps networking.mqtt_client for a mock (the P3-1
+    // close tests) orphans its real client; without force-closing it here,
+    // its reconnect timer fires into jest teardown (non-hermetic stderr
+    // noise). end(true) is what actually clears the reconnect timer.
+    const realClients: Array<{ end: (force: boolean, cb: () => void) => void }> = [];
+
     beforeEach(() => {
         logger = createTestLogger();
 
@@ -196,11 +203,24 @@ describe("MqttNetworking", () => {
 
         // MqttNetworking will try to connect to MQTT; that's fine — we only test the non-networking parts.
         networking = new MqttNetworking(config, logger);
+        const realClient = (networking as any).mqtt_client;
+        if (realClient) {
+            realClients.push(realClient);
+        }
     });
 
     afterEach(() => {
         // Best-effort cleanup — won't succeed without a real broker, but avoids leaks.
         networking.close(1000).catch(() => {});
+        // Force-close any real client a test orphaned by swapping in a mock
+        // (a second end() on an already-closed client is a no-op).
+        for (const client of realClients.splice(0)) {
+            try {
+                client.end(true, () => { });
+            } catch {
+                /* best-effort */
+            }
+        }
     });
 
     it("should default the log topic to iot/v3/log", () => {
@@ -618,6 +638,36 @@ describe("MqttNetworking", () => {
             expect(result.payload).toEqual(CAPTURED_GET_DETAILS_RESPONSE["payload"]);
             expect(result.payload["success"]).toBe(true);
             expect((result.payload as any)["data"]["network"]["ip_address"]).toBe("10.10.10.214");
+
+            dude.deinitialize();
+        });
+
+        // Optional-3: pin the numeric-normalization contract for `_ms` fields
+        // explicitly. getNumericField() truncates to integer every field whose
+        // name contains "time" or "millis" — "uptime_ms" matches via "upTIME",
+        // so a fractional value is truncated here. This test pins that
+        // contract for uptime_ms instead of leaving it implied by the library
+        // docstring (which says "time-related fields (milliseconds)").
+        it("truncates a fractional uptime_ms to an integer (Optional-3)", async () => {
+            const anyNetworking = networking as any;
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize("opt3-0001");
+
+            await anyNetworking.handle_mqtt_message({
+                "uptime_ms": 73056.7,
+                "message_type": "command_response",
+                "message_schema_version": 3,
+                "payload": {
+                    "command": "get-details",
+                    "command_id": "opt3-0001",
+                    "success": true,
+                    "data": {},
+                },
+                "source": "Soil-1",
+            } as any);
+
+            expect(dude.results).toHaveLength(1);
+            expect(dude.results[0].uptime_ms).toBe(73056);
 
             dude.deinitialize();
         });

@@ -58,6 +58,11 @@ rate-limit-max: 250             # max requests per window
 # Optional: silence timeout for sensor command responses (default: 1500ms)
 command-silence-timeout-ms: 5000
 
+# Optional: fetch timeout for the IP pinger proxy/analyze calls (default: 10000ms).
+# The older key name fetch-timeout-ms is still accepted as a deprecated alias;
+# if both are set, ippinger-fetch-timeout-ms wins.
+# ippinger-fetch-timeout-ms: 10000
+
 # PostgreSQL database for settings persistence
 # (db-password is a secret — it lives in the gitignored config-secrets.yml,
 #  which overrides this file; see config-secrets.example.yml for the template)
