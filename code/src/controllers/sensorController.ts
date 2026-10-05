@@ -4,7 +4,7 @@
  */
 
 import type * as express from "express";
-import { InternalServerError, Json, NotImplemented, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
+import { BadRequest, InternalServerError, Json, NotImplemented, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
@@ -67,6 +67,27 @@ export function create_mqtt_command_message(target: string, command: string, pay
         "command_id": commandId,
         "payload": payload ?? {},
     };
+}
+
+/**
+ * True when a target is the MQTT broadcast wildcard `*` — or a normalized
+ * equivalent (surrounding whitespace, or URL percent-encoding such as %2A / %2a
+ * that a transport may not have decoded). Used to keep state-changing commands
+ * from fanning out to every sensor on the broker.
+ */
+export function isBroadcastTarget(target: string): boolean {
+    if (typeof target !== "string") {
+        return false;
+    }
+    // Decode percent-encoding so %2A/%2a normalize to `*` even if not already.
+    // decodeURIComponent throws on a stray `%`, so fall back to the raw value.
+    let decoded = target;
+    try {
+        decoded = decodeURIComponent(target);
+    } catch {
+        decoded = target;
+    }
+    return decoded.trim().toLowerCase() === "*";
 }
 
 function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
@@ -360,6 +381,17 @@ export async function getReadConfigBySource(req: express.Request, res: express.R
 // WRITE CONFIG
 
 export async function postWriteConfigBySource(req: express.Request, res: express.Response, network: MqttNetworking, source: string) {
+    // write-config must target a single sensor: the MQTT wildcard `*` would
+    // rewrite the config of EVERY sensor on the broker at once. Reject it at
+    // the HTTP boundary with 400, before any broker check, slot claim, or MQTT
+    // publish. (get-details / reboot / read-config legitimately broadcast to `*`
+    // and are intentionally unaffected.)
+    if (isBroadcastTarget(source)) {
+        res.status(BadRequest).contentType(Json).json({
+            error: "write-config does not accept the broadcast target '*'; specify a single sensor source",
+        });
+        return;
+    }
     // The V3 protocol requires the complete config wrapped in a 'config' key:
     // payload must be exactly {"config": <complete candidate config>}
     await post_it(req, res, network, source, "write-config", { config: req.body });

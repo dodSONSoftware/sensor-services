@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.12)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.13)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -289,7 +289,7 @@ HTTP request → middleware (request ID, rate limit, body validation)
 | POST | `/sensors/reboot/:source` | Reboot a specific sensor. POST is canonical; GET is accepted during the compatibility period |
 | GET | `/sensors/read-config` | Read config from all sensors |
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
-| POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor (MQTT command) |
+| POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor (MQTT command). Rejects the broadcast target `*` (and `%2A`, whitespace variants) with 400 — no MQTT publish |
 | POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
 | GET | `/sensors/logs/:source` | Fetch sensor logs from Loki; `:source` is allowlist-validated (LogQL injection guard), optional `level` (debug/info/warn/error) and `limit` (max 100) query params |
 
@@ -405,6 +405,7 @@ case-sensitive: true
 - **`case-sensitive` is configurable** via `config.yml` (used by `analyzeIt()` in pingerController).
 - **V3 MQTT protocol (firmware v4)** — outbound commands use the `message_schema_version: 3` envelope with a required `payload` object (write-config wraps the complete config as `{"config": <config>}`); command responses are parsed from `payload.command`/`payload.command_id` (no top-level `type`). The `identify` command and `/sensors/identify` routes were removed — use `get-details` (sensor IP now at `payload.data.network.ip_address` in pinger analysis). `update-config` is not supported by firmware v4 — the route returns 501.
 - **`write-config` is an active** POST endpoint in `sensorRoutes.ts`; **`update-config` is deprecated** and returns 501 (NotImplemented).
+- **`write-config` rejects the broadcast target `*` (P1-2)** — `postWriteConfigBySource()` checks `isBroadcastTarget(source)` and returns 400 (no broker check, slot claim, or MQTT publish) when the source normalizes to the MQTT wildcard `*` (including `%2A`/`%2a` and surrounding whitespace). Publishing a config to `*` would rewrite every sensor on the broker at once. The read commands (`get-details`, `read-config`) and `reboot` legitimately broadcast to `*` and are unaffected.
 - **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`. Uses `if (!res.headersSent)` guard to prevent double-sending when matched routes fall through without calling next().
 - **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod v4 schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).

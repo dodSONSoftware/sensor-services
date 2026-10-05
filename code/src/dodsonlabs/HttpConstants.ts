@@ -6,6 +6,7 @@
 // **** HTTP Status Codes
 
 export const OK = 200;
+export const BadRequest = 400;
 export const NotFound = 404;
 export const InternalServerError = 500;
 export const NotImplemented = 501;

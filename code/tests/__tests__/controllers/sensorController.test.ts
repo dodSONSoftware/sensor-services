@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { create_mqtt_command_message, getDetails } from "../../../src/controllers/sensorController";
+import { create_mqtt_command_message, getDetails, isBroadcastTarget } from "../../../src/controllers/sensorController";
 import type { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
 import { MqttCommandControl } from "../../../src/dodsonlabs/MqttCommandControl";
 import type { IMqttCommandControl } from "../../../src/dodsonlabs/Interfaces";
@@ -127,6 +127,46 @@ describe("create_mqtt_command_message (V3 envelope)", () => {
     };
     const msg = create_mqtt_command_message("*", "get-details", null, captured["command_id"]);
     expect(msg).toEqual(captured);
+  });
+});
+
+describe("isBroadcastTarget (P1-2 normalization)", () => {
+  it("detects the literal wildcard", () => {
+    expect(isBroadcastTarget("*")).toBe(true);
+  });
+
+  it("detects a wildcard surrounded by whitespace", () => {
+    expect(isBroadcastTarget(" * ")).toBe(true);
+    expect(isBroadcastTarget("  *")).toBe(true);
+    expect(isBroadcastTarget("* ")).toBe(true);
+  });
+
+  it("detects URL percent-encoding of the wildcard (%2A / %2a)", () => {
+    expect(isBroadcastTarget("%2A")).toBe(true);
+    expect(isBroadcastTarget("%2a")).toBe(true);
+    expect(isBroadcastTarget(" %2A ")).toBe(true);
+  });
+
+  it("is case-insensitive after normalization", () => {
+    // lowercase of "*" is still "*"; a mixed-case percent-encoding is caught
+    expect(isBroadcastTarget("＊")).toBe(false); // fullwidth asterisk is NOT the MQTT wildcard
+  });
+
+  it("does NOT treat a single-sensor source as broadcast", () => {
+    expect(isBroadcastTarget("Soil-1")).toBe(false);
+    expect(isBroadcastTarget("air-2")).toBe(false);
+  });
+
+  it("does NOT treat a source that merely contains an asterisk as broadcast", () => {
+    expect(isBroadcastTarget("my*device")).toBe(false);
+    expect(isBroadcastTarget("device%2A1")).toBe(false); // decodes to "device*1"
+  });
+
+  it("handles non-string input safely", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(isBroadcastTarget(undefined as any)).toBe(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(isBroadcastTarget(null as any)).toBe(false);
   });
 });
 
@@ -428,6 +468,43 @@ describe("sensor controller integration (error paths, already-running)", () => {
       expect(res.status).toBe(200);
       const published = (network.publish_mqtt_message as jest.Mock).mock.calls[0];
       expect(published[1]["payload"]).toEqual({ config });
+    });
+  });
+
+  describe("write-config broadcast rejection (P1-2)", () => {
+    // A valid single-sensor target still works and publishes exactly once.
+    it("should still accept a single sensor source and publish", async () => {
+      const network = makeMockNetwork();
+      const config = { source: "Soil-1", config_schema_version: 10 };
+      const res = await hitPostItRoute(network, "/sensors/write-config/Soil-1", config);
+      expect(res.status).toBe(200);
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject the literal broadcast target '*' with 400 and publish nothing", async () => {
+      const network = makeMockNetwork();
+      const res = await hitPostItRoute(network, "/sensors/write-config/*", { source: "Soil-1" });
+      expect(res.status).toBe(400);
+      expect(String(res.body.error)).toMatch(/\*/);
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+    });
+
+    it("should reject the URL-encoded broadcast target %2A with 400 and publish nothing", async () => {
+      const network = makeMockNetwork();
+      const res = await hitPostItRoute(network, "/sensors/write-config/%2A", { source: "Soil-1" });
+      expect(res.status).toBe(400);
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+    });
+
+    // The broadcast guard must NOT affect the read commands that legitimately
+    // fan out to '*' — get-details still publishes to '*' (target unchanged).
+    it("should still allow broadcast '*' for get-details (read command unaffected)", async () => {
+      const network = makeMockNetwork();
+      const res = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res.status).toBe(200);
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      const published = (network.publish_mqtt_message as jest.Mock).mock.calls[0];
+      expect(published[1]["target"]).toBe("*");
     });
   });
 
