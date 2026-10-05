@@ -218,3 +218,51 @@ describe("CreateMiddleware — global body validation", () => {
         });
     });
 });
+
+describe("CreateMiddleware — rate-limit exemption for /health and /metrics (P2-4)", () => {
+    // A fresh app per test (each CreateMiddleware builds its own in-memory
+    // rate limiter), with a tight limit (2) so we can exhaust it quickly.
+    function buildLimitedApp(): express.Application {
+        const limitedConfig = validateConfig({
+            ...config,
+            "rate-limit-window-ms": 60_000,
+            "rate-limit-max": 2,
+        });
+        const app = express();
+        new CreateMiddleware(app, limitedConfig);
+        new CreateGeneralRoutes(app, createMockMqttNetworking());
+        return app;
+    }
+
+    it("rate-limits a normal route (max 2 -> the 3rd request is 429)", async () => {
+        const app = buildLimitedApp();
+        const r1 = await request(app).get("/about");
+        const r2 = await request(app).get("/about");
+        const r3 = await request(app).get("/about");
+        expect(r1.status).toBe(200);
+        expect(r2.status).toBe(200);
+        expect(r3.status).toBe(429);
+    });
+
+    it("/health is exempt: still 200 after the limit is exhausted", async () => {
+        const app = buildLimitedApp();
+        await request(app).get("/about"); // 1st
+        await request(app).get("/about"); // 2nd -> limit reached
+        const about429 = await request(app).get("/about"); // 3rd -> 429
+        expect(about429.status).toBe(429);
+        const health = await request(app).get("/health"); // exempt -> 200
+        expect(health.status).toBe(200);
+        expect(health.body).toHaveProperty("status");
+    });
+
+    it("/metrics is exempt: still 200 after the limit is exhausted", async () => {
+        const app = buildLimitedApp();
+        await request(app).get("/about");
+        await request(app).get("/about");
+        const about429 = await request(app).get("/about");
+        expect(about429.status).toBe(429);
+        const metrics = await request(app).get("/metrics"); // exempt -> 200
+        expect(metrics.status).toBe(200);
+        expect(metrics.text).toContain("http_requests_total");
+    });
+});

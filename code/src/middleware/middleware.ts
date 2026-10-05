@@ -50,6 +50,11 @@ export class CreateMiddleware extends RoutesCreatorBase {
             standardHeaders: true,
             legacyHeaders: false,
             message: { error: "too many requests, please try again later" },
+            // /health and /metrics are scraped on a fixed cadence by the Docker
+            // healthcheck and Prometheus. Exempt them so normal scrape load can
+            // never 429 the container into "unhealthy" or drop metrics —
+            // observability endpoints must stay available.
+            skip: (req: express.Request) => req.path === "/health" || req.path === "/metrics",
         }));
 
         // add request ID middleware (must run before logger so every log has a traceable ID)
