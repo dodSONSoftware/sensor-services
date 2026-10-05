@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.13)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.14)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -396,6 +396,7 @@ case-sensitive: true
 - **All logging goes through Winston** — `error`/`warn`/`info`/`debug` levels, console transport always active, optional Loki transport. `handle_mqtt_message_log()` in MqttNetworking forwards sensor application logs at the appropriate level; controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level, default `debug`) config keys.
 - **Sensor commands use event-based completion** — `MqttCommandControl.waitForCompletion()` with a 10-second hard safety cap via `AbortController`. Replaces the old 1-second polling loop.
 - **MQTT-backed commands fail with HTTP 503 when the broker is disconnected** — the controller checks `is_connected()` before publishing (before the slot is claimed), so a disconnected broker returns `503 { error: "MQTT broker unavailable" }` instead of `200 []`. `MqttNetworking` also sets `queueQoSZero: false` so a publish that loses the disconnect race is dropped, never delivered late.
+- **Slot acquisition + publish are failure-atomic (P2-1)** — the pre-slot `is_connected()` gate and the publish are not atomic, so the controller re-checks `is_connected()` AFTER acquiring the slot: if the broker disconnected in the gap (or while waiting for the slot) it releases the slot (`deinitialize()`) and returns 503 rather than publish into the void. The publish itself is wrapped in try/catch: if `publish_mqtt_message()` throws after `initialize()`, the command control is `deinitialize()`d (releasing the slot) and the error rethrown, so a failed publish can never hold the slot and block every subsequent command of that type.
 - **Sensor command slots are serialized with an atomic `claim()`** — a second concurrent caller of the same command type waits, then publishes its OWN command; results are snapshotted at wait-completion so a caller never responds with another caller's (or stale/empty) results.
 - **MQTT messages on untracked topics are dropped** — the broker is unauthenticated, so `MqttNetworking.on_message()` warns and drops any message whose topic is not one of the subscribed topics (command-response, V3 info-request, and the log topic when forwarding is enabled).
 - **`on_disconnect()` and `on_error()` rely on the mqtt library's auto-reconnect** — manual reconnection was removed (created race conditions). The `reconnectPeriod: 5000` handles reconnection automatically.

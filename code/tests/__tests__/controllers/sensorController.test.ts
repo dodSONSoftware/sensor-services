@@ -508,6 +508,102 @@ describe("sensor controller integration (error paths, already-running)", () => {
     });
   });
 
+  describe("failure-atomic slot acquisition + publish (P2-1)", () => {
+    // Build a mock network that exposes the command control (so we can assert
+    // the slot is released) and lets us script is_connected() / publish.
+    function makeP2Network(opts: {
+      connectedSequence?: boolean[];
+      publishImpl?: (topic: string, msg: unknown) => void;
+    }): { network: MqttNetworking; control: IMqttCommandControl } {
+      const control: IMqttCommandControl = {
+        is_running: false,
+        is_timed_out: true,
+        timeout: null,
+        results: [{ source: "test", payload: {} }],
+        claim: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+          if (this.is_running) return false;
+          this.is_running = true;
+          return true;
+        }),
+        initialize: jest.fn(),
+        deinitialize: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+          this.is_running = false;
+        }),
+        clear_results: jest.fn(),
+        restart_clock: jest.fn(),
+        cancel_clock: jest.fn(),
+        waitForCompletion: jest.fn().mockResolvedValue(undefined),
+      };
+
+      let i = 0;
+      const is_connected = jest.fn(() => {
+        const seq = opts.connectedSequence;
+        if (!seq) return true;
+        const v = seq[i < seq.length ? i : seq.length - 1];
+        if (i < seq.length) i++;
+        return v;
+      });
+
+      const network = {
+        mqtt_topic_command: "iot/v3/command",
+        mqtt_topic_command_response: "iot/v3/command-response",
+        is_connected,
+        prometheus_server_ready: jest.fn().mockReturnValue(true),
+        publish_mqtt_message: jest.fn(opts.publishImpl ?? (() => {})),
+        register_command_id: jest.fn(),
+        close: jest.fn(),
+        get_cr_dude: jest.fn().mockReturnValue(control),
+      } as unknown as MqttNetworking;
+
+      return { network, control };
+    }
+
+    it("get path: broker disconnects after slot acquisition -> 503, no publish, slot released", async () => {
+      // 1st is_connected() = pre-slot gate (true, passes); 2nd = post-slot
+      // re-check (false, triggers the 503).
+      const { network, control } = makeP2Network({ connectedSequence: [true, false] });
+      const res = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res.status).toBe(503);
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+      // The slot must be released so a later request is not blocked
+      expect(control.deinitialize).toHaveBeenCalled();
+      expect(control.is_running).toBe(false);
+    });
+
+    it("post path: broker disconnects after slot acquisition -> 503, no publish, slot released", async () => {
+      const { network, control } = makeP2Network({ connectedSequence: [true, false] });
+      const res = await hitPostItRoute(network, "/sensors/write-config/Soil-1", { source: "Soil-1" });
+      expect(res.status).toBe(503);
+      expect(network.publish_mqtt_message).not.toHaveBeenCalled();
+      expect(control.deinitialize).toHaveBeenCalled();
+      expect(control.is_running).toBe(false);
+    });
+
+    it("publish throws -> state released, and the NEXT request starts immediately (200)", async () => {
+      let publishCount = 0;
+      const { network, control } = makeP2Network({
+        publishImpl: () => {
+          publishCount++;
+          if (publishCount === 1) throw new Error("simulated publish failure");
+          // second publish succeeds
+        },
+      });
+
+      // First request: publish throws -> 500 (generic error), slot released.
+      const res1 = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res1.status).toBe(500);
+      expect(control.is_running).toBe(false);
+      expect(control.deinitialize).toHaveBeenCalled();
+
+      // Second request: the slot is free, so it claims immediately and the
+      // (now-succeeding) publish completes -> 200. If the state had not been
+      // released after the failure, this request would hang until the hard cap.
+      const res2 = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res2.status).toBe(200);
+      expect(publishCount).toBe(2);
+    });
+  });
+
   describe("update-config deprecation", () => {
     it("should return 501 and publish nothing to MQTT", async () => {
       const network = makeMockNetwork();

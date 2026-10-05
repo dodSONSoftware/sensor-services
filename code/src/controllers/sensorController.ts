@@ -100,8 +100,16 @@ function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<stri
     // initialize timer
     dude.initialize(command_id);
 
-    // publish mqtt request (dedup handled inline by publish_mqtt_message)
-    network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
+    try {
+        // publish mqtt request (dedup handled inline by publish_mqtt_message)
+        network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
+    } catch (err) {
+        // Publish failed AFTER initialize() ran: release the slot/state so the
+        // failed command cannot hold the command slot and block every subsequent
+        // command of this type, then propagate the error to the caller.
+        dude.deinitialize();
+        throw err;
+    }
 }
 
 // Maximum time to wait for a single MQTT command to complete (10 seconds).
@@ -243,6 +251,17 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
     // the same type to finish)
     await mqtt_command_acquire_slot(dude, command);
 
+    // Re-check connectivity AFTER acquiring the slot: the pre-slot gate and the
+    // publish are not atomic, so the broker could disconnect in the gap (or while
+    // we waited for the slot). Release the slot and report broker-unavailable
+    // (503) rather than publish into the void — a QoS-0 publish made while
+    // disconnected would be queued for late delivery or dropped.
+    if (!network.is_connected()) {
+        dude.deinitialize();
+        _log().write_warn("sensorController.ts/mqtt_command_get_messages", `MQTT broker disconnected after slot acquisition, rejecting '${command}'`);
+        throw new MqttBrokerUnavailableError();
+    }
+
     // create mqtt request and run our own command
     const mqtt_request = create_mqtt_command_message(target, command, null, cmdId);
     const results = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
@@ -308,6 +327,16 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
         // serialize: acquire the command slot, then run our own command so
         // this request responds with its own results
         await mqtt_command_acquire_slot(dude, command);
+
+        // Re-check connectivity AFTER acquiring the slot (see
+        // mqtt_command_get_messages). Throwing MqttBrokerUnavailableError is
+        // caught below and mapped to 503; the slot is released first so the
+        // rejected command never holds it.
+        if (!network.is_connected()) {
+            dude.deinitialize();
+            _log().write_warn("sensorController.ts/post_it", `MQTT broker disconnected after slot acquisition, rejecting '${command}'`);
+            throw new MqttBrokerUnavailableError();
+        }
 
         // create mqtt request
         const mqtt_request = create_mqtt_command_message(target, command, payload, commandId);
