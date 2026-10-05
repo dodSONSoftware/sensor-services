@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+import { join } from "path";
 import express from "express";
 import request from "supertest";
 import type { z } from "zod";
@@ -10,6 +11,8 @@ import type { z } from "zod";
 import { CreateMiddleware } from "../../../src/middleware/middleware";
 import { CreateGeneralRoutes } from "../../../src/routes/generalRoutes";
 import { validateConfig, type configSchema } from "../../../src/schemas/config";
+import { apiMetricsRegistry, createApiMetricsMiddleware } from "../../../src/common/metrics";
+import { setupSwagger } from "../../../src/swagger";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
 import { createMockReq, createMockRes } from "../../mocks/express";
 
@@ -264,5 +267,108 @@ describe("CreateMiddleware — rate-limit exemption for /health and /metrics (P2
         const metrics = await request(app).get("/metrics"); // exempt -> 200
         expect(metrics.status).toBe(200);
         expect(metrics.text).toContain("http_requests_total");
+    });
+});
+
+describe("CreateMiddleware — middleware ordering (P3-2)", () => {
+    // Fresh app per test (each CreateMiddleware builds its own in-memory rate
+    // limiter) with a tight limit (2) so we can exhaust it quickly. The API
+    // metrics middleware is installed THROUGH CreateMiddleware so it sits AHEAD
+    // of the rate limiter — the ordering the P3-2 fix establishes (request ID ->
+    // metrics -> CORS -> rate limiter -> JSON parser -> logging/validation).
+    function buildObservableApp(): express.Application {
+        const limitedConfig = validateConfig({
+            ...config,
+            "rate-limit-window-ms": 60_000,
+            "rate-limit-max": 2,
+        });
+        const app = express();
+        new CreateMiddleware(app, limitedConfig, createApiMetricsMiddleware());
+        new CreateGeneralRoutes(app, createMockMqttNetworking());
+        return app;
+    }
+
+    // Total of the http_requests_total counter for GET 429s (route label may be
+    // the "unmatched" sentinel or a path; we only care that a 429 was counted).
+    async function get429Count(): Promise<number> {
+        const metrics = await apiMetricsRegistry.getMetricsAsJSON();
+        const metric = metrics.find((m) => m.name === "http_requests_total");
+        if (!metric) {
+            return 0;
+        }
+        return (metric.values ?? [])
+            // status is recorded from res.statusCode (a number); coerce so the
+            // comparison is robust to number-vs-string label representation.
+            .filter((v) => v.labels.method === "GET" && String(v.labels.status) === "429")
+            .reduce((sum, v) => sum + v.value, 0);
+    }
+
+    async function exhaustRateLimit(app: express.Application) {
+        await request(app).get("/about"); // 1st
+        await request(app).get("/about"); // 2nd -> limit reached
+    }
+
+    it("a 429 response carries an X-Request-ID", async () => {
+        const app = buildObservableApp();
+        await exhaustRateLimit(app);
+        const r3 = await request(app).get("/about"); // 3rd -> 429
+        expect(r3.status).toBe(429);
+        // Request ID is generated BEFORE rate limiting, so even a 429 (which
+        // terminates before the logger and routes) is traceable.
+        const id = r3.headers["x-request-id"];
+        expect(typeof id).toBe("string");
+        expect((id as string).length).toBeGreaterThan(0);
+    });
+
+    it("a 429 response is counted by HTTP metrics", async () => {
+        const app = buildObservableApp();
+        const before = await get429Count();
+        await exhaustRateLimit(app);
+        const r3 = await request(app).get("/about"); // 3rd -> 429
+        expect(r3.status).toBe(429);
+
+        // The metrics middleware wraps res.end ahead of the rate limiter, so the
+        // terminal 429 is recorded. A precise delta (not mere presence) proves
+        // THIS request's 429 was counted.
+        expect(await get429Count()).toBe(before + 1);
+    });
+
+    it("Swagger requests pass through the global middleware (X-Request-ID)", async () => {
+        // Swagger is mounted AFTER CreateMiddleware (P3-2), so it no longer
+        // bypasses the request-ID / metrics / CORS / rate-limit / body-validation
+        // pipeline. A swagger asset must come back with a request ID.
+        const app = express();
+        new CreateMiddleware(app, config, createApiMetricsMiddleware());
+        // code/ directory — the glob scans src/routes/**/*.ts (see swagger.test.ts)
+        const codeRoot = join(__dirname, "..", "..", "..");
+        setupSwagger(app, 32000, codeRoot, "http://127.0.0.1:32000/");
+
+        const res = await request(app).get("/swagger/swagger-ui-init.js");
+        expect(res.status).toBe(200);
+        expect(typeof res.headers["x-request-id"]).toBe("string");
+    });
+
+    it("rate limiting runs before the JSON body parser", async () => {
+        // Body limit is tiny (10 bytes) and the rate limit is 1. The first
+        // request consumes the slot with a small (parsable) body; the second is
+        // over the limit AND has a body that would exceed the 10-byte limit.
+        // Because rate limiting precedes the parser, the client gets a 429
+        // (rate limited) rather than a 413 (body too large) — proof the
+        // over-limit body was never parsed.
+        const limitedConfig = validateConfig({
+            ...config,
+            "rate-limit-window-ms": 60_000,
+            "rate-limit-max": 1,
+            "express-body-limit": "10",
+        });
+        const app = express();
+        new CreateMiddleware(app, limitedConfig);
+        app.post("/big", (_req, res) => res.status(200).json({ ok: true }));
+
+        const r1 = await request(app).post("/big").send({ a: 1 });
+        expect(r1.status).toBe(200);
+
+        const r2 = await request(app).post("/big").send({ a: "x".repeat(100) });
+        expect(r2.status).toBe(429);
     });
 });

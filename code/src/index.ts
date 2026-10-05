@@ -114,14 +114,6 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     // get express port (before swagger so the server URL is correct)
     const port = config["express-port"];
 
-    // setup swagger (auto-derived from machine IP + port, overridable via config)
-    // Resolve source dir relative to __dirname (compiled output directory).
-    // Since __dirname is /app/dist/ in Docker, ../src gives us /app/src/.
-    // The swagger.ts buildApisArray adds another "src/" so we pass the parent dir.
-    const srcDir = resolve(__dirname, "..");
-    const swagger_server_url = config["swagger-server-url"] as string | undefined;
-    setupSwagger(app, port, srcDir, swagger_server_url);
-
     // **** Settings initialization (PostgreSQL-backed persistence, before routes)
 
     // Initialize settings synchronously before routes are registered
@@ -133,14 +125,23 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     }
 
     try {
-        // create middleware
-        new middleware.CreateMiddleware(app, config);
+        // create middleware. The API metrics middleware is passed in (rather
+        // than app.use()'d here) so it is installed AHEAD of the rate limiter —
+        // that ordering is what makes 429 responses carry an X-Request-ID and
+        // be counted (P3-2). Registry and metrics live in common/metrics.ts so
+        // they can also be used by route handlers (e.g. generalRoutes.ts).
+        // Unmatched requests are recorded under the bounded "unmatched" label.
+        new middleware.CreateMiddleware(app, config, createApiMetricsMiddleware());
 
-        // **** API Prometheus metrics (separate registry, exposed at /metrics)
-        // Registry and metrics live in common/metrics.ts so they can also be
-        // used by route handlers (e.g. generalRoutes.ts). Unmatched requests
-        // are recorded under the bounded "unmatched" route label.
-        app.use(createApiMetricsMiddleware());
+        // setup swagger AFTER the global middleware so it does not bypass the
+        // request-ID / metrics / CORS / rate-limit / body-validation pipeline
+        // (P3-2), but BEFORE the application routes.
+        // Resolve source dir relative to __dirname (compiled output directory).
+        // Since __dirname is /app/dist/ in Docker, ../src gives us /app/src/.
+        // The swagger.ts buildApisArray adds another "src/" so we pass the parent dir.
+        const srcDir = resolve(__dirname, "..");
+        const swagger_server_url = config["swagger-server-url"] as string | undefined;
+        setupSwagger(app, port, srcDir, swagger_server_url);
 
         // create routes
         const ip_pinger_web_api = config["ip-pinger-web-api"];

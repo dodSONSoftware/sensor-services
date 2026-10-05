@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.18)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.19)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -46,7 +46,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── logController.ts      -- GET /sensors/logs/:source (Loki queries; source allowlist-validated against LogQL injection, level allowlist, fetch timeout via AbortSignal; loki-url is never logged verbatim — it may embed credentials)
     │   │   └── settingsController.ts -- GET /ui/settings, GET /ui/settings-schema, PATCH /ui/settings-update
     │   ├── middleware/
-    │   │   └── middleware.ts -- CORS, JSON parser (configurable body limit), rate limiting (default 100 req/15min), request ID (X-Request-ID + AsyncLocalStorage), request logger, body validation (Zod)
+    │   │   └── middleware.ts -- Global middleware in deliberate order (P3-2): request ID -> HTTP metrics (optional, passed in) -> CORS -> rate limiting (default 100 req/15min) -> JSON parser (configurable body limit) -> request logger -> body validation (Zod)
     │   ├── routes/
     │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
@@ -89,7 +89,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchItOnly non-OK responses, getAnalyzeIpPinger degradation on malformed upstream bodies (Zod-validated), camelCase ipAddress normalization
     │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
     │       ├── middleware/
-    │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through)
+    │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through) + rate-limit exemption for /health and /metrics (P2-4) + middleware ordering: 429 carries X-Request-ID, 429 counted by metrics, Swagger passes through the pipeline, rate limiting precedes the JSON parser (P3-2)
     │       ├── routes/
     │       │   ├── configRoutes.test.ts       -- /api/reload-config, /api/read-config, /api/write-config via supertest
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
@@ -163,15 +163,14 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 3. Create global `Logger` instance via `createLogger(config)` — Winston-backed with `error`/`warn`/`info`/`debug` levels, optional Loki transport
 4. Create `MqttNetworking` instance (connects to MQTT broker, subscribes to command-response topic)
 5. Get port from config `express-port`
-6. Setup Swagger at `/swagger` (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
-7. Create middleware (CORS, JSON parsing with configurable body limit, rate limiting, request ID propagation via AsyncLocalStorage, request logger, body validation)
-8. Register API metrics middleware (tracks request duration/status/errors using separate prom-client registry)
-9. Initialize settings persistence (`settingsStore.init()`) — connects to PostgreSQL, creates DB/table if needed, seeds defaults
-10. Register route groups: `generalRoutes`, `sensorRoutes`, `pingerRoutes`, `settingsRoutes`, `routeNotFound`
-11. Validate `__routesHelp` entries match actual registered routes (drift detection)
-12. Listen on configured port
-13. Register `uncaughtException`/`unhandledRejection` handlers — call `shutdown()` to trigger graceful shutdown
-14. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, re-entrancy guard; `runGracefulShutdown()` (common/shutdown.ts) closes HTTP server → MQTT client → settings store → final log → active logger (exactly once), then the caller exits with the signal's exit code (0 for SIGINT/SIGTERM; 1 for uncaughtException/unhandledRejection)
+6. Initialize settings persistence (`settingsStore.init()`) — connects to PostgreSQL, creates DB/table if needed, seeds defaults (graceful degradation to in-memory defaults on failure)
+7. Create middleware in the P3-2 order (request ID → HTTP metrics → CORS → rate limiting → JSON parsing → request logger → body validation). The API metrics middleware is passed into `CreateMiddleware` so it is installed AHEAD of the rate limiter (that is what makes 429s carry an X-Request-ID and be counted); it tracks request duration/status/errors using a separate prom-client registry
+8. Setup Swagger at `/swagger` (auto-derived from routable IP + port, overridable via config `swagger-server-url`) — mounted AFTER the global middleware so it does not bypass the request-ID / metrics / CORS / rate-limit / body-validation pipeline (P3-2)
+9. Register route groups: `generalRoutes`, `sensorRoutes`, `pingerRoutes`, `settingsRoutes`, `configRoutes`, `logRoutes`, `routeNotFound`
+10. Validate `__routesHelp` entries match actual registered routes (drift detection)
+11. Listen on configured port
+12. Register `uncaughtException`/`unhandledRejection` handlers — call `shutdown()` to trigger graceful shutdown
+13. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, re-entrancy guard; `runGracefulShutdown()` (common/shutdown.ts) closes HTTP server → MQTT client → settings store → final log → active logger (exactly once), then the caller exits with the signal's exit code (0 for SIGINT/SIGTERM; 1 for uncaughtException/unhandledRejection)
 
 ### Core Components
 
@@ -427,10 +426,10 @@ case-sensitive: true
 - **Secrets never reach the logs** — `redactSecrets()` (SystemFunctions.ts) recursively masks `SENSITIVE_SECRET_KEYS` (`wifi-password`, `password`, `db-password`, matched case-insensitively at any nesting depth) without mutating the input. `MqttNetworking.publish_mqtt_message()` logs a sanitized copy only: a `write-config` publish logs metadata (`{command, target, command_id}`) and every other command logs a redacted copy of the message. The MQTT message that is actually published is never touched. Incoming command-response configs are redacted with the same helper before logging.
 - **Config secrets are split out (P1-4)** — `readConfigWithSecrets()` (src/schemas/configLoader.ts) reads the base `config.yml` and merges an optional sibling `config-secrets.yml` (override) before the merged result is validated against the full Zod schema. The tracked `config.yml` holds no real credentials; `config-secrets.example.yml` is the tracked template. A missing required secret fails validation at startup (clear error, no silent fallback); a present-but-corrupt secrets file is a hard error. Both `index.ts` startup and `doReloadConfig()` use the merged loader. `config-secrets.yml` is gitignored and excluded from the Docker build context, so no real secret is committed or baked into the image.
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.
-- **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`). `/health` and `/metrics` are exempt (`skip`), so the Docker healthcheck and Prometheus scrapes can never be 429'd into marking the container unhealthy or dropping metrics.
+- **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`). `/health` and `/metrics` are exempt (`skip`), so the Docker healthcheck and Prometheus scrapes can never be 429'd into marking the container unhealthy or dropping metrics. Runs BEFORE the JSON body parser (P3-2), so an over-limit request's (potentially oversized) body is rejected with a 429 without ever being parsed. Because it runs after request-ID and metrics, a 429 response carries an `X-Request-ID` and is counted in the API metrics.
 - **Health probe timeout leaves margin under Docker's deadline (P2-3)** — each `/health` dependency probe (IP pinger, sensor telemetry) uses `AbortSignal.timeout(2500ms)` (`HEALTH_CHECK_TIMEOUT_MS`), materially shorter than Docker's `--timeout=5s`. The probes run concurrently, so worst-case `/health` latency is ~2.5s — a wedged dependency is classified `unreachable` (→ `degraded`, still HTTP 200) instead of pushing the endpoint past Docker's 5s deadline and making an up-but-degraded container look down.
 - **Body validation** — a present body is validated as a JSON object with Zod (`validatePostBody()`); returns 400 if a body is present but not a JSON object. A missing body is passed through untouched — "body required" is a route-level concern owned by each controller (e.g. `configController`'s write-config returns its own 400). Replaces `req.body` with the validated object.
-- **API metrics middleware** — `createApiMetricsMiddleware()` (common/metrics.ts) wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`. The route label is the matched route pattern; unmatched requests collapse to the bounded `"unmatched"` sentinel so arbitrary 404 paths cannot grow label cardinality without bound.
+- **API metrics middleware** — `createApiMetricsMiddleware()` (common/metrics.ts) wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`. The route label is the matched route pattern; unmatched requests collapse to the bounded `"unmatched"` sentinel so arbitrary 404 paths cannot grow label cardinality without bound. Installed AHEAD of the rate limiter (passed into `CreateMiddleware`, P3-2) so terminal 429 responses are counted — they land under the `"unmatched"` route label because rate limiting ends the request before a route matches.
 - **Graceful shutdown** — 15-second hard timeout safety net (cleared before exit, so it can never log after the logger closes) plus a re-entrancy guard against double signals. Sequence lives in `common/shutdown.ts` (`runGracefulShutdown()`): stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → emit the final shutdown log → close the active logger exactly once (once-guarded, so buffered transports like the Loki batch timer flush). Nothing may log after the close.
 - **MQTT close clears its timeout when the graceful close wins (P3-1)** — `MqttNetworking.close(timeout_ms)` races the graceful `end()` against a `setTimeout` that forces the disconnect. The timeout handle is now captured and `clearTimeout()`ed in a `finally` around the race, so a clean shutdown that finishes before the deadline no longer leaves a live timer that would (a) force a second, forced disconnect after an already-clean close and (b) emit a spurious "timed out" error during a successful shutdown. The forced path still fires when the graceful close genuinely overruns the deadline.
 - **Process exit-code contract (P2-2)** — the caller (index.ts) chooses the exit code: SIGINT/SIGTERM → `0` (clean, operator-requested stop); uncaughtException/unhandledRejection → `1` (a crash, so a supervisor can distinguish it from a deliberate stop); fatal startup errors (invalid config, HTTP bind failure such as EADDRINUSE) → `1`; hard shutdown timeout → `1`. A `server.on("error")` handler turns a bind failure into a logged fatal startup error.

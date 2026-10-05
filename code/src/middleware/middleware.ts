@@ -19,20 +19,29 @@ import type { AppRequest } from "../common/app-request";
 // createRoutes() (called from super()) can access it. Safe in Node.js (single-threaded).
 let _config: z.infer<typeof configSchema>;
 
+// Module-level metrics middleware reference — same reason as _config above:
+// createRoutes() runs from super(), before any derived-class instance field
+// (e.g. a `private` parameter property) has been assigned. Stored here so the
+// optional API-metrics middleware can be installed at its (deliberately early)
+// position in the chain.
+let _metricsMiddleware: express.RequestHandler | undefined;
+
 // **** public classes
 
 export class CreateMiddleware extends RoutesCreatorBase {
     // **** ctor
 
-    constructor(protected app: express.Application, config: z.infer<typeof configSchema>) {
+    constructor(
+        protected app: express.Application,
+        config: z.infer<typeof configSchema>,
+        // Optional API-metrics middleware (createApiMetricsMiddleware in
+        // common/metrics.ts). Passed in by index.ts so it can be installed
+        // AHEAD of the rate limiter — the order is what makes 429 responses
+        // observable (P3-2). Tests that don't care about metrics omit it.
+        metricsMiddleware?: express.RequestHandler
+    ) {
         _config = config;
-
-        // add CORS
-        app.use(cors());
-
-        // add JSON (configurable body limit, default 1mb)
-        const bodyLimit = config["express-body-limit"] ?? "1mb";
-        app.use(express.json({ limit: bodyLimit }));
+        _metricsMiddleware = metricsMiddleware;
 
         // ----
         super(app);
@@ -41,7 +50,37 @@ export class CreateMiddleware extends RoutesCreatorBase {
     // **** protected functions
 
     protected createRoutes() {
-        // add rate limiting (configurable, default 100 requests per 15 minutes)
+        // Global middleware, in deliberate order (P3-2):
+        //   1. request ID      -> every response (incl. 429) carries X-Request-ID
+        //   2. HTTP metrics    -> wraps res.end, so it counts rate-limit 429s too
+        //   3. CORS            -> before rate limiting (preflight stays unthrottled)
+        //   4. rate limiter    -> before body parsing (an over-limit body is
+        //                         rejected without being parsed)
+        //   5. JSON body parser
+        //   6. request logger
+        //   7. body validation
+        //
+        // Metrics is installed here (rather than later in index.ts) precisely so
+        // it sits ahead of the rate limiter and therefore observes 429 terminal
+        // responses.
+
+        // 1. request ID middleware — must run first so every response is
+        //    traceable (and every log line has an ID, including rate-limited
+        //    ones that terminate before the logger below).
+        this.app.use(this._requestIdMiddleware.bind(this));
+
+        // 2. HTTP metrics — before rate limiting so 429s are counted.
+        if (_metricsMiddleware) {
+            this.app.use(_metricsMiddleware);
+        }
+
+        // 3. add CORS
+        this.app.use(cors());
+
+        // 4. add rate limiting (configurable, default 100 requests per 15
+        //    minutes). Runs BEFORE the JSON body parser (below) so an over-limit
+        //    client's (potentially oversized) body is rejected without being
+        //    parsed.
         const windowMs = _config["rate-limit-window-ms"] ?? 900_000;
         const max = _config["rate-limit-max"] ?? 100;
         this.app.use(rateLimit({
@@ -57,11 +96,15 @@ export class CreateMiddleware extends RoutesCreatorBase {
             skip: (req: express.Request) => req.path === "/health" || req.path === "/metrics",
         }));
 
-        // add request ID middleware (must run before logger so every log has a traceable ID)
-        this.app.use(this._requestIdMiddleware.bind(this));
+        // 5. add JSON (configurable body limit, default 1mb) — after rate
+        //    limiting, so a 429'd request's body is never parsed.
+        const bodyLimit = _config["express-body-limit"] ?? "1mb";
+        this.app.use(express.json({ limit: bodyLimit }));
 
-        // add middleware components
+        // 6. add request logger (request ID is already in AsyncLocalStorage)
         this.app.use(this._loggerMiddleware.bind(this));
+
+        // 7. add body validation
         this.app.use(this._validateBodyMiddleware.bind(this));
     }
 
