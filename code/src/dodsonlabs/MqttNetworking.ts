@@ -185,6 +185,12 @@ export class MqttNetworking implements IMqttNetworking {
     public async close(timeout_ms: number = 5000): Promise<void> {
         this.logger.write_info(this.originator, `<close> => Shutting down MQTT client (timeout: ${timeout_ms}ms)...`);
 
+        // Capture the timeout handle so it can be cleared when the graceful
+        // close wins the race. Otherwise the pending timer fires after a
+        // successful close and both logs a false "timed out" error and forces
+        // end(true) on an already-closed client.
+        let timeoutHandle: NodeJS.Timeout | null = null;
+
         // Close MQTT client with timeout
         const closePromise = new Promise<void>((resolve) => {
             this.mqtt_client.end(() => {
@@ -194,7 +200,7 @@ export class MqttNetworking implements IMqttNetworking {
         });
 
         const timeoutPromise = new Promise<void>((resolve) => {
-            setTimeout(() => {
+            timeoutHandle = setTimeout(() => {
                 this.logger.write_error(
                     this.originator,
                     `<close> => MQTT client close timed out after ${timeout_ms}ms, forcing disconnect.`
@@ -205,7 +211,17 @@ export class MqttNetworking implements IMqttNetworking {
             }, timeout_ms);
         });
 
-        await Promise.race([closePromise, timeoutPromise]);
+        try {
+            await Promise.race([closePromise, timeoutPromise]);
+        } finally {
+            // Whichever side won, the timer is no longer needed: if the graceful
+            // close won it is still pending (clear it so it can't force a
+            // disconnect / log a spurious timeout later); if the timeout won the
+            // callback already ran (clearTimeout is a harmless no-op).
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
+        }
     }
 
     public publish_mqtt_message(topic: string, message: Record<string, any>): void {

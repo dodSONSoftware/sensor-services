@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.17)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.18)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -107,7 +107,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       └── dodsonlabs/
     │           ├── Logger.test.ts               -- Loki shutdown ownership: transport constructed with gracefulShutdown:false, bounded flush/close on logger close (mocked winston-loki, no real HTTP/DNS)
     │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers), claim() slot serialization
-    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop, outbound publish secret redaction)
+    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop, outbound publish secret redaction, close() timeout clearing: graceful-wins vs timeout-wins)
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)
     │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters, redactSecrets()
     └── dist/              -- Compiled output (tsc)
@@ -432,6 +432,7 @@ case-sensitive: true
 - **Body validation** — a present body is validated as a JSON object with Zod (`validatePostBody()`); returns 400 if a body is present but not a JSON object. A missing body is passed through untouched — "body required" is a route-level concern owned by each controller (e.g. `configController`'s write-config returns its own 400). Replaces `req.body` with the validated object.
 - **API metrics middleware** — `createApiMetricsMiddleware()` (common/metrics.ts) wraps `res.end()` to capture final status code, computes request duration via `process.hrtime()`, records to separate prom-client registry. Exposed at `/metrics`. The route label is the matched route pattern; unmatched requests collapse to the bounded `"unmatched"` sentinel so arbitrary 404 paths cannot grow label cardinality without bound.
 - **Graceful shutdown** — 15-second hard timeout safety net (cleared before exit, so it can never log after the logger closes) plus a re-entrancy guard against double signals. Sequence lives in `common/shutdown.ts` (`runGracefulShutdown()`): stop accepting new requests → close HTTP server → close MQTT client (5s timeout) → cleanup settingsStore persistence resources → emit the final shutdown log → close the active logger exactly once (once-guarded, so buffered transports like the Loki batch timer flush). Nothing may log after the close.
+- **MQTT close clears its timeout when the graceful close wins (P3-1)** — `MqttNetworking.close(timeout_ms)` races the graceful `end()` against a `setTimeout` that forces the disconnect. The timeout handle is now captured and `clearTimeout()`ed in a `finally` around the race, so a clean shutdown that finishes before the deadline no longer leaves a live timer that would (a) force a second, forced disconnect after an already-clean close and (b) emit a spurious "timed out" error during a successful shutdown. The forced path still fires when the graceful close genuinely overruns the deadline.
 - **Process exit-code contract (P2-2)** — the caller (index.ts) chooses the exit code: SIGINT/SIGTERM → `0` (clean, operator-requested stop); uncaughtException/unhandledRejection → `1` (a crash, so a supervisor can distinguish it from a deliberate stop); fatal startup errors (invalid config, HTTP bind failure such as EADDRINUSE) → `1`; hard shutdown timeout → `1`. A `server.on("error")` handler turns a bind failure into a logged fatal startup error.
 - **Config reload applies only hot-reloadable keys at runtime** — `doReloadConfig()` updates the active in-memory config with only `HOT_RELOADABLE_KEYS` (currently `log-level`) and mutates the log level on the existing logger instance via `Logger.setLevel()`. Restart-required values from the file stay inactive until restart, so `/api/read-config` never reports inactive values as active and long-lived components never hold a closed logger.
 - **`log-level` enum includes `warn`** — valid values are `error`, `warn`, `info`, `debug`.

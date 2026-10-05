@@ -242,7 +242,12 @@ describe("MqttNetworking", () => {
             // close and end(true, callback) for the forced-close timeout path
             (networking as any).mqtt_client = {
                 publish,
-                end: jest.fn((_force?: boolean, cb?: () => void) => cb?.()),
+                // mqtt.js end() is overloaded (end(cb) / end(true, cb)); fire
+                // whichever callback form arrives so close() settles promptly.
+                end: jest.fn((...args: unknown[]) => {
+                    const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
+                    cb?.();
+                }),
             };
             return publish;
         }
@@ -320,6 +325,93 @@ describe("MqttNetworking", () => {
             expect(logged).not.toContain(WIFI_SECRET);
             expect(logged).toContain("********");
             expect(logged).toContain("present");
+        });
+    });
+
+    // P3-1: the close timeout must be cleared when the graceful close wins the
+    // race — otherwise the pending setTimeout outlives the close, forcing a
+    // second (forced) disconnect and a spurious "timed out" error log after a
+    // clean shutdown. Fake timers + a controllable end() make both outcomes
+    // deterministic.
+    describe("close() timeout handling (P3-1)", () => {
+        // Restores a client whose end() settles immediately (both the
+        // end(callback) and end(true, callback) forms), so the afterEach's
+        // best-effort close() finishes without leaving a pending real timer.
+        function installSafeClient() {
+            (networking as any).mqtt_client = {
+                publish: jest.fn(),
+                end: jest.fn((...args: unknown[]) => {
+                    const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
+                    cb?.();
+                }),
+            };
+        }
+
+        // mqtt.js end() is overloaded: end(callback) for a graceful close and
+        // end(true, callback) for a forced one. Distinguish by argument type —
+        // a leading function is the graceful form.
+        function makeEndMock(onGraceful: (cb: () => void) => void, onForced: (cb: () => void) => void) {
+            return jest.fn((...args: unknown[]) => {
+                if (typeof args[0] === "function") {
+                    onGraceful(args[0] as () => void);
+                } else {
+                    onForced(args[1] as () => void);
+                }
+            });
+        }
+
+        it("graceful close wins -> no forced close, no spurious timeout error", async () => {
+            jest.useFakeTimers();
+            let forcedCount = 0;
+            (networking as any).mqtt_client = {
+                end: makeEndMock(
+                    (cb) => cb(), // graceful end settles immediately -> wins the race
+                    (cb) => { forcedCount++; cb(); }
+                ),
+            };
+            try {
+                await networking.close(1000);
+
+                // Advance well past the timeout — the timer must have been
+                // cleared, so no forced disconnect and no timeout error.
+                jest.advanceTimersByTime(10_000);
+                await Promise.resolve();
+
+                expect(forcedCount).toBe(0);
+                const timeoutLogs = (logger.write_error as jest.Mock).mock.calls.filter(
+                    (c) => String(c[1]).includes("timed out")
+                );
+                expect(timeoutLogs).toHaveLength(0);
+            } finally {
+                jest.useRealTimers();
+                installSafeClient();
+            }
+        });
+
+        it("timeout wins -> forced close and timeout error are logged", async () => {
+            jest.useFakeTimers();
+            let forcedCount = 0;
+            (networking as any).mqtt_client = {
+                end: makeEndMock(
+                    () => { /* graceful end: hold the callback so the timeout wins */ },
+                    (cb) => { forcedCount++; cb(); }
+                ),
+            };
+            try {
+                const closePromise = networking.close(1000);
+                jest.advanceTimersByTime(1000); // fire the close timeout
+                await closePromise;
+                await Promise.resolve();
+
+                expect(forcedCount).toBe(1);
+                const timeoutLogs = (logger.write_error as jest.Mock).mock.calls.filter(
+                    (c) => String(c[1]).includes("timed out")
+                );
+                expect(timeoutLogs).toHaveLength(1);
+            } finally {
+                jest.useRealTimers();
+                installSafeClient();
+            }
         });
     });
 
