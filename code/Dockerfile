@@ -13,13 +13,12 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the application code (config-secrets.yml is excluded by .dockerignore)
+# Copy the rest of the application code
 COPY . .
 
-# Run the project's canonical build (tsc + copy config.yml to dist/). The rm is
-# defense in depth: config-secrets.yml must never reach the final image, even
-# if the .dockerignore exclusion is ever removed.
-RUN npm run build && rm -f dist/config-secrets.yml
+# Run the project's canonical build (tsc + copy config.yml to dist/). The
+# resulting dist/config.yml is a complete, independently valid configuration.
+RUN npm run build
 
 # ------------------------------------------------
 # Stage 2: Create the final image

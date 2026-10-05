@@ -11,6 +11,3 @@ jest.setup.ts
 .nyc_output
 coverage
 *.log
-# Secret configuration — never enters the build context or the image
-config-secrets.yml
-**/config-secrets.yml

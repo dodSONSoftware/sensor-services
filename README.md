@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Carbon Falcon — firmware 4.12.28
+**Release:** Carbon Falcon — firmware 4.12.29
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -164,7 +164,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/api/reload-config` | Reload configuration from disk; only `log-level` applies immediately — other changed keys are reported as restart-required (`restart_required`, `restart_keys`) |
-| GET | `/api/read-config` | Read the running (in-memory) configuration as JSON; secrets (`db-password`, `loki-url`) are masked |
+| GET | `/api/read-config` | Read the running (in-memory) configuration as JSON; the complete configuration is returned, including `db-password` and `loki-url` |
 | POST | `/api/write-config` | Save new configuration and reload; only `log-level` applies immediately, other changed keys are reported as restart-required |
 
 ### Swagger

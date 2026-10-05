@@ -1,4 +1,6 @@
 # SensorNET Services configuration
+# This file is the single source of truth for all application configuration,
+# including credentials (db-password, loki-url).
 
 # Main HTTP server port
 express-port: 32000
@@ -64,9 +66,8 @@ command-silence-timeout-ms: 5000
 # ippinger-fetch-timeout-ms: 10000
 
 # PostgreSQL database for settings persistence
-# (db-password is a secret — it lives in the gitignored config-secrets.yml,
-#  which overrides this file; see config-secrets.example.yml for the template)
 db-host: "10.10.10.64"
 db-port: 5432
 db-name: "sensor_web_services"
 db-user: "appuser"
+db-password: "password"

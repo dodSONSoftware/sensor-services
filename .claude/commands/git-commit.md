@@ -148,6 +148,7 @@ Rules:
 - Version and release codename in square brackets on first line, comma-separated (e.g., `[4.5.0, Brass Falcon]`); derive the codename from the new version using the release codename scheme at the end of this file
 - Conventional commit type (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `perf:`, `ci:`, `build:`, `style:`)
 - Overview is brief summary
+- **The subject MUST stand alone: a blank line MUST separate the subject from the bullet list.** `git log --oneline` prints the first *paragraph* of the message as the subject — if the blank line is missing, the bullets fold into the subject and oneline output becomes one giant line
 - One-line descriptions per file/group of changes
 - If breaking change, add `BREAKING CHANGE:` footer with migration notes
 - Always add `Authored-By: dodson Software and AI` at the end of the commit message
@@ -171,11 +172,14 @@ EOF
 )"
 ```
 
+Use this heredoc template verbatim — including the blank line after the subject. Do not compose the message as a single concatenated line.
+
 ### 7. POST-COMMIT VERIFICATION
 
 Run:
 - `git status` — confirm working tree is clean
-- `git log --oneline -3` — confirm commit landed correctly
+- `test -z "$(git log -1 --format=%B | sed -n '2p')"` — confirm the subject stands alone (line 2 of the message MUST be blank). If it fails, the bullets folded into the subject: restore the blank line after the first line, `git commit --amend -F <message-file>`, and re-run this check
+- `git log --oneline -3` — confirm commit landed correctly and the new subject is a single line
 - `PROJECT_ROOT=$(git rev-parse --show-toplevel) && node -p "require('$PROJECT_ROOT/code/package.json').version"` — verify version in committed commit
 - `grep -E "^export const APP_(VERSION|NAME) = " code/src/version.ts` — verify `APP_VERSION` equals the committed version and the codename matches the committed version's major.minor
 

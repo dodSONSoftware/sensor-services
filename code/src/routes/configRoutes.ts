@@ -24,11 +24,11 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/api/read-config",
-            "description": "GET Returns the running (in-memory) configuration as JSON. Secret values (db-password, loki-url) are masked."
+            "description": "GET Returns the current running application configuration as JSON, including all values (db-password, loki-url)."
         },
         {
             "route": "/api/write-config",
-            "description": "POST Saves a new configuration to disk and reloads it. Only log-level applies immediately; other changed keys are reported as restart_required with the list in restart_keys. Body must contain the complete valid configuration."
+            "description": "POST Saves a new configuration to disk and reloads it. Only log-level applies immediately; other changed keys are reported as restart_required with the list in restart_keys. Body must contain the complete valid configuration, including db-password and loki-url."
         }
     ]
 };
@@ -105,7 +105,11 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          * /api/read-config:
          *   get:
          *     summary: Read current configuration
-         *     description: Returns the running (in-memory) application configuration as a JSON object. Secret values (db-password, loki-url) are masked.
+         *     description: >-
+         *       Returns the current running application configuration as a JSON
+         *       object. All values are returned as-is, including db-password and
+         *       loki-url — modify fields in the response and POST it back to
+         *       /api/write-config to save changes without losing any values.
          *     responses:
          *       200:
          *         description: Current configuration
@@ -131,6 +135,20 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   type: string
          *                 case-sensitive:
          *                   type: boolean
+         *                 db-host:
+         *                   type: string
+         *                 db-port:
+         *                   type: integer
+         *                 db-name:
+         *                   type: string
+         *                 db-user:
+         *                   type: string
+         *                 db-password:
+         *                   type: string
+         *                 loki-url:
+         *                   type: string
+         *                 loki-enabled:
+         *                   type: boolean
          */
         this.app.route("/api/read-config").get((req: express.Request, res: express.Response) => config_controller.readConfig(req, res));
 
@@ -144,7 +162,8 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *       Writes the provided configuration to disk and reloads it. Only log-level
          *       takes effect immediately; every other changed key takes effect after a
          *       process restart and is reported in restart_keys with restart_required set
-         *       to true. The entire configuration must be provided (not partial updates).
+         *       to true. The entire configuration must be provided (not partial updates),
+         *       including the database fields and credentials (db-password, loki-url).
          *     requestBody:
          *       required: true
          *       content:
@@ -160,6 +179,11 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *               - mqtt-topic-command-response
          *               - ip-pinger-web-api
          *               - case-sensitive
+         *               - db-host
+         *               - db-port
+         *               - db-name
+         *               - db-user
+         *               - db-password
          *             properties:
          *               express-port:
          *                 type: integer
@@ -178,6 +202,52 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                 type: string
          *               case-sensitive:
          *                 type: boolean
+         *               db-host:
+         *                 type: string
+         *               db-port:
+         *                 type: integer
+         *               db-name:
+         *                 type: string
+         *               db-user:
+         *                 type: string
+         *               db-password:
+         *                 type: string
+         *               sensor-telemetry-api:
+         *                 type: string
+         *               swagger-server-url:
+         *                 type: string
+         *               loki-url:
+         *                 type: string
+         *               loki-enabled:
+         *                 type: boolean
+         *               mqtt-topic-log:
+         *                 type: string
+         *               forward-sensor-logs:
+         *                 type: boolean
+         *               forward-sensor-logs-level:
+         *                 type: string
+         *                 enum: [error, warn, info, debug]
+         *               express-body-limit:
+         *                 type: string
+         *               cors-allowed-origins:
+         *                 type: array
+         *                 items:
+         *                   type: string
+         *               rate-limit-window-ms:
+         *                 type: integer
+         *               rate-limit-max:
+         *                 type: integer
+         *               sensor-source-max-length:
+         *                 type: integer
+         *               sensor-source-valid-chars-regex:
+         *                 type: string
+         *               ippinger-fetch-timeout-ms:
+         *                 type: integer
+         *               fetch-timeout-ms:
+         *                 type: integer
+         *                 description: Deprecated alias for ippinger-fetch-timeout-ms
+         *               command-silence-timeout-ms:
+         *                 type: integer
          *     responses:
          *       200:
          *         description: Configuration saved and reloaded (check restart_required)

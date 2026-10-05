@@ -152,13 +152,13 @@ export function resolveIppingerFetchTimeoutMs(config: z.infer<typeof configSchem
     return config["ippinger-fetch-timeout-ms"] ?? config["fetch-timeout-ms"] ?? 10_000;
 }
 
-// Config keys whose values are secrets — never log or return these verbatim.
+// Config keys whose values are secrets — never log these verbatim.
 const SENSITIVE_CONFIG_KEYS = ["db-password", "loki-url"] as const;
 
 /**
  * Return a shallow copy of the config with secret values masked.
- * Used before logging the configuration or returning it over HTTP so that
- * credentials (e.g. db-password) never reach logs, Loki, or API clients.
+ * Used before logging configuration so sensitive values are not written to
+ * application logs or external logging systems.
  */
 export function redactConfig<T extends Record<string, unknown>>(config: T): T {
     const redacted: Record<string, unknown> = { ...config };

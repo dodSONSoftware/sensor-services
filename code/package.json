@@ -1,12 +1,12 @@
 {
   "name": "sensor-services",
-  "version": "4.12.28",
+  "version": "4.12.29",
   "description": "A RESTful web service connecting to the sensor net and the observability stack.",
   "author": "dodson labs",
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "build": "tsc && cp ./src/config.yml ./dist/ && (cp ./src/config-secrets.yml ./dist/ 2>/dev/null || true)",
+    "build": "tsc && cp ./src/config.yml ./dist/",
     "start": "node ./dist/index.js",
     "dev": "nodemon --exec ts-node src/index.ts",
     "lint": "eslint .",

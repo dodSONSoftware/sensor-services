@@ -107,6 +107,8 @@ db-password: "testpass"
             expect(res.body["express-port"]).toBe(32000);
             expect(res.body["log-level"]).toBe("debug");
             expect(res.body["mqtt-broker-ip-address"]).toBe("10.10.10.64");
+            // The complete configuration is returned — credentials unmasked
+            expect(res.body["db-password"]).toBe("testpass");
         });
     });
 

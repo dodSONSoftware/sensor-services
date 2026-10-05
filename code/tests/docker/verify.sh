@@ -7,27 +7,20 @@
 # npm install. Exits non-zero on the first failed check.
 #
 # Documented configuration strategy (see CLAUDE.md):
-#   The committed config.yml is intentionally secret-free — it carries no
-#   db-password. Credentials arrive from OUTSIDE the repo:
-#     - bare metal: a gitignored sibling config-secrets.yml next to the base
-#       config (the build copies it to dist/ alongside config.yml);
-#     - Docker: a MOUNTED config, because config-secrets.yml must never be
-#       baked into the image. The app reads /app/configs/config.yml first
-#       (the mount point), then falls back to ./dist/config.yml (the same
-#       secret-free default bare metal uses).
-#   So a container is NOT expected to start from the built-in default alone:
-#   it requires a mounted config that supplies the credentials. That is the
-#   behavior this script pins, rather than treating the baked default as a
-#   fully-working fallback.
+#   config.yml is the single source of truth for all application
+#   configuration, including credentials (db-password, loki-url). The
+#   committed config.yml is a complete, independently valid configuration,
+#   and the canonical build copies it into the image as /app/dist/config.yml.
+#   The app reads /app/configs/config.yml first (the docker-compose mount
+#   point) and then falls back to ./dist/config.yml, so a mounted config
+#   always takes precedence over the built-in one.
 #
 # Checks (the P3-8 minimum):
 #   1. The Docker image builds successfully.
-#   2. The application starts with the documented configuration strategy —
-#      a mounted config supplying credentials (db-password). And the mirror
-#      image of that strategy: with NO config mounted, the built-in
-#      secret-free default cannot satisfy the required db-password, so the
-#      container exits at startup (fail-fast, not a silent partial start).
-#   3. No real secret file (config-secrets.yml) exists inside the final image.
+#   2. The built-in complete configuration starts the application with NO
+#      config mounted.
+#   3. A mounted /app/configs/config.yml takes precedence over the built-in
+#      configuration.
 #   4. Swagger still initializes correctly (UI served, spec contains the real
 #      route paths built from the copied src/routes subset).
 # ------------------------------------------------
@@ -40,21 +33,69 @@ IMAGE="sensor-services-p38-verify"
 CONTAINER="sensor-services-p38-verify-$$"
 PORT="${VERIFY_PORT:-32099}"
 
-CONFIG_DIR="$(mktemp -d)"
-# mktemp -d creates a 700 dir owned by the host user; the container runs as
-# non-root appuser (UID 100) and must be able to traverse and read the mount.
-chmod 755 "$CONFIG_DIR"
+CONFIG_DIR=""
+# mktemp -d (when used) creates a 700 dir owned by the host user; the
+# container runs as non-root appuser (UID 100) and must be able to traverse
+# and read the mount.
 cleanup() {
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
     docker rmi "$IMAGE" >/dev/null 2>&1 || true
-    rm -rf "$CONFIG_DIR"
+    if [ -n "$CONFIG_DIR" ]; then
+        rm -rf "$CONFIG_DIR"
+    fi
 }
 trap cleanup EXIT
 
-# A complete config for the container: every required key present, with
-# localhost values so any DB/MQTT connection fails fast (ECONNREFUSED) instead
-# of timing out against an unroutable address. The app still boots — settings
-# persist to the in-memory fallback and MQTT simply reports disconnected.
+# Wait until the app answers on /date_utc (always 200 when the server is up)
+# or the container stops. /health is deliberately not used: it returns 503
+# when MQTT is disconnected — which it will be in a sandbox. "Server is up"
+# is the property under test.
+wait_for_app() {
+    local i
+    for i in $(seq 1 60); do
+        if curl -sf "http://localhost:$PORT/date_utc" >/dev/null 2>&1; then
+            return 0
+        fi
+        if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
+            return 1
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+echo "[1/4] Building image..."
+docker build -t "$IMAGE" .
+echo "      image built: $IMAGE"
+
+echo "[2/4] Verifying the built-in configuration starts the app (no config mounted)..."
+docker run -d --name "$CONTAINER" -p "$PORT:32000" "$IMAGE" >/dev/null
+
+if ! wait_for_app; then
+    echo "      FAILED: /date_utc never returned 200 with no config mounted; container logs:" >&2
+    docker logs "$CONTAINER" >&2 || true
+    exit 1
+fi
+# The built-in config.yml carries a non-empty db-password; the running config
+# must report it, proving the built-in file is a complete configuration.
+builtin_config="$(curl -sf "http://localhost:$PORT/api/read-config")"
+if ! printf '%s' "$builtin_config" | grep -Eq '"db-password":"[^"]+"'; then
+    echo "      FAILED: /api/read-config reports no db-password — the built-in config.yml is not a complete configuration:" >&2
+    printf '%s' "$builtin_config" >&2
+    exit 1
+fi
+echo "      app is up from the built-in config (read-config reports db-password)"
+docker stop "$CONTAINER" >/dev/null
+docker rm "$CONTAINER" >/dev/null
+
+echo "[3/4] Verifying a mounted config takes precedence over the built-in one..."
+CONFIG_DIR="$(mktemp -d)"
+chmod 755 "$CONFIG_DIR"
+# A complete mounted config: every required key present, with localhost values
+# so any DB/MQTT connection fails fast (ECONNREFUSED) instead of timing out
+# against an unroutable address. The db-password and
+# command-silence-timeout-ms values are distinguishable from the built-in
+# config's values, so the running config proves the mount won.
 cat > "$CONFIG_DIR/config.yml" <<'YAML'
 log-level: info
 express-port: 32000
@@ -68,65 +109,41 @@ db-host: "127.0.0.1"
 db-port: 5432
 db-name: "sensor_web_services"
 db-user: "appuser"
-YAML
-# Sibling secrets file (the documented Docker mechanism for credentials).
-# Placeholder value only — it just needs to satisfy the required-string check.
-cat > "$CONFIG_DIR/config-secrets.yml" <<'YAML'
 db-password: "verify-test-only-not-a-real-secret"
+command-silence-timeout-ms: 4242
 YAML
-chmod 644 "$CONFIG_DIR/config.yml" "$CONFIG_DIR/config-secrets.yml"
+chmod 644 "$CONFIG_DIR/config.yml"
 
-echo "[1/4] Building image..."
-docker build -t "$IMAGE" .
-echo "      image built: $IMAGE"
-
-echo "[2/4] Verifying the documented configuration strategy..."
-
-# 2a. Negative: with NO config mounted, the built-in secret-free default lacks
-#     the required db-password, so startup must fail fast (non-zero exit).
-#     This is the intended "a mounted config is required" behavior.
-if docker run --rm "$IMAGE" >/dev/null 2>&1; then
-    echo "      FAILED: container started with no mounted config — but the built-in default has no db-password, so it must exit at startup" >&2
-    exit 1
-fi
-echo "      (correctly) refuses to start without a mounted config"
-
-# 2b. Positive: with a mounted config supplying credentials, the app starts.
-#     Probe /date_utc (always 200 when the server is up) rather than /health,
-#     because /health returns 503 when MQTT is disconnected — which it will be
-#     in a sandbox. "Server is up" is the property under test here.
 docker run -d --name "$CONTAINER" -p "$PORT:32000" \
     -v "$CONFIG_DIR:/app/configs:ro" "$IMAGE" >/dev/null
 
-started=""
-for _ in $(seq 1 60); do
-    if curl -sf "http://localhost:$PORT/date_utc" >/dev/null 2>&1; then
-        started=yes
-        break
-    fi
-    if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
-        break
-    fi
-    sleep 1
-done
+if ! wait_for_app; then
+    echo "      FAILED: /date_utc never returned 200 with a mounted config; container logs:" >&2
+    docker logs "$CONTAINER" >&2 || true
+    exit 1
+fi
+mounted_config="$(curl -sf "http://localhost:$PORT/api/read-config")"
+if ! printf '%s' "$mounted_config" | grep -q '"db-password":"verify-test-only-not-a-real-secret"'; then
+    echo "      FAILED: running config does not report the mounted db-password — the mount did not take precedence:" >&2
+    printf '%s' "$mounted_config" >&2
+    exit 1
+fi
+if ! printf '%s' "$mounted_config" | grep -q '"command-silence-timeout-ms":4242'; then
+    echo "      FAILED: running config does not report the mounted command-silence-timeout-ms:" >&2
+    printf '%s' "$mounted_config" >&2
+    exit 1
+fi
+echo "      mounted config takes precedence (mounted db-password and marker key are active)"
+docker stop "$CONTAINER" >/dev/null
+docker rm "$CONTAINER" >/dev/null
 
-if [ -z "$started" ]; then
+echo "[4/4] Checking that Swagger initializes..."
+docker run -d --name "$CONTAINER" -p "$PORT:32000" "$IMAGE" >/dev/null
+if ! wait_for_app; then
     echo "      FAILED: /date_utc never returned 200; container logs:" >&2
     docker logs "$CONTAINER" >&2 || true
     exit 1
 fi
-echo "      app is up with a mounted config (date_utc: $(curl -sf "http://localhost:$PORT/date_utc"))"
-
-echo "[3/4] Checking that no config-secrets.yml exists inside the image..."
-# Inspect the image itself (no mounts), so a runtime mount cannot mask the result.
-if docker run --rm "$IMAGE" sh -c 'find /app -name "config-secrets.yml" 2>/dev/null | grep -q .'; then
-    echo "      FAILED: config-secrets.yml found inside the image:" >&2
-    docker run --rm "$IMAGE" sh -c 'find /app -name "config-secrets.yml" 2>/dev/null' >&2
-    exit 1
-fi
-echo "      no secret file in the image"
-
-echo "[4/4] Checking that Swagger initializes..."
 swagger_status="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/swagger/")"
 if [ "$swagger_status" != "200" ]; then
     echo "      FAILED: GET /swagger/ returned $swagger_status (expected 200)" >&2

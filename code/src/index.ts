@@ -23,9 +23,8 @@ import { formatFatalError, runGracefulShutdown } from "./common/shutdown";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
-import { ensureError } from "./dodsonlabs/SystemFunctions";
+import { ensureError, read_file_yaml } from "./dodsonlabs/SystemFunctions";
 import { redactConfig, resolveIppingerFetchTimeoutMs, validateConfig, type configSchema } from "./schemas/config";
-import { readConfigWithSecrets } from "./schemas/configLoader";
 import fs from "fs";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
@@ -63,11 +62,11 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 // **** start up code
 
 (async () => {
-    // Read the configuration file (try container mount first, then CWD-relative),
-    // merging in an optional sibling config-secrets.yml. The base file holds no
-    // real secrets; credentials live in the gitignored config-secrets.yml.
-    const CONFIG_BASE_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
-    const baseConfigPath = CONFIG_BASE_PATHS.find((p) => {
+    // Read the configuration file (try container mount first, then CWD-relative).
+    // The selected config.yml is the single source of truth for all application
+    // configuration, including credentials.
+    const CONFIG_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
+    const configPath = CONFIG_PATHS.find((p) => {
         try {
             fs.accessSync(p);
             return true;
@@ -75,13 +74,13 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
             return false;
         }
     });
-    if (!baseConfigPath) {
+    if (!configPath) {
         // eslint-disable-next-line no-console
-        console.error(`ERROR: Could not find config.yml (tried: ${CONFIG_BASE_PATHS.join(", ")}) — cannot start without configuration.`);
+        console.error(`ERROR: Could not find config.yml (tried: ${CONFIG_PATHS.join(", ")}) — cannot start without configuration.`);
         process.exit(1);
     }
 
-    const configResult = readConfigWithSecrets(baseConfigPath);
+    const configResult = read_file_yaml<Record<string, unknown>>(configPath);
     if (configResult.data === null) {
         // eslint-disable-next-line no-console
         console.error(`ERROR: Could not read config.yml — ${configResult.error ?? "unknown error"} — cannot start without configuration.`);

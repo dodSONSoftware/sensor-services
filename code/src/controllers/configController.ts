@@ -6,11 +6,10 @@
 import fs from "fs";
 import { isDeepStrictEqual } from "util";
 import type express from "express";
-import { ensureError, write_file_atomic } from "../dodsonlabs/SystemFunctions";
+import { ensureError, read_file_yaml, write_file_atomic } from "../dodsonlabs/SystemFunctions";
 import { logger, getConfig, setConfig } from "../common/global";
 import type { z } from "zod";
-import { redactConfig, validateConfig, type configSchema } from "../schemas/config";
-import { readConfigWithSecrets } from "../schemas/configLoader";
+import { validateConfig, type configSchema } from "../schemas/config";
 import type * as yamlModule from "js-yaml";
 
 // Config file paths to try (in order)
@@ -135,9 +134,9 @@ async function doReloadConfig(): Promise<ReloadResult> {
         return reloadFailure("Could not find config file (tried: " + CONFIG_PATHS.join(", ") + ")");
     }
 
-    // Merge in an optional sibling config-secrets.yml so a reload sees the same
-    // (secret-complete) config the process started with.
-    const configResult = readConfigWithSecrets(configPath);
+    // Read the selected config.yml directly — the same single file the
+    // process started with.
+    const configResult = read_file_yaml<Record<string, unknown>>(configPath);
     if (configResult.data === null) {
         return reloadFailure("Failed to read config: " + (configResult.error ?? "unknown error"));
     }
@@ -195,7 +194,10 @@ export async function reloadConfig(_req: express.Request, res: express.Response)
 /**
  * GET /read-config: Return the running (in-memory) configuration.
  * Pure read — no disk reload side effects (that is /reload-config's job).
- * Secret values (db-password, loki-url) are masked.
+ * Returns the COMPLETE configuration — including db-password and loki-url.
+ * This trusted deployment's /api/write-config consumes the whole document,
+ * so a read → modify → write round trip must preserve every value (secrets
+ * are still kept out of logs via redactConfig()).
  */
 export function readConfig(_req: express.Request, res: express.Response): void {
     const config = getConfig();
@@ -205,7 +207,7 @@ export function readConfig(_req: express.Request, res: express.Response): void {
         return;
     }
 
-    res.json(redactConfig(config));
+    res.json(config);
 }
 
 /**

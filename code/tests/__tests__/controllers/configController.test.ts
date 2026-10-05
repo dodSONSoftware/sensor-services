@@ -267,10 +267,10 @@ describe("hot reload runtime state (no split-brain config)", () => {
         const body = sendCalls[0] as Record<string, unknown>;
 
         // Restart-required values are reported as ACTIVE (old) values, not the
-        // new file values; secrets stay masked.
+        // new file values; the complete config is returned (no masking).
         expect(body["mqtt-broker-ip-address"]).toBe("10.0.0.11");
         expect(body["ip-pinger-web-api"]).toBe("http://pinger-a:3300");
-        expect(body["loki-url"]).toBe("********");
+        expect(body["loki-url"]).toBe("http://loki-a:3100");
         expect(body["log-level"]).toBe("debug");
     });
 });
@@ -290,12 +290,14 @@ describe("writeConfig (POST /api/write-config)", () => {
         expect(response.restart_keys).toEqual(["db-port", "mqtt-broker-ip-address"]);
         expect(response.message).toBe("Configuration saved; restart required for: db-port, mqtt-broker-ip-address");
 
-        // The new values were actually persisted to disk
+        // The new values were actually persisted to disk, and the complete
+        // config (including db-password) was written directly to config.yml
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const yaml = require("js-yaml") as { load: (v: string) => unknown };
         const onDisk = yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
         expect(onDisk["mqtt-broker-ip-address"]).toBe("10.0.0.9");
         expect(onDisk["db-port"]).toBe(5433);
+        expect(onDisk["db-password"]).toBe("sensor_pass");
     });
 
     it("should report restart_required when loki settings change (hot-reload disabled for loki)", async () => {
@@ -313,6 +315,14 @@ describe("writeConfig (POST /api/write-config)", () => {
         expect(response.restart_required).toBe(true);
         expect(response.restart_keys).toEqual(["loki-url"]);
         expect(response.applied_keys).toEqual(["log-level"]);
+
+        // The complete config (including loki-url and db-password) was written
+        // directly to config.yml
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const yaml = require("js-yaml") as { load: (v: string) => unknown };
+        const onDisk = yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+        expect(onDisk["loki-url"]).toBe("http://loki:3100");
+        expect(onDisk["db-password"]).toBe("sensor_pass");
     });
 
     it("should reject an invalid body with 400 without writing to disk", async () => {
@@ -334,7 +344,7 @@ describe("writeConfig (POST /api/write-config)", () => {
 });
 
 describe("readConfig (GET /api/read-config)", () => {
-    it("should mask db-password and loki-url in the response", () => {
+    it("should return the complete configuration, including db-password and loki-url", () => {
         setConfig(validateConfig({
             ...BASE_CONFIG,
             "loki-url": "http://loki:3100",
@@ -345,9 +355,9 @@ describe("readConfig (GET /api/read-config)", () => {
 
         // res.json() without an explicit status — Express defaults to 200
         const body = sendCalls[0] as Record<string, unknown>;
-        expect(body["db-password"]).toBe("********");
-        expect(body["loki-url"]).toBe("********");
-        // non-secret values are returned as-is
+        expect(body["db-password"]).toBe("sensor_pass");
+        expect(body["loki-url"]).toBe("http://loki:3100");
+        // all other values are returned as-is
         expect(body["db-host"]).toBe("localhost");
         expect(body["mqtt-broker-ip-address"]).toBe("10.10.10.64");
     });
@@ -369,5 +379,45 @@ describe("readConfig (GET /api/read-config)", () => {
         readConfig(createMockReq() as express.Request, res as express.Response);
 
         expect(statusCalls).toContain(500);
+    });
+});
+
+describe("read → modify → write round trip (regression)", () => {
+    it("preserves db-password and loki-url when only an unrelated key changes", async () => {
+        // Start with a complete config.yml on disk
+        writeConfigFile({
+            ...BASE_CONFIG,
+            "db-password": "original-password",
+            "loki-url": "http://loki:3100",
+            "log-level": "info",
+        });
+        // Prime the running config from disk so readConfig has something to serve
+        await reloadConfig(createMockReq() as express.Request, (createMockRes().res) as express.Response);
+
+        // 1. Read the complete configuration
+        const readMock = createMockRes();
+        readConfig(createMockReq() as express.Request, readMock.res as express.Response);
+        const config = readMock.sendCalls[0] as Record<string, unknown>;
+        expect(config["db-password"]).toBe("original-password");
+        expect(config["loki-url"]).toBe("http://loki:3100");
+
+        // 2. Modify only an unrelated setting
+        config["log-level"] = "debug";
+
+        // 3. Write the complete returned configuration back
+        const writeMock = createMockRes();
+        await writeConfig(createMockReq({ body: config }) as express.Request, writeMock.res as express.Response);
+        expect((writeMock.sendCalls[0] as Record<string, unknown>).success).toBe(true);
+
+        // 4. The file on disk keeps the credentials; only log-level changed
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const yaml = require("js-yaml") as { load: (v: string) => unknown };
+        const written = yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+        expect(written["db-password"]).toBe("original-password");
+        expect(written["loki-url"]).toBe("http://loki:3100");
+        expect(written["log-level"]).toBe("debug");
+
+        // 5. The result still validates as a complete configuration
+        expect(() => validateConfig(written)).not.toThrow();
     });
 });

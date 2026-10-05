@@ -140,8 +140,3 @@ out
 
 # Runtime data
 settings.yml
-
-# Secret configuration — real credentials, never committed (see
-# code/src/config-secrets.example.yml for the tracked template)
-config-secrets.yml
-**/config-secrets.yml
