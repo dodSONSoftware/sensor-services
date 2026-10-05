@@ -15,11 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.21)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.22)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
-    ├── Dockerfile         -- Two-stage build (Node 22), non-root user, healthcheck, exposes port 32000
+    ├── Dockerfile         -- Two-stage build (Node 22): builder runs the canonical `npm run build` (P3-8); final image gets dist/, only the src/routes subset for Swagger, non-root user, /health healthcheck, exposes port 32000
     ├── docker-compose.yml -- Docker Compose: build + run with configs dir mount (/app/configs/), restart: unless-stopped
     ├── nodemon.json       -- Dev watch config
     ├── eslint.config.mjs  -- ESLint 9.x flat config (@typescript-eslint v8), excludes tests/, dodsonlabs/, jest config files, coverage/
@@ -74,8 +74,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   ├── mocks/
     │   │   ├── express.ts   -- createMockRes(), createMockReq() helpers
     │   │   └── mqtt.ts      -- createMockMqttNetworking() helper (adds waitForCompletion, register_command_id)
+    │   ├── docker/
+    │   │   └── verify.sh    -- P3-8 Docker e2e regression (needs Docker daemon): image builds, starts with a mounted config (and refuses without one), no secret file in the image, Swagger initializes
     │   └── __tests__/
-    │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc), including /api/reload-config and /api/write-config
+    │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc), including /api/reload-config, /api/write-config, and /ui/settings-update (guards against a JSDoc YAML error silently dropping a block)
     │       ├── exitCodes.test.ts -- P2-2 integration: spawns dist/index.js and asserts exit codes (SIGTERM/SIGINT→0, invalid config→1, EADDRINUSE→1); skipped if dist/ is not built
     │       ├── common/
     │       │   ├── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
@@ -104,12 +106,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── services/
     │       │   ├── settingsStore.test.ts     -- validateSettingsFromDb: nested/legacy key resolution, migrations, schema validation
     │       │   └── settingsStoreInit.test.ts -- init(): seeding, corrupt-row repair (UPSERT), bootstrap pool cleanup
-    │       └── dodsonlabs/
+    │       ├── dodsonlabs/
     │           ├── Logger.test.ts               -- Loki shutdown ownership: transport constructed with gracefulShutdown:false, bounded flush/close on logger close (mocked winston-loki, no real HTTP/DNS)
     │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers), claim() slot serialization
     │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop, outbound publish secret redaction, close() timeout clearing: graceful-wins vs timeout-wins)
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)
     │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters, redactSecrets()
+    │       └── docker/
+    │           └── docker.test.ts     -- P3-8 static Dockerfile/.dockerignore guards: canonical `npm run build`, no config-secrets copy, src/routes subset only, CWD-relative fallback resolution, secrets excluded from build context
     └── dist/              -- Compiled output (tsc)
 
 ## Commands
@@ -132,8 +136,12 @@ npm run blt            # CI check: build + lint + test with coverage (`npm run b
 ```bash
 docker compose up --build   # Build image + run container (config.yml mounted from /mnt/sensor-services/config.yml)
 docker compose down         # Stop and remove container
+bash tests/docker/verify.sh # P3-8 regression: image builds, app starts via the documented config strategy, no secret file in the image, Swagger initializes
+```
 
-**docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/configs/config.yml`. The container exposes port 32000 (API). Healthcheck probes `/ready` every 30s (`timeout: 5s`, `retries: 3`, `start_period: 10s`). Container restarts automatically with `restart: unless-stopped`.
+**docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/configs/config.yml`. The container exposes port 32000 (API). Healthcheck probes `/health` every 30s (`timeout: 5s`, `retries: 3`, `start-period: 10s`). Container restarts automatically with `restart: unless-stopped`.
+
+**Docker configuration strategy (P3-8):** the container reads config exactly like bare metal — `/app/configs/config.yml` first (the docker-compose mount point), then the CWD-relative fallback `./dist/config.yml`. The final image's WORKDIR is `/app`, so the fallback resolves to `/app/dist/config.yml` — the same secret-free default that bare metal resolves (`code/dist/config.yml`), keeping the two startup paths consistent. The committed `config.yml` is intentionally secret-free: it carries no `db-password` (a required secret), so the built-in default is NOT a standalone working config. Real credentials always come from outside the repo — on bare metal via a gitignored sibling `config-secrets.yml` (the build copies it next to `config.yml`), and in Docker via a **mounted config** (docker-compose mounts the host configs dir at `/app/configs/`; an optional sibling `config-secrets.yml` there is merged in at startup). A container with no mounted config therefore exits at startup (missing `db-password`) rather than partially starting — that is the intended, documented behavior, and it is what `tests/docker/verify.sh` pins. `config-secrets.yml` never enters the image (excluded by `.dockerignore` AND explicitly removed after the build in the builder stage).
 
 ### Notes
 
@@ -143,7 +151,7 @@ docker compose down         # Stop and remove container
 - Uses Volta to pin Node 22.22.0 / npm 10.9.4.
 - `dodsonlabs/` is excluded from ESLint and test coverage (shared library, not a git submodule).
 - `tsconfig.json` uses `module: "NodeNext"`, `noUnusedLocals: true`, `noUnusedParameters: true`. Excludes `coverage/` to prevent leaked test artifacts from blocking builds.
-- Dockerfile runs as non-root user (`appuser`), includes HEALTHCHECK on `/ready`.
+- Dockerfile runs as non-root user (`appuser`), includes HEALTHCHECK on `/health`; the builder stage runs the canonical `npm run build` (P3-8) rather than re-implementing its steps.
 
 ## Architecture
 
@@ -393,7 +401,7 @@ case-sensitive: true
 
 **Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`, `cors-allowed-origins` (list of http(s) origins; empty/absent = no cross-origin browser origin authorized).
 
-**Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`. Settings persistence stores to PostgreSQL database.
+**Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml` (falling back to `./dist/config.yml`), merging an optional sibling `config-secrets.yml` for credentials. The mounted config must supply the required `db-password` — see the "Docker configuration strategy (P3-8)" note. Settings persistence stores to PostgreSQL database.
 
 ## Key Patterns and Caveats
 
@@ -421,7 +429,8 @@ case-sensitive: true
 - **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod v4 schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).
 - **`sys_info` array in `aboutDude()` is now populated** with platform, arch, hostname, uptime, total/free memory.
-- **Docker container** (via `code/docker-compose.yml`) mounts `config.yml` into the container at `/app/configs/config.yml`. Runs as non-root user (`appuser`). Healthcheck probes `/ready` every 30s.
+- **Docker container** (via `code/docker-compose.yml`) mounts `config.yml` into the container at `/app/configs/config.yml`. Runs as non-root user (`appuser`). Healthcheck probes `/health` every 30s.
+- **Docker build is the canonical build (P3-8)** — the builder stage runs `npm run build` (tsc + copy `config.yml`→`dist/`) instead of re-implementing its steps, so Docker and bare-metal builds cannot drift. The final image copies only `dist/`, the `src/routes/` subset (Swagger scans `src/routes/**/*.ts` at startup), and `package*.json` — not the whole source tree. `config-secrets.yml` never enters the image: it is excluded by `.dockerignore` AND explicitly `rm -f`'d after the build in the builder stage (defense in depth). The final image's WORKDIR is `/app` (with `CMD node dist/index.js`) so the CWD-relative `./dist/config.yml` fallback resolves identically to bare metal. Because the committed default is secret-free (no `db-password`), a container requires a **mounted config** to supply credentials and exits at startup without one — the intended, documented behavior pinned by `tests/docker/verify.sh` (e2e) and `tests/__tests__/docker/docker.test.ts` (static guards).
 - **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list; `validateRoutesHelp()` in `index.ts` checks for drift at startup between `__routesHelp` entries and actual registered routes.
 - **`createAnalyzeResult` spreads its `origin` argument** (no longer mutates in-place).
 - **`pingerController.ts` uses `async/await`** consistently — `fetchIt()`/`postIt()`/`fetchItOnly()` all use async/await. `getAnalyzeIpPinger()` gracefully degrades when the pinger service is unreachable (returns live sensors with a warning).

@@ -165,7 +165,7 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *         description: Updated application settings (full merged result)
          *         headers:
          *           X-Settings-Persisted:
-         *             description: "true" when the update was written to PostgreSQL, "false" when only applied in-memory (degraded mode — the value will not survive a restart).
+         *             description: Whether the update was written to PostgreSQL (true) or only applied in-memory in degraded mode, where it will not survive a restart (false).
          *             schema:
          *               type: string
          *               enum: [ "true", "false" ]
