@@ -179,7 +179,6 @@ function createMockNetwork(liveResults: unknown[]): MqttNetworking {
       // skips the hard-timeout setTimeout entirely.
       waitForCompletion: jest.fn().mockImplementation(() => Promise.resolve()),
     }),
-    register_command_id: jest.fn().mockReturnValue(true),
   } as unknown as MqttNetworking;
 }
 

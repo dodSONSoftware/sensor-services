@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.25)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.26)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -74,7 +74,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     ├── tests/
     │   ├── mocks/
     │   │   ├── express.ts   -- createMockRes(), createMockReq() helpers
-    │   │   └── mqtt.ts      -- createMockMqttNetworking() helper (adds waitForCompletion, register_command_id)
+    │   │   └── mqtt.ts      -- createMockMqttNetworking() helper (mockCommandControl with claim() slot serialization and an immediately-resolving waitForCompletion; mirrors only the real MqttNetworking surface — P3-10)
     │   ├── docker/
     │   │   └── verify.sh    -- P3-8 Docker e2e regression (needs Docker daemon): image builds, starts with a mounted config (and refuses without one), no secret file in the image, Swagger initializes
     │   └── __tests__/

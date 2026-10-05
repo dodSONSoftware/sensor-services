@@ -207,7 +207,6 @@ describe("sensor controller integration (error paths, already-running)", () => {
       is_connected: jest.fn().mockReturnValue(true),
       prometheus_server_ready: jest.fn().mockReturnValue(true),
       publish_mqtt_message: jest.fn(),
-      register_command_id: jest.fn(),
       close: jest.fn(),
       get_cr_dude: jest.fn().mockReturnValue(mockCommandControl),
     } as unknown as MqttNetworking;
@@ -263,7 +262,6 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_connected: jest.fn().mockReturnValue(true),
         prometheus_server_ready: jest.fn().mockReturnValue(true),
         publish_mqtt_message: jest.fn(),
-        register_command_id: jest.fn(),
         close: jest.fn(),
         get_cr_dude: jest.fn().mockReturnValue(mockCommandControl),
       } as unknown as MqttNetworking;
@@ -294,7 +292,6 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_connected: jest.fn().mockReturnValue(true),
         prometheus_server_ready: jest.fn().mockReturnValue(true),
         publish_mqtt_message: jest.fn(),
-        register_command_id: jest.fn(),
         close: jest.fn(),
         get_cr_dude: jest.fn().mockReturnValue(mockCommandControl),
       } as unknown as MqttNetworking;
@@ -421,7 +418,6 @@ describe("sensor controller integration (error paths, already-running)", () => {
             control.restart_clock();
           }, 10);
         }),
-        register_command_id: jest.fn(),
         close: jest.fn(),
         get_cr_dude: jest.fn().mockReturnValue(control),
       } as unknown as MqttNetworking;
@@ -550,7 +546,6 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_connected,
         prometheus_server_ready: jest.fn().mockReturnValue(true),
         publish_mqtt_message: jest.fn(opts.publishImpl ?? (() => {})),
-        register_command_id: jest.fn(),
         close: jest.fn(),
         get_cr_dude: jest.fn().mockReturnValue(control),
       } as unknown as MqttNetworking;
@@ -653,7 +648,6 @@ describe("sensor controller integration (error paths, already-running)", () => {
         is_connected: jest.fn().mockReturnValue(true),
         prometheus_server_ready: jest.fn().mockReturnValue(true),
         publish_mqtt_message: jest.fn(),
-        register_command_id: jest.fn(),
         close: jest.fn(),
         get_cr_dude: jest.fn().mockReturnValue(mockCommandControl),
       } as unknown as MqttNetworking;
