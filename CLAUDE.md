@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.24)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.25)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -96,7 +96,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── routes/
     │       │   ├── configRoutes.test.ts       -- /api/reload-config, /api/read-config, /api/write-config via supertest
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
-    │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501)
+    │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501) + POST body validation through the REAL CreateMiddleware stack (P3-9): own `constructor`/`prototype` key → 400, normal object → 200
     │       │   ├── pingerRoutes.test.ts       -- /sensors/ippinger-analyze via supertest (degraded warning when pinger unreachable, analysis when reachable)
     │       │   ├── routeDrift.test.ts         -- P3-4: pingerRoutes owns /sensors/ippinger-analyze metadata, per-module __routes↔__routesHelp consistency, registered routes == union of declared __routes, routeDrift helper unit tests
     │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest + X-Settings-Persisted header, unknown key → 400 (P3-6, P3-7)

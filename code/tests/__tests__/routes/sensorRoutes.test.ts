@@ -5,7 +5,11 @@
 
 import request from "supertest";
 import express from "express";
+import type { z } from "zod";
+
 import { CreateSensorRoutes } from "../../../src/routes/sensorRoutes";
+import { CreateMiddleware } from "../../../src/middleware/middleware";
+import { validateConfig, type configSchema } from "../../../src/schemas/config";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
 
 function createTestApp(): express.Application {
@@ -15,6 +19,24 @@ function createTestApp(): express.Application {
   new CreateSensorRoutes(app, networking);
   return app;
 }
+
+// Config for the production-equivalent stack below, in the same shape the
+// CreateMiddleware integration tests (middleware.test.ts) use.
+const config: z.infer<typeof configSchema> = validateConfig({
+  "log-level": "error",
+  "express-port": 32000,
+  "mqtt-broker-ip-address": "10.10.10.64",
+  "mqtt-topic-telemetry": "iot/v3/telemetry",
+  "mqtt-topic-command": "iot/v3/command",
+  "mqtt-topic-command-response": "iot/v3/command-response",
+  "ip-pinger-web-api": "http://10.10.10.50:3300",
+  "case-sensitive": true,
+  "db-host": "10.10.10.64",
+  "db-port": 5432,
+  "db-name": "sensor_web_services",
+  "db-user": "appuser",
+  "db-password": "testpass",
+});
 
 describe("Sensor Routes", () => {
   describe("GET /sensors/identify (removed)", () => {
@@ -215,9 +237,23 @@ describe("Sensor Routes", () => {
     });
   });
 
-  describe("POST body validation", () => {
-    it("should accept normal object body", async () => {
-      const app = createTestApp();
+  // P3-9: the pre-fix version of this describe used the bare createTestApp()
+  // (express.json() only, NO CreateMiddleware) and asserted 200 for a body
+  // with an own `constructor` key, on the theory that "Express strips it".
+  // body-parser strips only `__proto__`; an own `constructor` key reaches the
+  // body-validation middleware, where postBodySchema rejects it. These tests
+  // drive the request through the real CreateMiddleware pipeline — the same
+  // validation production runs — and expect the production 400.
+  describe("POST body validation (P3-9 — production middleware stack)", () => {
+    function createProductionApp(): express.Application {
+      const app = express();
+      new CreateMiddleware(app, config);
+      new CreateSensorRoutes(app, createMockMqttNetworking());
+      return app;
+    }
+
+    it("should accept a normal object body", async () => {
+      const app = createProductionApp();
 
       const res = await request(app)
         .post("/sensors/write-config/sensor-1")
@@ -226,18 +262,28 @@ describe("Sensor Routes", () => {
       expect(res.status).toBe(200);
     });
 
-    // Note: Express's JSON body parser strips __proto__, constructor, and prototype
-    // keys for security, so these never reach the route handler. The schema-level
-    // protection in postBodySchema is defense-in-depth for non-Express code paths.
-    it("should accept body with constructor key (Express strips it before handler)", async () => {
-      const app = createTestApp();
+    it("should return 400 for a body with an own constructor key", async () => {
+      const app = createProductionApp();
 
       const res = await request(app)
         .post("/sensors/write-config/sensor-1")
         .send({ constructor: { foo: "bar" } });
 
-      // Express strips constructor key, body arrives as {}
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+      expect(res.body).toHaveProperty("error");
+    });
+
+    it("should return 400 for a body with an own prototype key", async () => {
+      const app = createProductionApp();
+
+      const res = await request(app)
+        .post("/sensors/write-config/sensor-1")
+        .send({ prototype: { polluted: true } });
+
+      expect(res.status).toBe(400);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+      expect(res.body).toHaveProperty("error");
     });
   });
 });
