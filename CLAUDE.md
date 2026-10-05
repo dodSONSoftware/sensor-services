@@ -15,12 +15,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.27)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.28)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
     ├── Dockerfile         -- Two-stage build (Node 22): builder runs the canonical `npm run build` (P3-8); final image gets dist/, only the src/routes subset for Swagger, non-root user, /health healthcheck, exposes port 32000
     ├── docker-compose.yml -- Docker Compose: build + run with configs dir mount (/app/configs/), restart: unless-stopped
+    ├── docker-refresh.sh  -- Redeploy helper: syncs src/config.yml AND the gitignored src/config-secrets.yml to the /mnt/sensor-services mount, then compose down → rmi → up -d
     ├── nodemon.json       -- Dev watch config
     ├── eslint.config.mjs  -- ESLint 9.x flat config (@typescript-eslint v8), excludes tests/, dodsonlabs/, jest config files, coverage/
     ├── .vscode/           -- VS Code workspace settings
@@ -138,12 +139,13 @@ npm run blt            # CI check: build + lint + test with coverage (`npm run b
 ```bash
 docker compose up --build   # Build image + run container (config.yml mounted from /mnt/sensor-services/config.yml)
 docker compose down         # Stop and remove container
+./docker-refresh.sh         # Redeploy helper: sync config.yml + config-secrets.yml to the mount, force a fresh image, start, and tail logs
 bash tests/docker/verify.sh # P3-8 regression: image builds, app starts via the documented config strategy, no secret file in the image, Swagger initializes
 ```
 
 **docker-compose.yml** (in `code/`) mounts a host `config.yml` into the container at `/app/configs/config.yml`. The container exposes port 32000 (API). Healthcheck probes `/health` every 30s (`timeout: 5s`, `retries: 3`, `start-period: 10s`). Container restarts automatically with `restart: unless-stopped`.
 
-**Docker configuration strategy (P3-8):** the container reads config exactly like bare metal — `/app/configs/config.yml` first (the docker-compose mount point), then the CWD-relative fallback `./dist/config.yml`. The final image's WORKDIR is `/app`, so the fallback resolves to `/app/dist/config.yml` — the same secret-free default that bare metal resolves (`code/dist/config.yml`), keeping the two startup paths consistent. The committed `config.yml` is intentionally secret-free: it carries no `db-password` (a required secret), so the built-in default is NOT a standalone working config. Real credentials always come from outside the repo — on bare metal via a gitignored sibling `config-secrets.yml` (the build copies it next to `config.yml`), and in Docker via a **mounted config** (docker-compose mounts the host configs dir at `/app/configs/`; an optional sibling `config-secrets.yml` there is merged in at startup). A container with no mounted config therefore exits at startup (missing `db-password`) rather than partially starting — that is the intended, documented behavior, and it is what `tests/docker/verify.sh` pins. `config-secrets.yml` never enters the image (excluded by `.dockerignore` AND explicitly removed after the build in the builder stage).
+**Docker configuration strategy (P3-8):** the container reads config exactly like bare metal — `/app/configs/config.yml` first (the docker-compose mount point), then the CWD-relative fallback `./dist/config.yml`. The final image's WORKDIR is `/app`, so the fallback resolves to `/app/dist/config.yml` — the same secret-free default that bare metal resolves (`code/dist/config.yml`), keeping the two startup paths consistent. The committed `config.yml` is intentionally secret-free: it carries no `db-password` (a required secret), so the built-in default is NOT a standalone working config. Real credentials always come from outside the repo — on bare metal via a gitignored sibling `config-secrets.yml` (the build copies it next to `config.yml`), and in Docker via a **mounted config** (docker-compose mounts the host configs dir at `/app/configs/`; an optional sibling `config-secrets.yml` there is merged in at startup). A container with no mounted config therefore exits at startup (missing `db-password`) rather than partially starting — that is the intended, documented behavior, and it is what `tests/docker/verify.sh` pins. `config-secrets.yml` never enters the image (excluded by `.dockerignore` AND explicitly removed after the build in the builder stage). `code/docker-refresh.sh` is the redeploy helper: it syncs the local `src/config.yml` **and** the gitignored `src/config-secrets.yml` to the host mount (`/mnt/sensor-services/`), forces a fresh image, and starts the container — the secrets sync is what keeps the mounted config validation-passing (a config-only sync leaves the container exit-looping on `db-password must be a string`, and the script warns when the local secrets file is missing).
 
 ### Notes
 
