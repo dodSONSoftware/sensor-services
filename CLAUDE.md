@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.9)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.10)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -63,7 +63,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── CreatorBase.ts       -- Abstract RoutesCreatorBase for route creators
     │       ├── Interfaces.ts        -- IAbout, ILogger, IMqttCommandControl, IMqttNetworking, LogLevel
     │       ├── HttpConstants.ts     -- HTTP status codes and MIME types
-    │       ├── Logger.ts            -- Console logger with Error/Warn/Info/Debug levels, requestId in output
+    │       ├── Logger.ts            -- Console logger with Error/Warn/Info/Debug levels, requestId in output; Loki transport runs with gracefulShutdown: false so no logging library hook can terminate the process — the app closes the transport via a bounded closeLokiTransportBounded() (flush → batcher.close, 5s cap)
     │       ├── SystemFunctions.ts   -- File I/O, sleep, timestamps, bash exec, error helpers
     │       ├── MqttNetworking.ts    -- MQTT client, command-response tracker (drops messages on untracked topics; telemetry handling moved to sensor-telemetry-service)
     │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs (atomic claim() slot serialization, last_sent_at)
@@ -101,6 +101,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── settingsStore.test.ts     -- validateSettingsFromDb: nested/legacy key resolution, migrations, schema validation
     │       │   └── settingsStoreInit.test.ts -- init(): seeding, corrupt-row repair (UPSERT), bootstrap pool cleanup
     │       └── dodsonlabs/
+    │           ├── Logger.test.ts               -- Loki shutdown ownership: transport constructed with gracefulShutdown:false, bounded flush/close on logger close (mocked winston-loki, no real HTTP/DNS)
     │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers), claim() slot serialization
     │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop)
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)

@@ -36,11 +36,21 @@ export async function runGracefulShutdown(
     startTime: number
 ): Promise<void> {
     // Once-guard: the logger must close exactly once, never duplicated.
+    // close() is async and bounded (flushes/closes the Loki transport) and
+    // never rejects, so awaiting it here is safe and guarantees the final log
+    // has been flushed before the caller exits.
     let loggerClosed = false;
-    const closeLoggerOnce = () => {
+    const closeLoggerOnce = async () => {
         if (!loggerClosed) {
             loggerClosed = true;
-            appLogger.close();
+            // close() may be async (the app Logger flushes the Loki transport,
+            // bounded, and never rejects) or a synchronous no-op (test fakes /
+            // the ILogger surface, which does not declare close()). Await only
+            // when a promise is returned.
+            const result = appLogger.close() as unknown;
+            if (result instanceof Promise) {
+                await result.catch(() => { /* best effort */ });
+            }
         }
     };
 
@@ -60,7 +70,9 @@ export async function runGracefulShutdown(
         // Log the failure before closing the logger
         appLogger.write_error("shutdown.ts", `Error during graceful shutdown: ${ensureError(err).message}`);
     } finally {
-        // 5. Close the active logger — after the final log, before the exit
-        closeLoggerOnce();
+        // 5. Close the active logger — after the final log, before the exit.
+        //    Awaited so the Loki transport flush completes (bounded) before
+        //    the caller exits; nothing may log after this resolves.
+        await closeLoggerOnce();
     }
 }

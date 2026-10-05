@@ -25,7 +25,9 @@ export const createLogger = (config: z.infer<typeof configSchema>) => {
     // safety net for any accidental second creation.
     const previous = _logger;
     if (previous) {
-        previous.close();
+        // close() is async (bounded Loki flush) and never rejects; swallow it
+        // so this safety-net path can never surface an unhandled rejection.
+        void previous.close().catch(() => { /* best effort */ });
     }
     setLogger(new Logger(config));
     return _logger;
