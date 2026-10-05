@@ -11,6 +11,8 @@ import {
   formatElapsedTime,
   convert_from_log_level_string_to_enum,
   write_file_atomic,
+  redactSecrets,
+  SENSITIVE_SECRET_KEYS,
 } from "../../../src/dodsonlabs/SystemFunctions";
 import { LogLevel } from "../../../src/dodsonlabs/Interfaces";
 
@@ -37,6 +39,69 @@ describe("ensureError", () => {
     expect(err.message).toBe(
       "Unknown Error: error value cannot be converted to a json string."
     );
+  });
+});
+
+describe("redactSecrets (P1-3 shared redaction)", () => {
+  it("masks the minimum required secret keys at the top level", () => {
+    const input = {
+      "wifi-password": "a",
+      "password": "b",
+      "db-password": "c",
+      source: "keep",
+    };
+    const out = redactSecrets(input);
+    expect(out["wifi-password"]).toBe("********");
+    expect(out["password"]).toBe("********");
+    expect(out["db-password"]).toBe("********");
+    expect(out["source"]).toBe("keep");
+  });
+
+  it("redacts recursively through nested objects and arrays", () => {
+    const input = {
+      config: {
+        "wifi-password": "x",
+        nested: { "db-password": "y" },
+        list: [{ password: "z" }, { ok: "v" }],
+      },
+    };
+    const out = redactSecrets(input);
+    expect(out.config["wifi-password"]).toBe("********");
+    expect(out.config.nested["db-password"]).toBe("********");
+    expect(out.config.list[0].password).toBe("********");
+    expect(out.config.list[1].ok).toBe("v");
+  });
+
+  it("matches secret key names case-insensitively", () => {
+    const out = redactSecrets({ "WiFi-Password": "s", "DB-PASSWORD": "s2" });
+    expect(out["WiFi-Password"]).toBe("********");
+    expect(out["DB-PASSWORD"]).toBe("********");
+  });
+
+  it("does not mutate the input", () => {
+    const input = { "wifi-password": "orig", "password": "orig" };
+    const snapshot = JSON.parse(JSON.stringify(input));
+    redactSecrets(input);
+    expect(input).toEqual(snapshot);
+  });
+
+  it("returns primitives and null unchanged", () => {
+    expect(redactSecrets("plain")).toBe("plain");
+    expect(redactSecrets(42)).toBe(42);
+    expect(redactSecrets(null)).toBe(null);
+    expect(redactSecrets(undefined)).toBe(undefined);
+  });
+
+  it("honors a custom key set", () => {
+    const out = redactSecrets({ api_token: "t", "wifi-password": "w" }, new Set(["api_token"]));
+    expect(out.api_token).toBe("********");
+    expect(out["wifi-password"]).toBe("w");
+  });
+
+  it("exposes the minimum required keys in SENSITIVE_SECRET_KEYS", () => {
+    expect(SENSITIVE_SECRET_KEYS.has("wifi-password")).toBe(true);
+    expect(SENSITIVE_SECRET_KEYS.has("password")).toBe(true);
+    expect(SENSITIVE_SECRET_KEYS.has("db-password")).toBe(true);
   });
 });
 

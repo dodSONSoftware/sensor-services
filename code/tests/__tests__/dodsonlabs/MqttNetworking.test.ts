@@ -208,6 +208,121 @@ describe("MqttNetworking", () => {
         expect(anyNetworking.mqtt_topic_log).toBe("iot/v3/log");
     });
 
+    // ---- outbound publish secret redaction (P1-3)
+
+    describe("outbound publish secret redaction (P1-3)", () => {
+        const WIFI_SECRET = "TEST_WIFI_SECRET";
+        const PASSWORD_SECRET = "TEST_PASSWORD_SECRET";
+        const DB_SECRET = "TEST_DB_SECRET";
+
+        function writeConfigMessage() {
+            return {
+                "message_type": "command",
+                "message_schema_version": 3,
+                "target": "soil-1",
+                "command": "write-config",
+                "command_id": "cmd-123",
+                "payload": {
+                    "config": {
+                        "source": "soil-1",
+                        "wifi-password": WIFI_SECRET,
+                        "password": PASSWORD_SECRET,
+                        "db-password": DB_SECRET,
+                        "some_normal_field": "visible-value",
+                    },
+                },
+            };
+        }
+
+        // Replace the (disconnected) real client with a capture stub so we can
+        // assert exactly what would be published, without any real broker.
+        function installCaptureClient() {
+            const publish = jest.fn();
+            // mqtt client end() is called as end() / end(callback) for graceful
+            // close and end(true, callback) for the forced-close timeout path
+            (networking as any).mqtt_client = {
+                publish,
+                end: jest.fn((_force?: boolean, cb?: () => void) => cb?.()),
+            };
+            return publish;
+        }
+
+        function allLoggedStrings() {
+            return [
+                (logger.write_debug as jest.Mock).mock.calls,
+                (logger.write_info as jest.Mock).mock.calls,
+                (logger.write_warn as jest.Mock).mock.calls,
+                (logger.write_error as jest.Mock).mock.calls,
+            ].flat().map((c) => String(c[1]));
+        }
+
+        it("publishes the original write-config payload intact (never mutated by redaction)", () => {
+            const publish = installCaptureClient();
+            const message = writeConfigMessage();
+
+            networking.publish_mqtt_message("iot/v3/command", message);
+
+            expect(publish).toHaveBeenCalledTimes(1);
+            const [topic, raw] = publish.mock.calls[0];
+            expect(topic).toBe("iot/v3/command");
+            const published = JSON.parse(raw);
+            // Original secrets are still present in what is actually published
+            expect(published.payload.config["wifi-password"]).toBe(WIFI_SECRET);
+            expect(published.payload.config["password"]).toBe(PASSWORD_SECRET);
+            expect(published.payload.config["db-password"]).toBe(DB_SECRET);
+        });
+
+        it("logs no write-config secret and no config object — only operational metadata", () => {
+            installCaptureClient();
+            const message = writeConfigMessage();
+
+            networking.publish_mqtt_message("iot/v3/command", message);
+
+            const logged = allLoggedStrings();
+            const serialized = JSON.stringify(logged);
+            // No secret value reaches any logger
+            expect(serialized).not.toContain(WIFI_SECRET);
+            expect(serialized).not.toContain(PASSWORD_SECRET);
+            expect(serialized).not.toContain(DB_SECRET);
+            // The configuration object itself is excluded (not just the secrets)
+            expect(serialized).not.toContain("some_normal_field");
+            // Non-sensitive operational metadata remains available in the log
+            const publishLog = logged.find((s) => s.includes("write-config"));
+            expect(publishLog).toBeDefined();
+            expect(publishLog!).toContain("cmd-123");
+            expect(publishLog!).toContain("soil-1");
+        });
+
+        it("redacts sensitive keys on non-write-config commands (shared redaction) without mutating the original", () => {
+            const publish = installCaptureClient();
+            const message = {
+                "message_type": "command",
+                "message_schema_version": 3,
+                "target": "*",
+                "command": "read-config",
+                "command_id": "cmd-456",
+                "payload": {
+                    "config": {
+                        "password": PASSWORD_SECRET,
+                        "nested": { "wifi-password": WIFI_SECRET },
+                        "ok": "present",
+                    },
+                },
+            };
+
+            networking.publish_mqtt_message("iot/v3/command", message);
+
+            // Original untouched
+            expect(JSON.parse(publish.mock.calls[0][1]).payload.config.password).toBe(PASSWORD_SECRET);
+            // Log has secrets masked, non-secret preserved
+            const logged = allLoggedStrings().join("\n");
+            expect(logged).not.toContain(PASSWORD_SECRET);
+            expect(logged).not.toContain(WIFI_SECRET);
+            expect(logged).toContain("********");
+            expect(logged).toContain("present");
+        });
+    });
+
     // ---- heat index (calculateHeatIndex)
 
     // Table-driven reference values. Expected outputs are derived from the

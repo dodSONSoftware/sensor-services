@@ -27,6 +27,51 @@ export function ensureError(value: unknown): Error {
     return new Error(result);
 }
 
+// **** secret redaction
+
+// Config field names whose values are credentials/secrets and must never reach
+// logs, Loki, or API clients. Matched as exact key names, case-insensitively,
+// at any nesting depth.
+export const SENSITIVE_SECRET_KEYS: ReadonlySet<string> = new Set([
+    "wifi-password",
+    "password",
+    "db-password",
+]);
+
+// Value substituted for any redacted secret. Kept in sync with redactConfig()
+// in schemas/config.ts so masking looks consistent across the app.
+const SECRET_MASK = "********";
+
+/**
+ * Deep-clone a value, replacing the value of any sensitive key (at any depth,
+ * in both objects and arrays) with a mask.
+ *
+ * Returns a NEW structure — the input is never mutated — so callers can log the
+ * redacted copy while publishing/sending the original untouched. Non-secret
+ * values pass through unchanged (still deep-cloned for isolation).
+ */
+export function redactSecrets<T>(value: T, sensitiveKeys: ReadonlySet<string> = SENSITIVE_SECRET_KEYS): T {
+    return redactSecretsInternal(value, sensitiveKeys) as T;
+}
+
+function redactSecretsInternal(value: unknown, sensitiveKeys: ReadonlySet<string>): unknown {
+    if (value === null || typeof value !== "object") {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => redactSecretsInternal(item, sensitiveKeys));
+    }
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+        if (sensitiveKeys.has(key.toLowerCase())) {
+            result[key] = SECRET_MASK;
+        } else {
+            result[key] = redactSecretsInternal(val, sensitiveKeys);
+        }
+    }
+    return result;
+}
+
 // **** file functions
 
 /** Result of a file read operation — distinguishes "not found" from parse errors. */

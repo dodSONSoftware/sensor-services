@@ -9,5 +9,5 @@
 // (PATCH does not affect the name). Full scheme: .claude/commands/git-commit.md
 // (RELEASE CODENAME SCHEME section). Keep package.json's version in sync with
 // APP_VERSION — the /git-commit workflow does this on every version bump.
-export const APP_VERSION = "4.12.10";
+export const APP_VERSION = "4.12.11";
 export const APP_NAME = "Carbon Falcon";

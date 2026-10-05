@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.10)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.11)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -64,8 +64,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       ├── Interfaces.ts        -- IAbout, ILogger, IMqttCommandControl, IMqttNetworking, LogLevel
     │       ├── HttpConstants.ts     -- HTTP status codes and MIME types
     │       ├── Logger.ts            -- Console logger with Error/Warn/Info/Debug levels, requestId in output; Loki transport runs with gracefulShutdown: false so no logging library hook can terminate the process — the app closes the transport via a bounded closeLokiTransportBounded() (flush → batcher.close, 5s cap)
-    │       ├── SystemFunctions.ts   -- File I/O, sleep, timestamps, bash exec, error helpers
-    │       ├── MqttNetworking.ts    -- MQTT client, command-response tracker (drops messages on untracked topics; telemetry handling moved to sensor-telemetry-service)
+    │       ├── SystemFunctions.ts   -- File I/O, sleep, timestamps, bash exec, error helpers; redactSecrets() shared recursive secret masking (SENSITIVE_SECRET_KEYS at any depth, no input mutation)
+    │       ├── MqttNetworking.ts    -- MQTT client, command-response tracker (drops messages on untracked topics; telemetry handling moved to sensor-telemetry-service); outbound publish logs are sanitized — write-config logs metadata only, all other commands are redacted via redactSecrets(), the published message is never mutated
     │       ├── MqttCommandControl.ts -- Timeout-based state machine for command-response pairs (atomic claim() slot serialization, last_sent_at)
     │       └── version.txt          -- Library version (1.2.8)
     ├── tests/
@@ -103,9 +103,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       └── dodsonlabs/
     │           ├── Logger.test.ts               -- Loki shutdown ownership: transport constructed with gracefulShutdown:false, bounded flush/close on logger close (mocked winston-loki, no real HTTP/DNS)
     │           ├── MqttCommandControl.test.ts -- State machine tests (fake timers), claim() slot serialization
-    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop)
+    │           ├── MqttNetworking.test.ts     -- MQTT networking tests (dedup, latency, telemetry validation, untracked-topic drop, outbound publish secret redaction)
     │           ├── PrometheusWriter.test.ts   -- PrometheusWriter tests (source sanitization, range checks)
-    │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters
+    │           └── SystemFunctions.test.ts    -- ensureError(), formatElapsedTime(), log level converters, redactSecrets()
     └── dist/              -- Compiled output (tsc)
 
 ## Commands
@@ -416,6 +416,7 @@ case-sensitive: true
 - **`uncaughtException`/`unhandledRejection`** — top-level handlers in `index.ts` call `shutdown()` to trigger graceful shutdown on fatal errors.
 - **Config migrated from JSON to YAML** — `config.yml` is loaded via `read_file_yaml()` and validated with Zod v4 schemas in `src/schemas/config.ts`. The old `config.json` was replaced.
 - **Config writes are atomic** — `/api/write-config` uses `write_file_atomic()` (unique same-directory temp file + rename), so a failure mid-write can never truncate the live `config.yml`; the temp file is removed and the prior config preserved on failure.
+- **Secrets never reach the logs** — `redactSecrets()` (SystemFunctions.ts) recursively masks `SENSITIVE_SECRET_KEYS` (`wifi-password`, `password`, `db-password`, matched case-insensitively at any nesting depth) without mutating the input. `MqttNetworking.publish_mqtt_message()` logs a sanitized copy only: a `write-config` publish logs metadata (`{command, target, command_id}`) and every other command logs a redacted copy of the message. The MQTT message that is actually published is never touched. Incoming command-response configs are redacted with the same helper before logging.
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
 - **Body validation** — a present body is validated as a JSON object with Zod (`validatePostBody()`); returns 400 if a body is present but not a JSON object. A missing body is passed through untouched — "body required" is a route-level concern owned by each controller (e.g. `configController`'s write-config returns its own 400). Replaces `req.body` with the validated object.

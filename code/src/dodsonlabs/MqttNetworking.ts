@@ -210,10 +210,16 @@ export class MqttNetworking implements IMqttNetworking {
 
     public publish_mqtt_message(topic: string, message: Record<string, any>): void {
 
-        // Log the message being published (for debugging)
+        // Log a safe representation of the message being published (for
+        // debugging). A write-config command carries the sensor's complete
+        // config — including secrets such as wifi-password / db-password — so
+        // for that command we log ONLY operational metadata, never the config.
+        // Every other command is logged with its sensitive keys recursively
+        // redacted. In all cases the ORIGINAL message (unmodified) is what is
+        // actually published: redaction operates on a copy.
         this.logger.write_debug(
             this.originator,
-            `<publish_mqtt_message> => Publishing to topic '${topic}': ${JSON.stringify(message)}`
+            `<publish_mqtt_message> => Publishing to topic '${topic}': ${this.format_publish_log(message)}`
         );
 
         try {
@@ -223,6 +229,25 @@ export class MqttNetworking implements IMqttNetworking {
             this.logger.write_error(this.originator, errMessage);
             throw new Error(errMessage);
         }
+    }
+
+    /**
+     * Build the debug log representation of an outbound MQTT command message.
+     * write-config logs metadata only (command, target, command_id) because its
+     * payload holds the full config with secrets; other commands log a
+     * recursively-redacted copy. Never mutates the input.
+     */
+    private format_publish_log(message: Record<string, any>): string {
+        const command = message["command"];
+        if (command !== undefined && String(command).toLowerCase() === "write-config") {
+            const meta: Record<string, unknown> = {
+                command: "write-config",
+                target: message["target"],
+                command_id: message["command_id"],
+            };
+            return JSON.stringify(meta);
+        }
+        return JSON.stringify(sysFunc.redactSecrets(message));
     }
 
 
@@ -508,27 +533,13 @@ export class MqttNetworking implements IMqttNetworking {
         // V3: command_id lives inside payload
         const command_id = this.getField(payload, "command_id");
 
-        // Log with sanitized payload to avoid exposing sensitive data in logs.
-        // Use deep clone to ensure we don't accidentally modify the original payload.
-        // V2 configs lived at payload.configuration/payload.config; V3 nests the
-        // read-config result at payload.data.config.
-        const sanitizedDoc = JSON.parse(JSON.stringify(json_doc));
-        if (sanitizedDoc["payload"]) {
-            const sanitizedPayload = sanitizedDoc["payload"];
-            const scrubConfig = (cfg: any) => {
-                if (cfg && typeof cfg === "object" && !Array.isArray(cfg)) {
-                    delete cfg["wifi-password"];
-                    delete cfg["password"];
-                    delete cfg["db-password"];
-                }
-            };
-            scrubConfig(sanitizedPayload["configuration"]);
-            scrubConfig(sanitizedPayload["config"]);
-            if (sanitizedPayload["data"] && typeof sanitizedPayload["data"] === "object") {
-                scrubConfig(sanitizedPayload["data"]["config"]);
-            }
-            sanitizedDoc["payload"] = sanitizedPayload;
-        }
+        // Log with a redacted deep copy so credentials never reach the logs.
+        // redactSecrets() masks sensitive keys (wifi-password, password,
+        // db-password) at ANY nesting depth — the config may live at
+        // payload.config, payload.data.config, or elsewhere — and returns a new
+        // object, so the original json_doc (still used for command_id
+        // correlation below) is never mutated.
+        const sanitizedDoc = sysFunc.redactSecrets(json_doc);
         this.logger.write_debug(this.originator, `<handle_mqtt_message_command_response>: ${cmd_type} from '${source}': ${JSON.stringify(sanitizedDoc)}`);
 
         // ----
