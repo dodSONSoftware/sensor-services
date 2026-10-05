@@ -15,6 +15,7 @@ import { CreateRouteNotFound } from "./routes/routeNotFound";
 import * as settingsRoutes from "./routes/settingsRoutes";
 import * as configRoutes from "./routes/configRoutes";
 import * as logRoutes from "./routes/logRoutes";
+import { assertRoutesMatchDeclared } from "./routes/routeDrift";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { createApiMetricsMiddleware } from "./common/metrics";
@@ -156,13 +157,28 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         new logRoutes.CreateLogRoutes(app);
         new CreateRouteNotFound(app);
 
-        // Validate __routesHelp entries match __routes arrays
+        // Validate __routesHelp entries match __routes arrays (per-module
+        // static consistency: every declared route has help text and vice versa).
         validateRoutesHelp("generalRoutes", generalRoutes.__routes, generalRoutes.__routesHelp);
         validateRoutesHelp("sensorRoutes", sensorRoutes.__routes, sensorRoutes.__routesHelp);
         validateRoutesHelp("pingerRoutes", pingerRoutes.__routes, pingerRoutes.__routesHelp);
         validateRoutesHelp("settingsRoutes", settingsRoutes.__routes, settingsRoutes.__routesHelp);
         validateRoutesHelp("configRoutes", configRoutes.__routes, configRoutes.__routesHelp);
         validateRoutesHelp("logRoutes", logRoutes.__routes, logRoutes.__routesHelp);
+
+        // Validate the DECLARED metadata against the LIVE Express app (P3-4):
+        // the union of every module's __routes must be exactly the set of
+        // routes actually registered. The per-module check above only compares
+        // static metadata to static metadata; this catches a route registered
+        // but never declared, or declared but never registered.
+        assertRoutesMatchDeclared(app, {
+            generalRoutes: generalRoutes.__routes,
+            sensorRoutes: sensorRoutes.__routes,
+            pingerRoutes: pingerRoutes.__routes,
+            settingsRoutes: settingsRoutes.__routes,
+            configRoutes: configRoutes.__routes,
+            logRoutes: logRoutes.__routes,
+        });
     } catch (err: unknown) {
         // log error
         appLogger.write_error("index.ts", ensureError(err).message);

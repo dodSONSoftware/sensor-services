@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.23)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.24)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -50,9 +50,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   ├── routes/
     │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
-    │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable fetch_timeout_ms)
+    │   │   ├── pingerRoutes.ts    -- /sensors/ippinger-analyze (analysis endpoint; owns its __routes/__routesHelp metadata, P3-4)
     │   │   ├── settingsRoutes.ts  -- /ui/settings, /ui/settings-schema, /ui/settings-update (PostgreSQL persistence via settingsStore)
     │   │   ├── logRoutes.ts       -- /sensors/logs/:source (Loki log queries)
+    │   │   ├── routeDrift.ts      -- registeredRoutePaths() + assertRoutesMatchDeclared(): validate declared __routes against the live Express app (P3-4)
     │   │   └── routeNotFound.ts   -- 404 handler (wired into app); logs unmatched routes at warn, not error (P3-3)
     │   ├── schemas/
     │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn); redactConfig() masks db-password/loki-url
@@ -96,7 +97,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── configRoutes.test.ts       -- /api/reload-config, /api/read-config, /api/write-config via supertest
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
     │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501)
-    │       │   ├── pingerRoutes.test.ts       -- All /ippinger/* routes via supertest (about, read-config, write-config, restart, ping, ping/:target, analyze-ippinger)
+    │       │   ├── pingerRoutes.test.ts       -- /sensors/ippinger-analyze via supertest (degraded warning when pinger unreachable, analysis when reachable)
+    │       │   ├── routeDrift.test.ts         -- P3-4: pingerRoutes owns /sensors/ippinger-analyze metadata, per-module __routes↔__routesHelp consistency, registered routes == union of declared __routes, routeDrift helper unit tests
     │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest + X-Settings-Persisted header, unknown key → 400 (P3-6, P3-7)
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger) + unmatched routes log at warn, never error (P3-3)
     │       ├── schemas/
@@ -175,7 +177,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 7. Create middleware in the P3-2 order (request ID → HTTP metrics → CORS → rate limiting → JSON parsing → request logger → body validation). The API metrics middleware is passed into `CreateMiddleware` so it is installed AHEAD of the rate limiter (that is what makes 429s carry an X-Request-ID and be counted); it tracks request duration/status/errors using a separate prom-client registry
 8. Setup Swagger at `/swagger` (auto-derived from routable IP + port, overridable via config `swagger-server-url`) — mounted AFTER the global middleware so it does not bypass the request-ID / metrics / CORS / rate-limit / body-validation pipeline (P3-2)
 9. Register route groups: `generalRoutes`, `sensorRoutes`, `pingerRoutes`, `settingsRoutes`, `configRoutes`, `logRoutes`, `routeNotFound`
-10. Validate `__routesHelp` entries match actual registered routes (drift detection)
+10. Drift detection: per-module, `validateRoutesHelp()` checks each `__routes` array matches its `__routesHelp`; then `assertRoutesMatchDeclared()` (routeDrift.ts, P3-4) checks the union of all declared `__routes` equals the routes actually registered on the live Express app — a route registered but never declared, or declared but never registered, fails startup
 11. Listen on configured port
 12. Register `uncaughtException`/`unhandledRejection` handlers — call `shutdown()` to trigger graceful shutdown
 13. Register graceful shutdown handlers for `SIGTERM`/`SIGINT` — 15s hard timeout safety net, re-entrancy guard; `runGracefulShutdown()` (common/shutdown.ts) closes HTTP server → MQTT client → settings store → final log → active logger (exactly once), then the caller exits with the signal's exit code (0 for SIGINT/SIGTERM; 1 for uncaughtException/unhandledRejection)
@@ -431,7 +433,7 @@ case-sensitive: true
 - **`sys_info` array in `aboutDude()` is now populated** with platform, arch, hostname, uptime, total/free memory.
 - **Docker container** (via `code/docker-compose.yml`) mounts `config.yml` into the container at `/app/configs/config.yml`. Runs as non-root user (`appuser`). Healthcheck probes `/health` every 30s.
 - **Docker build is the canonical build (P3-8)** — the builder stage runs `npm run build` (tsc + copy `config.yml`→`dist/`) instead of re-implementing its steps, so Docker and bare-metal builds cannot drift. The final image copies only `dist/`, the `src/routes/` subset (Swagger scans `src/routes/**/*.ts` at startup), and `package*.json` — not the whole source tree. `config-secrets.yml` never enters the image: it is excluded by `.dockerignore` AND explicitly `rm -f`'d after the build in the builder stage (defense in depth). The final image's WORKDIR is `/app` (with `CMD node dist/index.js`) so the CWD-relative `./dist/config.yml` fallback resolves identically to bare metal. Because the committed default is secret-free (no `db-password`), a container requires a **mounted config** to supply credentials and exits at startup without one — the intended, documented behavior pinned by `tests/docker/verify.sh` (e2e) and `tests/__tests__/docker/docker.test.ts` (static guards).
-- **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list; `validateRoutesHelp()` in `index.ts` checks for drift at startup between `__routesHelp` entries and actual registered routes.
+- **`__routesHelp` objects in each route file** are the single source of truth for the `/about` command list (aggregated in `generalController.ts` — note pingerRoutes is included, so `/sensors/ippinger-analyze` appears under a "Pinger" section). Drift is checked at startup in two passes (P3-4): `validateRoutesHelp()` in `index.ts` verifies each module's `__routes` matches its own `__routesHelp` (static↔static), and `assertRoutesMatchDeclared()` in `routeDrift.ts` verifies the union of all declared `__routes` equals the routes actually registered on the live Express app (read from `app._router.stack`). Route metadata must live in the module that actually registers the route — `/sensors/ippinger-analyze` is registered in `pingerRoutes`, so its `__routes`/`__routesHelp` entries belong there, not in `sensorRoutes`.
 - **`createAnalyzeResult` spreads its `origin` argument** (no longer mutates in-place).
 - **`pingerController.ts` uses `async/await`** consistently — `fetchIt()`/`postIt()`/`fetchItOnly()` all use async/await. `getAnalyzeIpPinger()` gracefully degrades when the pinger service is unreachable (returns live sensors with a warning).
 - **IP-pinger responses are schema-validated before analysis** — `getAnalyzeIpPinger()` Zod-validates the `/read-config` body (`ippingerConfigSchema`: `devices` array of `{ source, ipAddress | ip-address }`) because `fetchItOnly()` only guarantees 2xx + parseable JSON, not the schema. An HTTP 200 body that fails validation degrades exactly like an unavailable pinger (200 + `warning` + `live_sensors` only) — it must never reach `analyzeIt()` unchecked, since a rejected async handler is not caught by Express 4 and the process-level `unhandledRejection` handler would initiate shutdown. The current ip-pinger's camelCase `ipAddress` is normalized to the internal kebab-case `ip-address` key (older kebab-case builds are also accepted).

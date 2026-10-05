@@ -8,6 +8,7 @@ import { Json, OK, ServiceUnavailable, Text } from "../dodsonlabs/HttpConstants"
 import { aboutDude, getConfig, logger } from "../common/global";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
+import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 import { __routesHelp as configRoutesHelp } from "../routes/configRoutes";
 import { __routesHelp as logRoutesHelp } from "../routes/logRoutes";
@@ -106,6 +107,7 @@ export async function getAbout(req: express.Request, res: express.Response) {
     const cmds = [];
     cmds.push({ "name": "General", "help": generalRoutesHelp });
     cmds.push({ "name": "Sensors", "help": sensorRoutesHelp });
+    cmds.push({ "name": "Pinger", "help": pingerRoutesHelp });
     cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
     cmds.push({ "name": "Configuration", "help": configRoutesHelp });
     cmds.push({ "name": "Logs", "help": logRoutesHelp });

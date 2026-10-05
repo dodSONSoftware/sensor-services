@@ -12,12 +12,21 @@ export { pinger_controller };
 
 
 
-// Route registration is handled separately in index.ts
-export const __routes: string[] = [];
+// Canonical list of route paths — kept in sync with createRoutes() to prevent
+// drift. /sensors/ippinger-analyze is registered in THIS module (createRoutes
+// below), so its metadata lives here, not in sensorRoutes (P3-4).
+export const __routes: string[] = [
+    "/sensors/ippinger-analyze",
+];
 
 export const __routesHelp: Record<string, unknown> = {
-    "description": "",
-    "commands": []
+    "description": "Analysis endpoints that compare the configured IP Pinger devices against the live sensors.",
+    "commands": [
+        {
+            "route": "/sensors/ippinger-analyze",
+            "description": "Analyzes the configured devices in the registered IP Pinger against the live sensors and returns a report."
+        }
+    ]
 };
 
 export class CreatePingerRoutes extends RoutesCreatorBase {
