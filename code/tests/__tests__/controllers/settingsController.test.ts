@@ -24,11 +24,15 @@ jest.mock("../../../src/services/settingsStore", () => ({
         Object.assign(currentMockCache, updates);
         return structuredClone(currentMockCache);
     }),
+    isPersistenceAvailable: jest.fn(() => mockPersisted),
 }));
 
 import * as settingsStore from "../../../src/services/settingsStore";
 
 let currentMockCache = { ...baseMockCache };
+// P3-6: controllable so tests can exercise both the persisted (true) and
+// degraded in-memory (false) branches of the X-Settings-Persisted header.
+let mockPersisted = true;
 
 describe("getSettingsDefaults", () => {
     beforeEach(() => {
@@ -191,6 +195,7 @@ describe("updateSettings", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         currentMockCache = { ...baseMockCache };
+        mockPersisted = true;
     });
 
     it("should return merged settings after partial update", async () => {
@@ -247,6 +252,7 @@ describe("updateSettings - Partial Update Behavior", () => {
             ...baseMockCache,
             theme: "dark"
         };
+        mockPersisted = true;
     });
 
     it("should not apply defaults when updating other fields", async () => {
@@ -274,6 +280,112 @@ describe("updateSettings - Partial Update Behavior", () => {
         expect(body.theme).toBe("dark");             // Was explicitly set to "dark"
         expect(body.ping_delay_ms).toBe(1000);   // Was updated
         expect(body.dashboard_layout).toBe("cards");     // Default preserved
+    });
+});
+
+/**
+ * P3-6: the persistence state must be reported to the caller. The response
+ * body shape is intentionally unchanged (still the merged settings object,
+ * which the web app reads flat keys from), so the flag rides in the
+ * X-Settings-Persisted header.
+ */
+describe("updateSettings - persistence reporting (P3-6)", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
+        mockPersisted = true;
+    });
+
+    it("reports X-Settings-Persisted: true when the pool is available", async () => {
+        const { res, statusCalls, headerCalls, sendCalls } = createMockRes();
+        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(200);
+        expect(headerCalls["X-Settings-Persisted"]).toBe("true");
+        expect(settingsStore.isPersistenceAvailable).toHaveBeenCalled();
+        // Body shape unchanged: the merged settings object, no wrapper.
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body.theme).toBe("dark");
+        expect(body).not.toHaveProperty("persisted");
+    });
+
+    it("reports X-Settings-Persisted: false in degraded mode while the in-memory update still applies", async () => {
+        mockPersisted = false;
+        const { res, statusCalls, headerCalls, sendCalls } = createMockRes();
+        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(200);
+        expect(headerCalls["X-Settings-Persisted"]).toBe("false");
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body.theme).toBe("dark");
+    });
+
+    it("does not set the persistence header when validation fails", async () => {
+        const { res, statusCalls, headerCalls } = createMockRes();
+        const req = createMockReq({ body: { bogus_key: 1 } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(400);
+        expect(headerCalls["X-Settings-Persisted"]).toBeUndefined();
+    });
+});
+
+/**
+ * P3-7: the update schema is strict, so an unknown key (e.g. a typo) fails
+ * the request with 400 instead of being silently dropped.
+ */
+describe("updateSettings - strict key validation (P3-7)", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
+    });
+
+    it("rejects an unknown key with 400", async () => {
+        const { res, statusCalls, sendCalls, headerCalls } = createMockRes();
+        const req = createMockReq({ body: { them: "dark" } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(400);
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(String(body.error)).toMatch(/Invalid settings update/);
+        expect(String(body.error)).toMatch(/them/);
+        expect(headerCalls["X-Settings-Persisted"]).toBeUndefined();
+        expect(settingsStore.patchSettings).not.toHaveBeenCalled();
+    });
+
+    it("rejects a mix of known and unknown keys with 400 and applies nothing", async () => {
+        const { res, statusCalls, sendCalls } = createMockRes();
+        const req = createMockReq({ body: { theme: "dark", bogus_key: 1 } }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(400);
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(String(body.error)).toMatch(/bogus_key/);
+        expect(settingsStore.patchSettings).not.toHaveBeenCalled();
+        // The known key in the same body must not be partially applied.
+        expect(currentMockCache.theme).toBe("light");
+    });
+
+    it("accepts a valid partial update of a nested telemetry key", async () => {
+        const { res, statusCalls, sendCalls } = createMockRes();
+        const req = createMockReq({
+            body: {
+                "telemetry.air": [{ ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true }],
+            },
+        }) as Request;
+
+        await updateSettings(req, res as Response);
+
+        expect(statusCalls).toContain(200);
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body["telemetry.air"]).toEqual([{ ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true }]);
     });
 });
 

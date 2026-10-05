@@ -359,6 +359,18 @@ export function getSettings(): AppSettings {
 }
 
 /**
+ * Whether settings persistence (PostgreSQL) is currently initialized and
+ * usable. `false` means the store is running in real in-memory (degraded)
+ * mode: updates are applied to the in-memory cache but NOT written to the
+ * database, so they will not survive a restart. The settings controller uses
+ * this to report the X-Settings-Persisted flag on update responses (P3-6) so a
+ * caller is never left believing a degraded (in-memory-only) update is durable.
+ */
+export function isPersistenceAvailable(): boolean {
+    return pool !== null;
+}
+
+/**
  * Serialize settings updates within this process. patchSettings performs a
  * read-modify-write on the shared in-memory cache, and persistence crosses
  * async boundaries — without serialization, two concurrent patches can clone

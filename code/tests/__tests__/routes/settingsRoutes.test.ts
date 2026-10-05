@@ -23,6 +23,9 @@ jest.mock("../../../src/services/settingsStore", () => ({
         Object.assign(currentMockCache, updates);
         return structuredClone(currentMockCache);
     }),
+    // These route tests always exercise the persisted branch; the degraded
+    // branch is covered in controllers/settingsController.test.ts.
+    isPersistenceAvailable: jest.fn(() => true),
 }));
 
 import { CreateSettingsRoutes } from "../../../src/routes/settingsRoutes";
@@ -174,6 +177,29 @@ describe("settings routes", () => {
             const res = await request(app).get("/ui/settings");
 
             expect(res.body.theme).toBe("dark");
+        });
+
+        it("should report persistence state in the X-Settings-Persisted header (P3-6)", async () => {
+            const res = await request(app)
+                .patch("/ui/settings-update")
+                .send({ theme: "dark" });
+
+            expect(res.status).toBe(200);
+            expect(res.headers["x-settings-persisted"]).toBe("true");
+            // The response body is still the merged settings object.
+            expect(res.body.theme).toBe("dark");
+        });
+
+        it("should reject an unknown settings key with 400 (P3-7)", async () => {
+            const res = await request(app)
+                .patch("/ui/settings-update")
+                .send({ them: "dark" });
+
+            expect(res.status).toBe(400);
+            expect(res.body.error).toMatch(/Invalid settings update/);
+            expect(res.body.error).toMatch(/them/);
+            // A rejected update is not persisted, so the header is absent.
+            expect(res.headers["x-settings-persisted"]).toBeUndefined();
         });
     });
 });

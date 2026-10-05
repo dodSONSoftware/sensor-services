@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.20)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.21)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── sensorController.ts   -- MQTT-based sensor command handlers (event-based completion via waitForCompletion + AbortController, 10s hard cap, per-type slot serialization via claim(), each request publishes its own command)
     │   │   ├── pingerController.ts   -- IP Pinger proxy + analyze logic (async/await, graceful degradation, validateIpAddress() rejects private/reserved IPs, fetchWithTimeout() via AbortSignal.timeout())
     │   │   ├── logController.ts      -- GET /sensors/logs/:source (Loki queries; source allowlist-validated against LogQL injection, level allowlist, fetch timeout via AbortSignal; loki-url is never logged verbatim — it may embed credentials)
-    │   │   └── settingsController.ts -- GET /ui/settings, GET /ui/settings-schema, PATCH /ui/settings-update
+    │   │   └── settingsController.ts -- GET /ui/settings, GET /ui/settings-schema, PATCH /ui/settings-update (strict unknown-key rejection → 400, X-Settings-Persisted header on success)
     │   ├── middleware/
     │   │   └── middleware.ts -- Global middleware in deliberate order (P3-2): request ID -> HTTP metrics (optional, passed in) -> CORS (restricted to cors-allowed-origins, P3-5) -> rate limiting (default 100 req/15min) -> JSON parser (configurable body limit) -> request logger -> body validation (Zod)
     │   ├── routes/
@@ -60,7 +60,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── postBody.ts      -- Zod schemas for POST body validation
     │   │   └── settings.ts      -- Zod schemas + defaults + metadata for application settings (UI preferences + server connection details)
     │   ├── services/
-    │   │   └── settingsStore.ts -- PostgreSQL-backed persistence for application settings (init, getSettings, patchSettings)
+    │   │   └── settingsStore.ts -- PostgreSQL-backed persistence for application settings (init, getSettings, patchSettings, isPersistenceAvailable)
     │   └── dodsonlabs/          -- Shared library (git clone from dodson-labs-core)
     │       ├── CreatorBase.ts       -- Abstract RoutesCreatorBase for route creators
     │       ├── Interfaces.ts        -- IAbout, ILogger, IMqttCommandControl, IMqttNetworking, LogLevel
@@ -87,7 +87,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── logController.test.ts      -- /sensors/logs/:source: LogQL injection guard (400), level allowlist, AbortSignal wiring, loki-url never logged verbatim (credential in URL never appears in emitted logs)
     │       │   ├── sensorController.test.ts   -- create_mqtt_command_message(), get_it/post_it error paths, already-running (waiter publishes own command), concurrency (real MqttCommandControl), hard timeout
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchItOnly non-OK responses, getAnalyzeIpPinger degradation on malformed upstream bodies (Zod-validated), camelCase ipAddress normalization
-    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
+    │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings + X-Settings-Persisted header true/false (degraded mode still applies in-memory), strict update schema: unknown key → 400, known+unknown → 400, nested telemetry key accepted (P3-6, P3-7)
     │       ├── middleware/
     │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through) + rate-limit exemption for /health and /metrics (P2-4) + middleware ordering: 429 carries X-Request-ID, 429 counted by metrics, Swagger passes through the pipeline, rate limiting precedes the JSON parser (P3-2) + CORS origin restriction: allowed/unknown/no-origin, preflight for mutating endpoint, secure default when unset (P3-5)
     │       ├── routes/
@@ -95,7 +95,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
     │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501)
     │       │   ├── pingerRoutes.test.ts       -- All /ippinger/* routes via supertest (about, read-config, write-config, restart, ping, ping/:target, analyze-ippinger)
-    │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest
+    │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest + X-Settings-Persisted header, unknown key → 400 (P3-6, P3-7)
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
     │       ├── schemas/
     │       │   ├── config.test.ts     -- Zod v4 config schema validation tests (incl. cors-allowed-origins origin validation: well-formed accepted, path/credentials/non-http/bare-host/non-array/non-string rejected, P3-5)
@@ -186,7 +186,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 **SettingsStore** (`services/settingsStore.ts`) — PostgreSQL-backed persistence for application settings:
 - Connects to PostgreSQL database, creates target DB/table if needed, seeds defaults on first run
 - `init()` builds the pool in a local variable and only assigns module-level `pool` after full success — `pool !== null` means persistence is initialized and usable. On failure the client is released, the pool is closed, `pool` stays null, and the service runs in real writable in-memory mode
-- `getSettings()` returns deep clone; `patchSettings(updates)` merges partial updates and persists to DB
+- `getSettings()` returns deep clone; `patchSettings(updates)` merges partial updates and persists to DB; `isPersistenceAvailable()` reports `pool !== null` so the settings controller can report the persistence state of each update (P3-6)
 - Updates are serialized in-process via a promise queue: concurrent PATCHes each observe the latest committed state (no lost updates), and a failed update rethrows to its own caller without blocking subsequent ones
 - Graceful degradation: DB unavailability falls back to in-memory defaults without crashing
 - Exposed via three routes: `GET /ui/settings`, `GET /ui/settings-schema`, `PATCH /ui/settings-update`
@@ -258,7 +258,7 @@ HTTP request → middleware (request ID, rate limit, body validation)
 |--------|-------|-------------|
 | GET | `/ui/settings` | All application settings (merged from DB + defaults) |
 | GET | `/ui/settings-schema` | Setting definitions with name, default, range, and description for dynamic form generation |
-| PATCH | `/ui/settings-update` | Partial update — only fields in body are changed; persists to DB, returns merged result |
+| PATCH | `/ui/settings-update` | Partial update — only fields in body are changed; unknown keys are rejected with 400 (strict schema); persists to DB, returns merged result with `X-Settings-Persisted` header (`true` = PostgreSQL, `false` = in-memory degraded mode) |
 
 ### Configuration Routes (`/api/*`)
 
@@ -400,6 +400,8 @@ case-sensitive: true
 - **`dodsonlabs/` is a shared library** — cloned from `http://10.10.10.7:30008/sensor-services/dodson-labs-core.git` (main branch). Excluded from ESLint and test coverage (shared library, not a git submodule). Clone manually: `git clone --branch main http://10.10.10.7:30008/sensor-services/dodson-labs-core.git && mv dodson-labs-core dodsonlabs`.
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, rate limiting, request ID propagation, and body validation. This is a documented, accepted deployment decision: the service runs only on a trusted private LAN, and network segmentation/firewall rules are the access-control boundary for the configuration endpoints (see the README "Security and Deployment Assumptions" section).
 - **CORS is restricted to configured origins (P3-5)** — `cors({ origin: cors-allowed-origins })` replaces the old unrestricted `cors()`. Each `cors-allowed-origins` entry must be a well-formed http(s) origin (`scheme://host[:port]`, no path/credentials) — validated by Zod at startup so a malformed entry fails fast. A request whose `Origin` is in the list gets `Access-Control-Allow-Origin` reflecting it; a disallowed origin gets NO CORS header (the browser then blocks the cross-origin response / preflight); a non-browser request (no `Origin` header — curl, the pinger service, server-to-server) is unaffected. When the key is absent the allowlist is empty, so no cross-origin browser origin is authorized (secure default) — set the web UI origin(s) in config to enable browser access. Only `origin` is constrained; default allowed methods/headers are unchanged.
+- **Settings updates report persistence state (P3-6)** — `PATCH /ui/settings-update` sets the `X-Settings-Persisted` header: `true` when the update was written to PostgreSQL, `false` when it was only applied in-memory because the database is unavailable (the value will not survive a restart). The flag comes from `settingsStore.isPersistenceAvailable()` (`pool !== null`). The response body shape is intentionally unchanged (still the merged settings object, which the web app's `transformSettings()` reads flat keys from), so the flag rides in a header instead of a `{ settings, persisted }` wrapper.
+- **The settings update schema is strict (P3-7)** — `appSettingsUpdateSchema` is `.strict()`, so an unknown key (e.g. a typo'd `them` for `theme`) is rejected with 400 `Invalid settings update: …` instead of being silently stripped and left at its current value. Known keys keep their partial-update semantics (only keys present are changed); a body mixing a known and an unknown key is rejected as a whole and nothing is applied.
 - **No CI/CD pipeline** — no GitHub Actions, GitLab CI, or other automation.
 - **All logging goes through Winston** — `error`/`warn`/`info`/`debug` levels, console transport always active, optional Loki transport. `handle_mqtt_message_log()` in MqttNetworking forwards sensor application logs at the appropriate level; controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level, default `debug`) config keys.
 - **Sensor commands use event-based completion** — `MqttCommandControl.waitForCompletion()` with a 10-second hard safety cap via `AbortController`. Replaces the old 1-second polling loop.

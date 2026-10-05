@@ -6,7 +6,7 @@
 import type express from "express";
 import { Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
-import { getSettings, patchSettings } from "../services/settingsStore";
+import { getSettings, patchSettings, isPersistenceAvailable } from "../services/settingsStore";
 import { appSettingsUpdateSchema, SETTINGS_SCHEMA } from "../schemas/settings";
 import type { ZodIssue } from "zod";
 
@@ -71,7 +71,16 @@ export async function getSettingsSchema(_req: express.Request, res: express.Resp
 
 /**
  * PATCH /ui/settings-update — Partial update of application settings.
- * Only the fields present in the request body are updated; missing keys retain their current values.
+ * Only the fields present in the request body are updated; missing keys retain
+ * their current values. Unknown keys are REJECTED (400) — the update schema is
+ * strict (P3-7), so a typo'd or otherwise unrecognized key fails instead of
+ * silently no-op'ing.
+ *
+ * On success the response body is the merged settings object (shape unchanged
+ * for existing clients), and the `X-Settings-Persisted` header reports whether
+ * the update was written to PostgreSQL (`true`) or only applied in-memory
+ * because the database is unavailable (`false` — the value will not survive a
+ * restart) (P3-6).
  */
 export async function updateSettings(req: express.Request, res: express.Response) {
     const updates = req.body;
@@ -90,6 +99,13 @@ export async function updateSettings(req: express.Request, res: express.Response
 
     try {
         const merged = await patchSettings(parsed.data);
+
+        // P3-6: explicitly tell the caller whether this update was persisted to
+        // PostgreSQL or only applied in-memory (degraded mode — lost on
+        // restart). The response body shape is intentionally unchanged (still
+        // the merged settings object) so existing clients keep working; the
+        // persistence flag is carried in a header instead.
+        res.setHeader("X-Settings-Persisted", String(isPersistenceAvailable()));
 
         res.status(OK);
         res.contentType(Json);

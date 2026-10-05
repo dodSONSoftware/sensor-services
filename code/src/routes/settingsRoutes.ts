@@ -28,7 +28,7 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/ui/settings-update",
-            "description": "PATCH partial update of application settings. Returns full merged result."
+            "description": "PATCH partial update of application settings. Unknown keys are rejected (400). Returns full merged result; X-Settings-Persisted header reports whether the update reached PostgreSQL."
         }
     ]
 };
@@ -138,7 +138,7 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          * /ui/settings-update:
          *   patch:
          *     summary: Partially update application settings
-         *     description: Send only the fields you want to change. Missing keys retain their current values. Returns the full merged result.
+         *     description: Send only the fields you want to change. Missing keys retain their current values. Unknown keys are rejected with 400 — the update schema is strict, so a typo'd key fails instead of being silently dropped. Returns the full merged result; the X-Settings-Persisted header reports whether the update was written to PostgreSQL (true) or only applied in-memory because the database is unavailable (false).
          *     requestBody:
          *       required: true
          *       content:
@@ -163,10 +163,25 @@ export class CreateSettingsRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Updated application settings (full merged result)
+         *         headers:
+         *           X-Settings-Persisted:
+         *             description: "true" when the update was written to PostgreSQL, "false" when only applied in-memory (degraded mode — the value will not survive a restart).
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
          *               type: object
+         *       400:
+         *         description: Validation failure — an unknown settings key or an out-of-range value
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          *       500:
          *         description: Database persistence failure
          *         content:

@@ -10,10 +10,12 @@ export function createMockRes(): {
   statusCalls: number[];
   contentTypeCalls: string[];
   sendCalls: unknown[];
+  headerCalls: Record<string, unknown>;
 } {
   const statusCalls: number[] = [];
   const contentTypeCalls: string[] = [];
   const sendCalls: unknown[] = [];
+  const headerCalls: Record<string, unknown> = {};
 
   const mockRes: Partial<Response> = {
     status: jest.fn().mockImplementation((code: number) => {
@@ -22,6 +24,10 @@ export function createMockRes(): {
     }),
     contentType: jest.fn().mockImplementation((type: string) => {
       contentTypeCalls.push(type);
+      return mockRes;
+    }),
+    setHeader: jest.fn().mockImplementation((name: string, value: unknown) => {
+      headerCalls[name] = value;
       return mockRes;
     }),
     send: jest.fn().mockImplementation((body: unknown) => {
@@ -39,6 +45,7 @@ export function createMockRes(): {
     get statusCalls() { return statusCalls; },
     get contentTypeCalls() { return contentTypeCalls; },
     get sendCalls() { return sendCalls; },
+    get headerCalls() { return headerCalls; },
   };
 }
 

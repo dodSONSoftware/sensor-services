@@ -70,6 +70,11 @@ export const telemetrySettingsSchema = z.object({
 /**
  * Schema for partial updates - no defaults, all fields optional.
  * Used when receiving PATCH requests where only changed fields should be applied.
+ *
+ * Strict (P3-7): unknown keys are REJECTED rather than silently stripped, so a
+ * typo'd key (e.g. "them" instead of "theme") or an unrecognized setting fails
+ * the request with a 400 instead of being a silent no-op. Valid known keys keep
+ * their partial-update semantics (only the keys present are changed).
  */
 export const appSettingsUpdateSchema = z.object({
     theme: z.enum(["light", "dark"]).optional(),
@@ -91,7 +96,7 @@ export const appSettingsUpdateSchema = z.object({
     "telemetry.air": z.array(telemetryItemSchema).optional(),
     "telemetry.water": z.array(telemetryItemSchema).optional(),
     "telemetry.light": z.array(telemetryItemSchema).optional(),
-});
+}).strict();
 
 /**
  * Combined application settings schema with defaults for partial updates.
