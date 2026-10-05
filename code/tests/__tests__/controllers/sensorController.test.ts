@@ -599,6 +599,109 @@ describe("sensor controller integration (error paths, already-running)", () => {
     });
   });
 
+  describe("async publish failure (P2-1 publish race)", () => {
+    // The broker was connected when the gate ran and the slot was claimed, but
+    // the connection dropped before the QoS-0 publish landed. mqtt.js reports
+    // that failure ASYNCHRONOUSLY through the publish callback; the controller
+    // must surface it as a 503 (never a successful []) and release the slot at
+    // the failure point instead of waiting out the silence/hard timeout.
+    function makeAsyncPublishNetwork(
+      publishImpl: (topic: string, msg: unknown) => Promise<void> | void
+    ): { network: MqttNetworking; control: IMqttCommandControl } {
+      const control: IMqttCommandControl = {
+        is_running: false,
+        is_timed_out: true,
+        timeout: null,
+        results: [{ source: "test", payload: {} }],
+        claim: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+          if (this.is_running) return false;
+          this.is_running = true;
+          return true;
+        }),
+        initialize: jest.fn(),
+        deinitialize: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+          this.is_running = false;
+        }),
+        clear_results: jest.fn(),
+        restart_clock: jest.fn(),
+        cancel_clock: jest.fn(),
+        waitForCompletion: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const network = {
+        mqtt_topic_command: "iot/v3/command",
+        mqtt_topic_command_response: "iot/v3/command-response",
+        is_connected: jest.fn().mockReturnValue(true),
+        prometheus_server_ready: jest.fn().mockReturnValue(true),
+        publish_mqtt_message: jest.fn(publishImpl),
+        close: jest.fn(),
+        get_cr_dude: jest.fn().mockReturnValue(control),
+      } as unknown as MqttNetworking;
+
+      return { network, control };
+    }
+
+    it("get path: publish rejects asynchronously (broker gone) -> 503, slot released, no wait", async () => {
+      const { network, control } = makeAsyncPublishNetwork(
+        () => Promise.reject(new Error("No connection to broker"))
+      );
+      const res = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res.status).toBe(503);
+      expect(res.body).toHaveProperty("error", "MQTT broker unavailable");
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      // The failure surfaces before any silence/hard wait, and the slot is
+      // released immediately at the failure point.
+      expect(control.waitForCompletion).not.toHaveBeenCalled();
+      expect(control.deinitialize).toHaveBeenCalled();
+      expect(control.is_running).toBe(false);
+    });
+
+    it("post path: publish rejects asynchronously (broker gone) -> 503, slot released", async () => {
+      const { network, control } = makeAsyncPublishNetwork(
+        () => Promise.reject(new Error("No connection to broker"))
+      );
+      const res = await hitPostItRoute(network, "/sensors/write-config/Soil-1", { source: "Soil-1" });
+      expect(res.status).toBe(503);
+      expect(res.body).toHaveProperty("error", "MQTT broker unavailable");
+      expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      expect(control.waitForCompletion).not.toHaveBeenCalled();
+      expect(control.deinitialize).toHaveBeenCalled();
+      expect(control.is_running).toBe(false);
+    });
+
+    it("command slot is reusable immediately after an async publish failure", async () => {
+      let publishCount = 0;
+      const { network, control } = makeAsyncPublishNetwork(() => {
+        publishCount += 1;
+        if (publishCount === 1) {
+          return Promise.reject(new Error("No connection to broker"));
+        }
+        return Promise.resolve();
+      });
+
+      const res1 = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res1.status).toBe(503);
+      expect(control.is_running).toBe(false);
+
+      // The slot is free, so the next same-type command claims it immediately
+      // and completes normally (no hang waiting on the failed command's slot).
+      const res2 = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res2.status).toBe(200);
+      expect(publishCount).toBe(2);
+    });
+
+    it("a generic (non-disconnect) async publish failure stays a 500, not a 503", async () => {
+      const { network, control } = makeAsyncPublishNetwork(
+        () => Promise.reject(new Error("some other publish fault"))
+      );
+      const res = await hitGetItRoute(network, "/sensors/get-details");
+      expect(res.status).toBe(500);
+      expect(res.body).toHaveProperty("error", "some other publish fault");
+      expect(control.deinitialize).toHaveBeenCalled();
+      expect(control.is_running).toBe(false);
+    });
+  });
+
   describe("update-config deprecation", () => {
     it("should return 501 and publish nothing to MQTT", async () => {
       const network = makeMockNetwork();

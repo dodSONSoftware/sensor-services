@@ -90,7 +90,22 @@ export function isBroadcastTarget(target: string): boolean {
     return decoded.trim().toLowerCase() === "*";
 }
 
-function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
+/**
+ * True when a rejected MQTT publish means the broker connection was lost —
+ * the QoS-0 command lost the race with a disconnect. mqtt.js reports that as
+ * "No connection to broker" (and "client disconnecting" during an in-progress
+ * close); a client that is now disconnected is classified the same way. Any
+ * other publish failure is a genuine fault (500).
+ */
+function isBrokerUnavailablePublishError(error: unknown, network: MqttNetworking): boolean {
+    const message = ensureError(error).message.toLowerCase();
+    if (message.includes("no connection to broker") || message.includes("client disconnecting")) {
+        return true;
+    }
+    return !network.is_connected();
+}
+
+async function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<string, unknown>, network: MqttNetworking) {
     // Record the command id so incoming responses can be correlated with this
     // request — MqttNetworking ignores responses carrying any other id
     const command_id = mqtt_request["command_id"] !== undefined && mqtt_request["command_id"] !== null
@@ -102,12 +117,21 @@ function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Record<stri
 
     try {
         // publish mqtt request (dedup handled inline by publish_mqtt_message)
-        network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
+        // and await publication completion: with queueQoSZero disabled a QoS-0
+        // publish that loses the race with a broker disconnect fails
+        // asynchronously, and only awaiting surfaces that failure.
+        await network.publish_mqtt_message(network.mqtt_topic_command, mqtt_request);
     } catch (err) {
         // Publish failed AFTER initialize() ran: release the slot/state so the
         // failed command cannot hold the command slot and block every subsequent
         // command of this type, then propagate the error to the caller.
         dude.deinitialize();
+        // A publish that failed because the broker went away must surface as
+        // broker-unavailable (503), not a generic 500, so callers can tell the
+        // command never left the client.
+        if (isBrokerUnavailablePublishError(err, network)) {
+            throw new MqttBrokerUnavailableError();
+        }
         throw err;
     }
 }
@@ -183,7 +207,7 @@ async function mqtt_command_start_and_wait(
     command: string
 ): Promise<MqttCommandResult[]> {
     // start-it (initialize() clears last_sent_at — set it afterwards)
-    mqtt_command_start(dude, mqtt_request, network);
+    await mqtt_command_start(dude, mqtt_request, network);
 
     // record when the command was actually sent (for response metadata)
     dude.last_sent_at = new Date().toISOString();

@@ -224,7 +224,7 @@ export class MqttNetworking implements IMqttNetworking {
         }
     }
 
-    public publish_mqtt_message(topic: string, message: Record<string, any>): void {
+    public async publish_mqtt_message(topic: string, message: Record<string, any>): Promise<void> {
 
         // Log a safe representation of the message being published (for
         // debugging). A write-config command carries the sensor's complete
@@ -239,11 +239,31 @@ export class MqttNetworking implements IMqttNetworking {
         );
 
         try {
-            this.mqtt_client.publish(topic, JSON.stringify(message));
+            // Await publication completion. With queueQoSZero disabled, a QoS-0
+            // command published while the client is disconnected is NOT queued
+            // for later delivery — mqtt.js reports that failure ASYNCHRONOUSLY
+            // through the publish callback (e.g. "No connection to broker").
+            // The previous fire-and-forget call had no callback, so the failure
+            // was silently discarded: the command never reached the broker, yet
+            // the caller then waited for responses that could never arrive (a
+            // false success). Wrapping the callback in a promise makes the
+            // failure observable so the caller can fail the request (503).
+            await new Promise<void>((resolve, reject) => {
+                this.mqtt_client.publish(topic, JSON.stringify(message), (error) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve();
+                    }
+                });
+            });
         } catch (error) {
             const errMessage = `<publish_message> => ${sysFunc.ensureError(error).message}`;
             this.logger.write_error(this.originator, errMessage);
-            throw new Error(errMessage);
+            // Re-throw the ORIGINAL error (not a re-wrapped one) so callers can
+            // classify the failure by its message — the disconnect error is what
+            // a broker-unavailable 503 keys off of.
+            throw error;
         }
     }
 
@@ -880,17 +900,18 @@ export class MqttNetworking implements IMqttNetworking {
             "request_type": request_type,
         };
 
-        // Send response to V3 topic
-        try {
-            this.publish_mqtt_message(MqttNetworking.MQTT_TOPIC_INFO_RESPONSE_V3, {
-                ...response_header,
-                payload: response_payload,
-            });
-        } catch (error) {
+        // Send response to V3 topic. Fire-and-forget: this is a best-effort
+        // reply to a sensor's UTC-time query, so a publish failure is logged but
+        // not propagated. publish_mqtt_message now reports failures
+        // asynchronously, so the rejection is handled here.
+        this.publish_mqtt_message(MqttNetworking.MQTT_TOPIC_INFO_RESPONSE_V3, {
+            ...response_header,
+            payload: response_payload,
+        }).catch((error) => {
             this.logger.write_error(
                 this.originator,
                 `<handle_mqtt_message_info_request_v3> => Failed to send response: ${sysFunc.ensureError(error).message}`
             );
-        }
+        });
     }
 }

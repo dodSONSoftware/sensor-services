@@ -1074,6 +1074,8 @@ describe("MqttNetworking", () => {
         const publishedMessages: Array<{ topic: string; message: any }> = [];
         anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
             publishedMessages.push({ topic, message });
+            // Mirrors the real async publish_mqtt_message (always a Promise)
+            return Promise.resolve();
         };
 
         // Valid V3 utc_time request (captured shape from sensors_v4.json, iot/v3/info-request)
@@ -1235,6 +1237,8 @@ describe("MqttNetworking", () => {
         const publishedMessages: Array<{ topic: string; message: any }> = [];
         anyNetworking.publish_mqtt_message = (topic: string, message: any) => {
             publishedMessages.push({ topic, message });
+            // Mirrors the real async publish_mqtt_message (always a Promise)
+            return Promise.resolve();
         };
 
         // First request
@@ -1267,5 +1271,54 @@ describe("MqttNetworking", () => {
 
         // Second response should echo utc-hardware-002
         expect(publishedMessages[1].message["request_id"]).toBe("utc-hardware-002");
+    });
+
+    // P2-1: publish_mqtt_message must surface the ASYNCHRONOUS publish
+    // failure. A QoS-0 publish made while disconnected is reported by mqtt.js
+    // through the publish callback (not synchronously), so the old
+    // fire-and-forget call discarded the failure; the promise wrapper makes it
+    // observable to the caller.
+    describe("publish_mqtt_message async completion (P2-1)", () => {
+        function installPublishClient(publish: jest.Mock) {
+            (networking as any).mqtt_client = {
+                publish,
+                // Settle close() (both end(cb) and end(true, cb) forms) so the
+                // afterEach cleanup finishes without leaving a pending timer.
+                end: jest.fn((...args: unknown[]) => {
+                    const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
+                    cb?.();
+                }),
+            };
+        }
+
+        it("rejects when the publish callback reports a failure", async () => {
+            let publishCallback: ((err: Error | null) => void) | undefined;
+            installPublishClient(
+                jest.fn((_topic: string, _msg: string, cb: (err: Error | null) => void) => {
+                    publishCallback = cb;
+                })
+            );
+
+            const promise = networking.publish_mqtt_message("iot/v3/command", { a: 1 });
+            // The failure arrives asynchronously, after publish() has returned.
+            publishCallback!(new Error("No connection to broker"));
+
+            await expect(promise).rejects.toThrow("No connection to broker");
+        });
+
+        it("resolves when the publish callback reports success", async () => {
+            let publishCallback: ((err: Error | null) => void) | undefined;
+            installPublishClient(
+                jest.fn((_topic: string, _msg: string, cb: (err: Error | null) => void) => {
+                    publishCallback = cb;
+                })
+            );
+
+            const promise = networking.publish_mqtt_message("iot/v3/command", { a: 1 });
+            // The connected QoS-0 path invokes cb() with no error once written.
+            publishCallback!(null);
+
+            await expect(promise).resolves.toBeUndefined();
+        });
     });
 });

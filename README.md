@@ -1,8 +1,8 @@
-# Typescript SensorNET Services
+# SensorNET Services
 
 Series 4 - SensorNET Services
 
-**Release:** Carbon Falcon — firmware 4.12.29
+**Release:** Carbon Falcon — firmware 4.12.30
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
