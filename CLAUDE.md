@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.8)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.9)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -73,7 +73,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── express.ts   -- createMockRes(), createMockReq() helpers
     │   │   └── mqtt.ts      -- createMockMqttNetworking() helper (adds waitForCompletion, register_command_id)
     │   └── __tests__/
-    │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc)
+    │       ├── swagger.test.ts  -- setupSwagger(): served spec contains real route paths (not the stale empty doc), including /api/reload-config and /api/write-config
     │       ├── common/
     │       │   ├── global.test.ts -- AsyncLocalStorage request ID tests, createLogger(), setReqIdStore()
     │       │   ├── metrics.test.ts -- API metrics middleware: unmatched routes collapse to the "unmatched" label sentinel

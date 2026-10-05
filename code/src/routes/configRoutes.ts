@@ -69,7 +69,7 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   example: true
          *                 message:
          *                   type: string
-         *                   example: Configuration reloaded; restart required for: mqtt-broker-ip-address
+         *                   example: "Configuration reloaded; restart required for: mqtt-broker-ip-address"
          *                 restart_required:
          *                   type: boolean
          *                   example: true
@@ -191,7 +191,7 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   example: true
          *                 message:
          *                   type: string
-         *                   example: Configuration saved; restart required for: express-port
+         *                   example: "Configuration saved; restart required for: express-port"
          *                 restart_required:
          *                   type: boolean
          *                   example: true

@@ -28,6 +28,10 @@ describe("setupSwagger", () => {
         expect(res.text).toContain('"/about"');
         expect(res.text).toContain('"/sensors/get-details"');
         expect(res.text).toContain('"/api/read-config"');
+        // These two paths were silently dropped from the spec when an unquoted
+        // example value contained ": " (YAMLSemanticError in swagger-jsdoc).
+        expect(res.text).toContain('"/api/reload-config"');
+        expect(res.text).toContain('"/api/write-config"');
         // The server URL is populated from the explicit override
         expect(res.text).toContain("http://127.0.0.1:32000/");
     });
