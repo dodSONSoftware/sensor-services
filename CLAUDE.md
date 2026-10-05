@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.19)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.20)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -46,7 +46,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── logController.ts      -- GET /sensors/logs/:source (Loki queries; source allowlist-validated against LogQL injection, level allowlist, fetch timeout via AbortSignal; loki-url is never logged verbatim — it may embed credentials)
     │   │   └── settingsController.ts -- GET /ui/settings, GET /ui/settings-schema, PATCH /ui/settings-update
     │   ├── middleware/
-    │   │   └── middleware.ts -- Global middleware in deliberate order (P3-2): request ID -> HTTP metrics (optional, passed in) -> CORS -> rate limiting (default 100 req/15min) -> JSON parser (configurable body limit) -> request logger -> body validation (Zod)
+    │   │   └── middleware.ts -- Global middleware in deliberate order (P3-2): request ID -> HTTP metrics (optional, passed in) -> CORS (restricted to cors-allowed-origins, P3-5) -> rate limiting (default 100 req/15min) -> JSON parser (configurable body limit) -> request logger -> body validation (Zod)
     │   ├── routes/
     │   │   ├── generalRoutes.ts   -- /about, /date-local, /date-utc, /health, /metrics (dash-variant aliases for date routes)
     │   │   ├── sensorRoutes.ts    -- /sensors/* (MQTT command routes)
@@ -89,7 +89,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── pingerController.test.ts   -- analyzeIt(), createAnalyzeResult(), fetchItOnly non-OK responses, getAnalyzeIpPinger degradation on malformed upstream bodies (Zod-validated), camelCase ipAddress normalization
     │       │   └── settingsController.test.ts -- getAllSettings, getSettingsScheme, updateSettings
     │       ├── middleware/
-    │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through) + rate-limit exemption for /health and /metrics (P2-4) + middleware ordering: 429 carries X-Request-ID, 429 counted by metrics, Swagger passes through the pipeline, rate limiting precedes the JSON parser (P3-2)
+    │       │   └── middleware.test.ts   -- global body-validation pipeline via real CreateMiddleware + supertest (bodyless GETs reach handlers, array body → 400, body-requiring routes own their 400) + direct _validateBodyMiddleware tests (missing body passes through) + rate-limit exemption for /health and /metrics (P2-4) + middleware ordering: 429 carries X-Request-ID, 429 counted by metrics, Swagger passes through the pipeline, rate limiting precedes the JSON parser (P3-2) + CORS origin restriction: allowed/unknown/no-origin, preflight for mutating endpoint, secure default when unset (P3-5)
     │       ├── routes/
     │       │   ├── configRoutes.test.ts       -- /api/reload-config, /api/read-config, /api/write-config via supertest
     │       │   ├── generalRoutes.test.ts      -- Integration tests via supertest
@@ -98,7 +98,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
     │       ├── schemas/
-    │       │   ├── config.test.ts     -- Zod v4 config schema validation tests
+    │       │   ├── config.test.ts     -- Zod v4 config schema validation tests (incl. cors-allowed-origins origin validation: well-formed accepted, path/credentials/non-http/bare-host/non-array/non-string rejected, P3-5)
     │       │   ├── configLoader.test.ts -- readConfigWithSecrets(): merge/override, absent/empty/corrupt secrets, missing-required-secret fails validation
     │       │   └── postBody.test.ts   -- Zod POST body schema tests
     │       ├── services/
@@ -379,12 +379,19 @@ case-sensitive: true
 # rate-limit-window-ms: 900000    # 15 minutes in milliseconds
 # rate-limit-max: 100              # max requests per window
 
+# Optional: CORS allowed origins (browser UIs only). Each entry must be an
+# http(s) origin of the form scheme://host[:port] (no path/credentials). When
+# absent, NO cross-origin browser origin is authorized (secure default);
+# non-browser clients (no Origin header) are unaffected.
+# cors-allowed-origins:
+#   - "http://10.10.10.7:4200"
+
 # Optional: silence timeout for sensor command responses (default: 1500ms)
 # command-silence-timeout-ms: 5000
 
 **Required config keys:** `express-port` (positive int), `log-level` (error/warn/info/debug), `prometheus-port` (positive int), `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive` (boolean), `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
-**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`.
+**Optional config keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`, `cors-allowed-origins` (list of http(s) origins; empty/absent = no cross-origin browser origin authorized).
 
 **Docker config mount:** `code/docker-compose.yml` mounts host dir `/mnt/sensor-services/` → `/app/configs/`; app reads `config.yml` from `/app/configs/config.yml`. Settings persistence stores to PostgreSQL database.
 
@@ -392,6 +399,7 @@ case-sensitive: true
 
 - **`dodsonlabs/` is a shared library** — cloned from `http://10.10.10.7:30008/sensor-services/dodson-labs-core.git` (main branch). Excluded from ESLint and test coverage (shared library, not a git submodule). Clone manually: `git clone --branch main http://10.10.10.7:30008/sensor-services/dodson-labs-core.git && mv dodson-labs-core dodsonlabs`.
 - **No authentication or authorization** — middleware only provides CORS, JSON parsing, rate limiting, request ID propagation, and body validation. This is a documented, accepted deployment decision: the service runs only on a trusted private LAN, and network segmentation/firewall rules are the access-control boundary for the configuration endpoints (see the README "Security and Deployment Assumptions" section).
+- **CORS is restricted to configured origins (P3-5)** — `cors({ origin: cors-allowed-origins })` replaces the old unrestricted `cors()`. Each `cors-allowed-origins` entry must be a well-formed http(s) origin (`scheme://host[:port]`, no path/credentials) — validated by Zod at startup so a malformed entry fails fast. A request whose `Origin` is in the list gets `Access-Control-Allow-Origin` reflecting it; a disallowed origin gets NO CORS header (the browser then blocks the cross-origin response / preflight); a non-browser request (no `Origin` header — curl, the pinger service, server-to-server) is unaffected. When the key is absent the allowlist is empty, so no cross-origin browser origin is authorized (secure default) — set the web UI origin(s) in config to enable browser access. Only `origin` is constrained; default allowed methods/headers are unchanged.
 - **No CI/CD pipeline** — no GitHub Actions, GitLab CI, or other automation.
 - **All logging goes through Winston** — `error`/`warn`/`info`/`debug` levels, console transport always active, optional Loki transport. `handle_mqtt_message_log()` in MqttNetworking forwards sensor application logs at the appropriate level; controlled by `forward-sensor-logs` (on/off) and `forward-sensor-logs-level` (minimum level, default `debug`) config keys.
 - **Sensor commands use event-based completion** — `MqttCommandControl.waitForCompletion()` with a 10-second hard safety cap via `AbortController`. Replaces the old 1-second polling loop.

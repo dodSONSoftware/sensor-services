@@ -372,3 +372,72 @@ describe("CreateMiddleware — middleware ordering (P3-2)", () => {
         expect(r2.status).toBe(429);
     });
 });
+
+describe("CreateMiddleware — CORS origin restriction (P3-5)", () => {
+    const ALLOWED = "http://10.10.10.7:4200";
+    const UNKNOWN = "http://evil.example.com";
+
+    function buildCorsApp(allowedOrigins?: string[]): express.Application {
+        const corsConfig = validateConfig({
+            ...config,
+            // undefined (key omitted) -> the secure default (empty allowlist).
+            "cors-allowed-origins": allowedOrigins,
+        });
+        const app = express();
+        new CreateMiddleware(app, corsConfig);
+        new CreateGeneralRoutes(app, createMockMqttNetworking());
+        return app;
+    }
+
+    it("allows a configured origin (Access-Control-Allow-Origin reflects it)", async () => {
+        const app = buildCorsApp([ALLOWED]);
+        const res = await request(app).get("/about").set("Origin", ALLOWED);
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBe(ALLOWED);
+    });
+
+    it("omits CORS authorization for an unknown origin", async () => {
+        const app = buildCorsApp([ALLOWED]);
+        const res = await request(app).get("/about").set("Origin", UNKNOWN);
+        // The API-level request still succeeds, but no CORS header is emitted,
+        // so the browser blocks the cross-origin read.
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("does not affect non-browser clients (no Origin header)", async () => {
+        const app = buildCorsApp([ALLOWED]);
+        const res = await request(app).get("/about");
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("defaults to no allowed origins when cors-allowed-origins is unset", async () => {
+        const app = buildCorsApp(); // undefined -> empty allowlist
+        const res = await request(app).get("/about").set("Origin", ALLOWED);
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("authorizes a preflight for a configured origin on a mutating endpoint", async () => {
+        const app = buildCorsApp([ALLOWED]);
+        const res = await request(app)
+            .options("/ui/settings-update")
+            .set("Origin", ALLOWED)
+            .set("Access-Control-Request-Method", "PATCH");
+        expect(res.status).toBe(204);
+        expect(res.headers["access-control-allow-origin"]).toBe(ALLOWED);
+    });
+
+    it("does not authorize a preflight for an unknown origin", async () => {
+        const app = buildCorsApp([ALLOWED]);
+        const res = await request(app)
+            .options("/ui/settings-update")
+            .set("Origin", UNKNOWN)
+            .set("Access-Control-Request-Method", "PATCH");
+        // cors still ends the preflight (204) but omits the allow-origin header,
+        // so the browser rejects it and never sends the actual request.
+        expect(res.status).toBe(204);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+});

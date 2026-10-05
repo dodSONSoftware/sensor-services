@@ -6,6 +6,30 @@
 import { z } from "zod";
 
 /**
+ * A single allowed CORS origin: an absolute http(s) URL of the form
+ * scheme://host[:port] with no path, query, credentials, or fragment — e.g.
+ * "http://10.10.10.7:3000" or "https://example.com". Validated at startup so a
+ * malformed entry (typo, trailing path, embedded credentials, non-web scheme)
+ * fails fast instead of silently mis-configuring CORS (P3-5).
+ */
+const corsOriginSchema = z.string().refine((value) => {
+    try {
+        const u = new URL(value);
+        return (
+            (u.protocol === "http:" || u.protocol === "https:") &&
+            u.hostname !== "" &&
+            u.username === "" &&
+            u.password === "" &&
+            u.pathname === "/" &&
+            u.search === "" &&
+            u.hash === ""
+        );
+    } catch {
+        return false;
+    }
+}, "cors-allowed-origins entries must be http(s) origins of the form scheme://host[:port]");
+
+/**
  * Zod schema for config.yml.
  * All required keys must match their expected types.
  * Strict: unknown keys are rejected rather than silently stripped, so a typo
@@ -48,6 +72,7 @@ export const configSchema = z.strictObject({
         error: "forward-sensor-logs-level must be one of: error, warn, info, debug",
     }).optional(),
     "express-body-limit": z.string().optional(),
+    "cors-allowed-origins": z.array(corsOriginSchema).optional(),
     "rate-limit-window-ms": z.number({
         error: "rate-limit-window-ms must be a number",
     }).int("rate-limit-window-ms must be an integer")

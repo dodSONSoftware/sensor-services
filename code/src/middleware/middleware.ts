@@ -74,8 +74,18 @@ export class CreateMiddleware extends RoutesCreatorBase {
             this.app.use(_metricsMiddleware);
         }
 
-        // 3. add CORS
-        this.app.use(cors());
+        // 3. add CORS — restricted to the configured allowed origins (P3-5).
+        //    A request whose Origin is in the list gets Access-Control-Allow-Origin
+        //    reflecting it; a disallowed Origin gets NO CORS header, so the browser
+        //    blocks the cross-origin response; a non-browser request (no Origin
+        //    header — curl, the pinger service, server-to-server calls) is
+        //    unaffected and still works. When `cors-allowed-origins` is unset the
+        //    allowlist is empty, so no cross-origin browser request is authorized
+        //    (secure default): set the web UI origin(s) in config to enable it.
+        //    Only `origin` is constrained; the default allowed methods/headers are
+        //    left unchanged so existing clients keep working.
+        const allowedOrigins = _config["cors-allowed-origins"] ?? [];
+        this.app.use(cors({ origin: allowedOrigins }));
 
         // 4. add rate limiting (configurable, default 100 requests per 15
         //    minutes). Runs BEFORE the JSON body parser (below) so an over-limit

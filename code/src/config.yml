@@ -46,6 +46,15 @@ sensor-source-valid-chars-regex: "a-zA-Z0-9._-"
 rate-limit-window-ms: 600000    # 10 minutes in milliseconds
 rate-limit-max: 250             # max requests per window
 
+# Optional: CORS allowed origins (browser UIs only). Each entry must be an
+# http(s) origin of the form scheme://host[:port] (no path/credentials). When
+# this key is absent, NO cross-origin browser origin is authorized (secure
+# default) — non-browser clients (no Origin header) are unaffected. Set the
+# web UI origin(s) here to allow the browser app to call this API cross-origin:
+# cors-allowed-origins:
+#   - "http://10.10.10.7:4200"
+#   - "https://sensors.example.com"
+
 # Optional: silence timeout for sensor command responses (default: 1500ms)
 command-silence-timeout-ms: 5000
 

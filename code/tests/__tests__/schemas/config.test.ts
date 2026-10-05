@@ -131,4 +131,60 @@ describe("configSchema", () => {
     const config = { ...baseConfig, "command-silence-timeout-ms": "5000" };
     expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be a number");
   });
+
+  // ---- cors-allowed-origins (P3-5)
+
+  it("should accept config without cors-allowed-origins (optional)", () => {
+    const result = validateConfig(baseConfig);
+    expect(result).toBeDefined();
+    expect(result["cors-allowed-origins"]).toBeUndefined();
+  });
+
+  it("should accept well-formed http(s) origins", () => {
+    const config = {
+      ...baseConfig,
+      "cors-allowed-origins": ["http://10.10.10.7:4200", "https://sensors.example.com"],
+    };
+    const result = validateConfig(config);
+    expect(result["cors-allowed-origins"]).toEqual([
+      "http://10.10.10.7:4200",
+      "https://sensors.example.com",
+    ]);
+  });
+
+  it("should accept an empty cors-allowed-origins list (deny all cross-origin)", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": [] };
+    const result = validateConfig(config);
+    expect(result["cors-allowed-origins"]).toEqual([]);
+  });
+
+  it("should reject an origin with a path", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": ["http://10.10.10.7:4200/ui"] };
+    expect(() => validateConfig(config)).toThrow(/cors-allowed-origins/);
+  });
+
+  it("should reject an origin with embedded credentials", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": ["http://user:pass@10.10.10.7:4200"] };
+    expect(() => validateConfig(config)).toThrow(/cors-allowed-origins/);
+  });
+
+  it("should reject a non-http(s) scheme", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": ["ftp://10.10.10.7"] };
+    expect(() => validateConfig(config)).toThrow(/cors-allowed-origins/);
+  });
+
+  it("should reject a bare hostname (no scheme)", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": ["10.10.10.7:4200"] };
+    expect(() => validateConfig(config)).toThrow(/cors-allowed-origins/);
+  });
+
+  it("should reject a non-array cors-allowed-origins", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": "http://10.10.10.7:4200" };
+    expect(() => validateConfig(config)).toThrow();
+  });
+
+  it("should reject a non-string entry in cors-allowed-origins", () => {
+    const config = { ...baseConfig, "cors-allowed-origins": [4200] };
+    expect(() => validateConfig(config)).toThrow();
+  });
 });
