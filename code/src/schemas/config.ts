@@ -102,10 +102,17 @@ export const configSchema = z.strictObject({
     }).int("fetch-timeout-ms must be an integer")
         .positive("fetch-timeout-ms must be greater than 0")
         .optional(),
+    // The HTTP command layer enforces an absolute 10s hard cap (see __max_wait_ms
+    // in sensorController). A silence timeout above that can never be honored —
+    // the request is force-terminated at 10s — so reject it at startup rather
+    // than silently accept an ineffective value. The cap is inlined here (not
+    // imported from the controller) to keep the schemas -> controllers
+    // dependency direction clean; the two 10_000 values must stay in sync.
     "command-silence-timeout-ms": z.number({
         error: "command-silence-timeout-ms must be a number",
     }).int("command-silence-timeout-ms must be an integer")
         .positive("command-silence-timeout-ms must be greater than 0")
+        .max(10_000, "command-silence-timeout-ms must not exceed 10000 (the 10s HTTP command hard cap)")
         .optional(),
     "db-host": z.string({
         error: "db-host must be a string",

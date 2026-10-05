@@ -145,6 +145,31 @@ describe("configSchema", () => {
     expect(result["command-silence-timeout-ms"]).toBe(1);
   });
 
+  // P2-2: the HTTP command layer has a hard 10s cap, so a silence timeout above
+  // 10000ms can never be honored. Validation must reject it at startup instead
+  // of silently accepting an ineffective value.
+  it("should accept command-silence-timeout-ms just below the cap (9999)", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 9_999 };
+    const result = validateConfig(config);
+    expect(result["command-silence-timeout-ms"]).toBe(9_999);
+  });
+
+  it("should accept command-silence-timeout-ms at the cap boundary (10000)", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 10_000 };
+    const result = validateConfig(config);
+    expect(result["command-silence-timeout-ms"]).toBe(10_000);
+  });
+
+  it("should reject command-silence-timeout-ms just above the cap (10001)", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 10_001 };
+    expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must not exceed 10000");
+  });
+
+  it("should reject command-silence-timeout-ms far above the cap (15000)", () => {
+    const config = { ...baseConfig, "command-silence-timeout-ms": 15_000 };
+    expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must not exceed 10000");
+  });
+
   it("should reject command-silence-timeout-ms of 0", () => {
     const config = { ...baseConfig, "command-silence-timeout-ms": 0 };
     expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be greater than 0");
