@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.11)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.12)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -31,7 +31,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     ├── src/
     │   ├── index.ts       -- Entry point: config load, Zod validation, logger init, MQTT init, Swagger, middleware, API metrics, routes, listen, graceful shutdown (15s hard timeout, re-entrancy guard, exits after runGracefulShutdown)
     │   ├── version.ts     -- App version source of truth: APP_VERSION + APP_NAME (release codename, derived per the codename scheme in .claude/commands/git-commit.md); package.json version kept in sync
-    │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, rate limiting, YAML format)
+    │   ├── config.yml     -- Runtime configuration (MQTT broker, topics, ports, rate limiting, YAML format); holds NO real secrets — credentials live in config-secrets.yml
+    │   ├── config-secrets.example.yml -- Tracked TEMPLATE for config-secrets.yml (placeholders only); copy to config-secrets.yml and fill in real values
     │   ├── swagger.ts     -- Swagger UI setup at /swagger (auto-derived from routable IP + port, overridable via config `swagger-server-url`)
     │   ├── common/
     │   │   ├── global.ts  -- Global logger singleton, AsyncLocalStorage request ID propagation, aboutDude() metadata (system_info now populated)
@@ -54,7 +55,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── logRoutes.ts       -- /sensors/logs/:source (Loki log queries)
     │   │   └── routeNotFound.ts   -- 404 handler (wired into app)
     │   ├── schemas/
-    │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn)
+    │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn); redactConfig() masks db-password/loki-url
+    │   │   ├── configLoader.ts  -- readConfigWithSecrets(): read base config.yml + merge optional sibling config-secrets.yml (override) -> unvalidated merged config
     │   │   ├── postBody.ts      -- Zod schemas for POST body validation
     │   │   └── settings.ts      -- Zod schemas + defaults + metadata for application settings (UI preferences + server connection details)
     │   ├── services/
@@ -96,6 +98,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
     │       ├── schemas/
     │       │   ├── config.test.ts     -- Zod v4 config schema validation tests
+    │       │   ├── configLoader.test.ts -- readConfigWithSecrets(): merge/override, absent/empty/corrupt secrets, missing-required-secret fails validation
     │       │   └── postBody.test.ts   -- Zod POST body schema tests
     │       ├── services/
     │       │   ├── settingsStore.test.ts     -- validateSettingsFromDb: nested/legacy key resolution, migrations, schema validation
@@ -154,7 +157,7 @@ The app connects to an MQTT broker for real-time sensor telemetry ingestion and 
 
 ### Startup Flow (`src/index.ts`)
 
-1. Read config from `/app/configs/config.yml` (falls back to `./dist/config.yml`) via `read_file_yaml()` returning typed `ReadFileResult`
+1. Read config from `/app/configs/config.yml` (falls back to `./dist/config.yml`) via `readConfigWithSecrets()` — merges the base file with an optional sibling `config-secrets.yml` (credentials), then validates the merged result
 2. Validate config with Zod v4: required keys (`mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `express-port`, `prometheus-port`, `case-sensitive`, `log-level`), MQTT topic strings must be non-empty, ports must be positive integers, `case-sensitive` must be boolean, `log-level` must be one of `error`/`warn`/`info`/`debug`. Optional keys: `swagger-server-url`, `loki-url`, `loki-enabled`, `forward-sensor-logs`, `forward-sensor-logs-level`, `express-body-limit`, `rate-limit-window-ms`, `rate-limit-max`, `sensor-source-max-length`, `sensor-source-valid-chars-regex`, `fetch-timeout-ms`, `command-silence-timeout-ms`
 3. Create global `Logger` instance via `createLogger(config)` — Winston-backed with `error`/`warn`/`info`/`debug` levels, optional Loki transport
 4. Create `MqttNetworking` instance (connects to MQTT broker, subscribes to command-response topic)
@@ -329,6 +332,8 @@ HTTP request → middleware (request ID, rate limit, body validation)
 
 **File:** `code/src/config.yml`
 
+**Secrets split (P1-4):** credentials are NOT stored in the tracked `config.yml`. They live in a **gitignored** `config-secrets.yml` (sibling of `config.yml`), which overrides the same keys in the base file at load time. The tracked `config-secrets.example.yml` is the template (placeholders only). Load order: base `config.yml` → optional `config-secrets.yml` (override) → validate the **merged** result against the full Zod schema. A missing required secret (e.g. `db-password`) fails validation at startup with a clear error. `config-secrets.yml` is gitignored and excluded from the Docker build context (`.dockerignore`), so no real secret is ever committed or baked into the image. For Docker, place `config-secrets.yml` in the mounted `/app/configs/` dir alongside `config.yml`.
+
 ```yaml
 # Main HTTP server port
 express-port: 32000
@@ -417,6 +422,7 @@ case-sensitive: true
 - **Config migrated from JSON to YAML** — `config.yml` is loaded via `read_file_yaml()` and validated with Zod v4 schemas in `src/schemas/config.ts`. The old `config.json` was replaced.
 - **Config writes are atomic** — `/api/write-config` uses `write_file_atomic()` (unique same-directory temp file + rename), so a failure mid-write can never truncate the live `config.yml`; the temp file is removed and the prior config preserved on failure.
 - **Secrets never reach the logs** — `redactSecrets()` (SystemFunctions.ts) recursively masks `SENSITIVE_SECRET_KEYS` (`wifi-password`, `password`, `db-password`, matched case-insensitively at any nesting depth) without mutating the input. `MqttNetworking.publish_mqtt_message()` logs a sanitized copy only: a `write-config` publish logs metadata (`{command, target, command_id}`) and every other command logs a redacted copy of the message. The MQTT message that is actually published is never touched. Incoming command-response configs are redacted with the same helper before logging.
+- **Config secrets are split out (P1-4)** — `readConfigWithSecrets()` (src/schemas/configLoader.ts) reads the base `config.yml` and merges an optional sibling `config-secrets.yml` (override) before the merged result is validated against the full Zod schema. The tracked `config.yml` holds no real credentials; `config-secrets.example.yml` is the tracked template. A missing required secret fails validation at startup (clear error, no silent fallback); a present-but-corrupt secrets file is a hard error. Both `index.ts` startup and `doReloadConfig()` use the merged loader. `config-secrets.yml` is gitignored and excluded from the Docker build context, so no real secret is committed or baked into the image.
 - **Request ID propagation** — every request gets a unique `X-Request-ID` (client-provided or generated UUID). Stored in `AsyncLocalStorage` so all log lines are traceable. Attached to `req.id` for downstream access.
 - **Rate limiting** — applied to all routes via `express-rate-limit`. Default: 100 requests per 15 minutes. Configurable via `rate-limit-window-ms` and `rate-limit-max`. Uses standard RFC 9110 headers (`RateLimit-*`).
 - **Body validation** — a present body is validated as a JSON object with Zod (`validatePostBody()`); returns 400 if a body is present but not a JSON object. A missing body is passed through untouched — "body required" is a route-level concern owned by each controller (e.g. `configController`'s write-config returns its own 400). Replaces `req.body` with the validated object.

@@ -6,10 +6,11 @@
 import fs from "fs";
 import { isDeepStrictEqual } from "util";
 import type express from "express";
-import { ensureError, read_file_yaml, write_file_atomic } from "../dodsonlabs/SystemFunctions";
+import { ensureError, write_file_atomic } from "../dodsonlabs/SystemFunctions";
 import { logger, getConfig, setConfig } from "../common/global";
 import type { z } from "zod";
 import { redactConfig, validateConfig, type configSchema } from "../schemas/config";
+import { readConfigWithSecrets } from "../schemas/configLoader";
 import type * as yamlModule from "js-yaml";
 
 // Config file paths to try (in order)
@@ -134,7 +135,9 @@ async function doReloadConfig(): Promise<ReloadResult> {
         return reloadFailure("Could not find config file (tried: " + CONFIG_PATHS.join(", ") + ")");
     }
 
-    const configResult = read_file_yaml<z.infer<typeof configSchema>>(configPath);
+    // Merge in an optional sibling config-secrets.yml so a reload sees the same
+    // (secret-complete) config the process started with.
+    const configResult = readConfigWithSecrets(configPath);
     if (configResult.data === null) {
         return reloadFailure("Failed to read config: " + (configResult.error ?? "unknown error"));
     }

@@ -22,8 +22,10 @@ import { runGracefulShutdown } from "./common/shutdown";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
-import { ensureError, read_file_yaml } from "./dodsonlabs/SystemFunctions";
+import { ensureError } from "./dodsonlabs/SystemFunctions";
 import { redactConfig, validateConfig, type configSchema } from "./schemas/config";
+import { readConfigWithSecrets } from "./schemas/configLoader";
+import fs from "fs";
 import type { z } from "zod";
 import { MqttNetworking } from "./dodsonlabs/MqttNetworking";
 import * as settingsStore from "./services/settingsStore";
@@ -60,13 +62,25 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 // **** start up code
 
 (async () => {
-    // read the configuration file (try container mount first, then CWD-relative)
-    let configResult = read_file_yaml<z.infer<typeof configSchema>>(
-        "/app/configs/config.yml"
-    );
-    if (configResult.data === null) {
-        configResult = read_file_yaml<z.infer<typeof configSchema>>("./dist/config.yml");
+    // Read the configuration file (try container mount first, then CWD-relative),
+    // merging in an optional sibling config-secrets.yml. The base file holds no
+    // real secrets; credentials live in the gitignored config-secrets.yml.
+    const CONFIG_BASE_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
+    const baseConfigPath = CONFIG_BASE_PATHS.find((p) => {
+        try {
+            fs.accessSync(p);
+            return true;
+        } catch {
+            return false;
+        }
+    });
+    if (!baseConfigPath) {
+        // eslint-disable-next-line no-console
+        console.error(`ERROR: Could not find config.yml (tried: ${CONFIG_BASE_PATHS.join(", ")}) — cannot start without configuration.`);
+        process.exit(1);
     }
+
+    const configResult = readConfigWithSecrets(baseConfigPath);
     if (configResult.data === null) {
         // eslint-disable-next-line no-console
         console.error(`ERROR: Could not read config.yml — ${configResult.error ?? "unknown error"} — cannot start without configuration.`);

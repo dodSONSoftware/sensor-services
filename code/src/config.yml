@@ -50,8 +50,9 @@ rate-limit-max: 250             # max requests per window
 command-silence-timeout-ms: 5000
 
 # PostgreSQL database for settings persistence
+# (db-password is a secret — it lives in the gitignored config-secrets.yml,
+#  which overrides this file; see config-secrets.example.yml for the template)
 db-host: "10.10.10.64"
 db-port: 5432
 db-name: "sensor_web_services"
 db-user: "appuser"
-db-password: "password"
