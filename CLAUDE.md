@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── skills/
 │       └── blt/           -- BLT skill driver (analyze → build → lint → test)
 └── code/                  -- Application source (all development happens here)
-    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.22)
+    ├── package.json       -- Dependencies, scripts, Volta config (Node 22.22.0, version 4.12.23)
     ├── tsconfig.json      -- ES2022, NodeNext, strict mode, noUnusedLocals/Parameters, outDir: dist
     ├── jest.config.ts     -- Jest config (ts-jest preset, node environment, 70% coverage threshold)
     ├── jest.setup.ts      -- Test setup (suppresses console output)
@@ -53,7 +53,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │   │   ├── pingerRoutes.ts    -- /ippinger/* (proxy routes, configurable fetch_timeout_ms)
     │   │   ├── settingsRoutes.ts  -- /ui/settings, /ui/settings-schema, /ui/settings-update (PostgreSQL persistence via settingsStore)
     │   │   ├── logRoutes.ts       -- /sensors/logs/:source (Loki log queries)
-    │   │   └── routeNotFound.ts   -- 404 handler (wired into app)
+    │   │   └── routeNotFound.ts   -- 404 handler (wired into app); logs unmatched routes at warn, not error (P3-3)
     │   ├── schemas/
     │   │   ├── config.ts        -- Zod v4 schemas for config.yml validation (log-level: error/info/debug/warn); redactConfig() masks db-password/loki-url
     │   │   ├── configLoader.ts  -- readConfigWithSecrets(): read base config.yml + merge optional sibling config-secrets.yml (override) -> unvalidated merged config
@@ -98,7 +98,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     │       │   ├── sensorRoutes.test.ts       -- All /sensors/* routes via supertest (identify→404, get-details, reboot, read-config, write-config, update-config→501)
     │       │   ├── pingerRoutes.test.ts       -- All /ippinger/* routes via supertest (about, read-config, write-config, restart, ping, ping/:target, analyze-ippinger)
     │       │   ├── settingsRoutes.test.ts     -- GET /settings, GET /settings/schema, PATCH /settings/update via supertest + X-Settings-Persisted header, unknown key → 400 (P3-6, P3-7)
-    │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger)
+    │       │   └── routeNotFound.test.ts      -- 404 handler tests (including uninitialized logger) + unmatched routes log at warn, never error (P3-3)
     │       ├── schemas/
     │       │   ├── config.test.ts     -- Zod v4 config schema validation tests (incl. cors-allowed-origins origin validation: well-formed accepted, path/credentials/non-http/bare-host/non-array/non-string rejected, P3-5)
     │       │   ├── configLoader.test.ts -- readConfigWithSecrets(): merge/override, absent/empty/corrupt secrets, missing-required-secret fails validation
@@ -425,7 +425,7 @@ case-sensitive: true
 - **V3 MQTT protocol (firmware v4)** — outbound commands use the `message_schema_version: 3` envelope with a required `payload` object (write-config wraps the complete config as `{"config": <config>}`); command responses are parsed from `payload.command`/`payload.command_id` (no top-level `type`). The `identify` command and `/sensors/identify` routes were removed — use `get-details` (sensor IP now at `payload.data.network.ip_address` in pinger analysis). `update-config` is not supported by firmware v4 — the route returns 501.
 - **`write-config` is an active** POST endpoint in `sensorRoutes.ts`; **`update-config` is deprecated** and returns 501 (NotImplemented).
 - **`write-config` rejects the broadcast target `*` (P1-2)** — `postWriteConfigBySource()` checks `isBroadcastTarget(source)` and returns 400 (no broker check, slot claim, or MQTT publish) when the source normalizes to the MQTT wildcard `*` (including `%2A`/`%2a` and surrounding whitespace). Publishing a config to `*` would rewrite every sensor on the broker at once. The read commands (`get-details`, `read-config`) and `reboot` legitimately broadcast to `*` and are unaffected.
-- **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`. Uses `if (!res.headersSent)` guard to prevent double-sending when matched routes fall through without calling next().
+- **`routeNotFound.ts` is wired** into the app via `new CreateRouteNotFound(app)` in `index.ts`. Uses `if (!res.headersSent)` guard to prevent double-sending when matched routes fall through without calling next(). Unmatched routes are logged at **warn**, not error (P3-3) — a 404 is client behavior (typo, scanning, stale link), not a server failure, so it must not pollute error-level alerts.
 - **`prometheus-port` and `case-sensitive` are validated at startup** — `prometheus-port` must be a positive integer, `case-sensitive` must be a boolean. Config is loaded from `config.yml` (YAML) and validated with Zod v4 schemas in `src/schemas/config.ts`.
 - **`formatElapsedTime()` is used** in graceful shutdown logging (`Uptime: ${formatElapsedTime(...)}`).
 - **`sys_info` array in `aboutDude()` is now populated** with platform, arch, hostname, uptime, total/free memory.

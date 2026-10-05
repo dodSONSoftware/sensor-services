@@ -29,7 +29,10 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
                     message: "The requested resource was not found.",
                 });
 
-                logger()?.write_error("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
+                // A 404 is client behavior (typo, scanning, stale link), not a
+                // server failure — log it at warn so it stays visible without
+                // polluting error-level alerts (P3-3).
+                logger()?.write_warn("CreateRouteNotFound.ts/routeNotFound", `${req.method} ${req.url}. Route not found.`);
             }
         });
     }
