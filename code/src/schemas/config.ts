@@ -43,7 +43,8 @@ export const configSchema = z.strictObject({
     "express-port": z.number({
         error: "express-port must be a number",
     }).int("express-port must be an integer")
-        .positive("express-port must be greater than 0"),
+        .positive("express-port must be greater than 0")
+        .lte(65535, "express-port must be a valid TCP port (1-65535)"),
     "mqtt-broker-ip-address": z.string({
         error: "mqtt-broker-ip-address must be a string",
     }).min(1, "mqtt-broker-ip-address must not be empty"),
@@ -71,7 +72,16 @@ export const configSchema = z.strictObject({
     "forward-sensor-logs-level": z.enum(["error", "warn", "info", "debug"], {
         error: "forward-sensor-logs-level must be one of: error, warn, info, debug",
     }).optional(),
-    "express-body-limit": z.string().optional(),
+    // The value is passed verbatim to express.json({ limit }), which body-parser
+    // parses with the `bytes` package AT MIDDLEWARE CONSTRUCTION — an invalid
+    // string ("garbage", "", "1foo") throws a TypeError while the app is being
+    // assembled, i.e. a startup failure. Validate the narrow byte-size syntax
+    // (bare number = bytes, or a decimal with an optional b/kb/mb/gb unit) so
+    // the config boundary rejects values the runtime cannot accept.
+    "express-body-limit": z.string().refine(
+        (value) => /^\d+(\.\d+)?\s*(b|kb|mb|gb)?$/i.test(value),
+        "express-body-limit must be a byte size: a number (bytes) or a number with a b/kb/mb/gb unit (e.g. 1048576, 1mb, 10kb)"
+    ).optional(),
     "cors-allowed-origins": z.array(corsOriginSchema).optional(),
     "rate-limit-window-ms": z.number({
         error: "rate-limit-window-ms must be a number",

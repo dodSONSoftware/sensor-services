@@ -190,6 +190,74 @@ describe("configSchema", () => {
     expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must be a number");
   });
 
+  // ---- express-port (valid TCP port range)
+
+  it("should accept express-port at the boundary (65535)", () => {
+    const config = { ...baseConfig, "express-port": 65_535 };
+    const result = validateConfig(config);
+    expect(result["express-port"]).toBe(65_535);
+  });
+
+  it("should reject express-port above the TCP port range (65536)", () => {
+    // A port above 65535 passes old-style "positive integer" validation but
+    // makes Node's app.listen() fail at startup. The schema must reject it.
+    const config = { ...baseConfig, "express-port": 65_536 };
+    expect(() => validateConfig(config)).toThrow("express-port must be a valid TCP port (1-65535)");
+  });
+
+  // ---- express-body-limit (body-parser byte-size syntax)
+
+  it("should accept a well-formed express-body-limit (1mb)", () => {
+    const config = { ...baseConfig, "express-body-limit": "1mb" };
+    const result = validateConfig(config);
+    expect(result["express-body-limit"]).toBe("1mb");
+  });
+
+  it("should accept a bare byte-count express-body-limit (1048576)", () => {
+    const config = { ...baseConfig, "express-body-limit": "1048576" };
+    const result = validateConfig(config);
+    expect(result["express-body-limit"]).toBe("1048576");
+  });
+
+  it("should accept decimal and kb/gb variants of express-body-limit", () => {
+    for (const value of ["1.5mb", "10kb", "1gb"]) {
+      const result = validateConfig({ ...baseConfig, "express-body-limit": value });
+      expect(result["express-body-limit"]).toBe(value);
+    }
+  });
+
+  it("should reject an unparseable express-body-limit (garbage)", () => {
+    // body-parser parses the limit with `bytes` at express.json() construction;
+    // an invalid value throws a TypeError while the app is assembled.
+    const config = { ...baseConfig, "express-body-limit": "garbage" };
+    expect(() => validateConfig(config)).toThrow("express-body-limit must be a byte size");
+  });
+
+  it("should reject an empty express-body-limit", () => {
+    const config = { ...baseConfig, "express-body-limit": "" };
+    expect(() => validateConfig(config)).toThrow("express-body-limit must be a byte size");
+  });
+
+  it("should reject a truncated express-body-limit (1foo)", () => {
+    const config = { ...baseConfig, "express-body-limit": "1foo" };
+    expect(() => validateConfig(config)).toThrow("express-body-limit must be a byte size");
+  });
+
+  it("should reject a negative express-body-limit", () => {
+    const config = { ...baseConfig, "express-body-limit": "-1" };
+    expect(() => validateConfig(config)).toThrow("express-body-limit must be a byte size");
+  });
+
+  it("should reject an exponent-form express-body-limit (1e5)", () => {
+    const config = { ...baseConfig, "express-body-limit": "1e5" };
+    expect(() => validateConfig(config)).toThrow("express-body-limit must be a byte size");
+  });
+
+  it("should reject a non-string express-body-limit", () => {
+    const config = { ...baseConfig, "express-body-limit": 1_048_576 };
+    expect(() => validateConfig(config)).toThrow(/expected string, received number/);
+  });
+
   // ---- cors-allowed-origins (P3-5)
 
   it("should accept config without cors-allowed-origins (optional)", () => {
