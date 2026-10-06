@@ -340,6 +340,51 @@ describe("writeConfig (POST /api/write-config)", () => {
         const after = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : null;
         expect(after).toBe(before);
     });
+
+    it("two simultaneous full-document writes are last-writer-wins, never a torn document", async () => {
+        // Contract: /api/write-config has no optimistic concurrency control —
+        // no ETag/version check. Two concurrent full-document writers can both
+        // succeed, and the later write wins. What atomic replacement
+        // (same-directory temp file + rename) guarantees is that the live file
+        // always holds exactly ONE complete document, never a mix of the two.
+        // If multi-user config editing is ever introduced, an ETag/version
+        // check belongs at the API layer — not in the file replacement.
+        setConfig(validateConfig(BASE_CONFIG));
+        const bodyA = { ...BASE_CONFIG, "log-level": "info", "db-password": "password-a" };
+        const bodyB = { ...BASE_CONFIG, "log-level": "debug", "db-password": "password-b" };
+
+        const resA = createMockRes();
+        const resB = createMockRes();
+        await Promise.all([
+            writeConfig(createMockReq({ body: bodyA }) as express.Request, resA.res as express.Response),
+            writeConfig(createMockReq({ body: bodyB }) as express.Request, resB.res as express.Response),
+        ]);
+
+        // Both writes succeed — no 409, no version conflict
+        expect(resA.statusCalls).toContain(200);
+        expect(resB.statusCalls).toContain(200);
+
+        // The live file is exactly one complete document: same key set, and
+        // every key agrees with a single writer
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const yaml = require("js-yaml") as { load: (v: string) => unknown };
+        const onDisk = yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+        const writers: Record<string, unknown>[] = [bodyA, bodyB];
+        const winner = writers.find((body) =>
+            Object.keys(onDisk).length === Object.keys(body).length
+            && Object.keys(body).every((key) => onDisk[key] === body[key]));
+        expect(winner).toBeDefined();
+
+        // The in-memory config: the hot-reloadable key agrees with the
+        // winning document on disk. Restart-required keys keep the value the
+        // process is actually running (the pre-existing documented reload
+        // contract — the concurrent writes introduce no split brain of their
+        // own).
+        const { getConfig } = require("../../../src/common/global");
+        const active = getConfig() as Record<string, unknown>;
+        expect(active["log-level"]).toBe(onDisk["log-level"]);
+        expect(active["db-password"]).toBe("sensor_pass");
+    });
 });
 
 describe("readConfig (GET /api/read-config)", () => {

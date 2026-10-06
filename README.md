@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Graphite Falcon — firmware 4.13.4
+**Release:** Graphite Falcon — firmware 4.13.5
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -266,6 +266,17 @@ The deployment model assumes no WAN/public Internet exposure, trusted LAN client
 ### When to reconsider
 
 Application-level authentication should be added if the service becomes Internet-accessible, remote access is added, access from untrusted VLANs is required, multiple users with different trust levels use the service, a reverse proxy exposes the API outside the trusted LAN, or the service moves to a zero-trust network model. If authentication is added, prefer a minimal administrative token or equivalent mechanism over broad authentication architecture.
+
+### Config file metadata (`config.yml`)
+
+`config.yml` is the single source of truth for all configuration, including credentials (`db-password`, `loki-url`). Its file metadata is therefore part of the deployment contract:
+
+- **mode** — deploy it with restrictive permissions (`chmod 600`). `/api/write-config` replaces the file atomically (same-directory temp file + rename) and preserves the existing file's mode exactly, so `600` survives config writes. A first-time file *creation* uses the process's default creation mode (umask-dependent, typically `644`) — set `600` explicitly on the file you deploy.
+- **owner / group** — the service never runs `chown`. The replacement file is owned by the user (and group) of the service process that performed the write; a root- or operator-owned config is a deployment concern the application will not fix for you.
+- **container user** — the container runs as non-root `appuser` (group `appgroup`). The mounted `/mnt/sensor-services/` directory must be writable by `appuser`'s uid for `/api/write-config` to succeed, and after a write the file on the host is owned by that uid. The application does not — and cannot — change the ownership of mounted files.
+- **concurrent writes** — two simultaneous full-document writes are last-writer-wins: both can succeed, and the file always holds exactly one complete document (atomic replacement prevents torn files). There is deliberately no ETag/version check (no optimistic concurrency control); this contract is pinned by the `configController` tests.
+
+No ownership or metadata tooling is provided by the service; the semantics above are what an operator may rely on.
 
 ---
 
