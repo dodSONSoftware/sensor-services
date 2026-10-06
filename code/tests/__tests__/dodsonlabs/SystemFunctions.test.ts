@@ -150,6 +150,42 @@ describe("write_file_atomic", () => {
     expect(fs.readdirSync(tmpDir)).toEqual(["config.yml"]);
   });
 
+  it("should preserve the existing file's permission mode when replacing it", () => {
+    const target = path.join(tmpDir, "config.yml");
+    fs.writeFileSync(target, "old: config\n");
+    // Operator deliberately restricts a credentials-bearing config
+    fs.chmodSync(target, 0o600);
+
+    const ok = write_file_atomic(target, "new: config\n");
+
+    expect(ok).toBe(true);
+    expect(fs.readFileSync(target, "utf8")).toBe("new: config\n");
+    // The restrictive mode must survive the atomic replacement — the
+    // replacement inode otherwise gets the process's umask-based creation
+    // mode (0644 under a common 0022 umask), silently widening access
+    expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+  });
+
+  it("should apply the existing mode exactly even when the umask would strip bits", () => {
+    const target = path.join(tmpDir, "config.yml");
+    fs.writeFileSync(target, "old: config\n");
+    // 0640 grants group read; an open() mode of 0640 under a 0077 umask
+    // would be masked to 0600 — only a chmod preserves the exact mode
+    fs.chmodSync(target, 0o640);
+
+    const previousUmask = process.umask();
+    process.umask(0o077);
+    let ok = false;
+    try {
+      ok = write_file_atomic(target, "new: config\n");
+    } finally {
+      process.umask(previousUmask); // never leak a changed umask to other tests
+    }
+
+    expect(ok).toBe(true);
+    expect(fs.statSync(target).mode & 0o777).toBe(0o640);
+  });
+
   it("should fail cleanly without touching the live file when the temp write cannot succeed", () => {
     // A path inside a nonexistent directory: the temp write fails before any
     // rename can happen

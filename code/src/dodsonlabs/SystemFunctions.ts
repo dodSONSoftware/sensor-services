@@ -105,6 +105,13 @@ export function write_file(
  * A same-filesystem POSIX rename is atomic, so a crash mid-write can never
  * leave the live file truncated or partially written.
  *
+ * When the live file already exists, its permission mode is preserved: the
+ * replacement inode is created owner-only and chmod'd to the existing mode
+ * before the rename, so an operator's `chmod 600` on a credentials-bearing
+ * config survives an atomic write. Ownership follows the service process —
+ * a deliberately root- or operator-owned config is a deployment concern,
+ * not something this helper should silently chown.
+ *
  * On any failure the temporary file is removed (best effort) and the live
  * file is left untouched; returns false so the caller can report the error.
  */
@@ -117,7 +124,27 @@ export function write_file_atomic(
     // clobber each other's temporary files, and rename stays same-filesystem
     const tempPath = `${filename}.${randomUUID()}.tmp`;
     try {
-        fs.writeFileSync(tempPath, content);
+        // The temp file is a NEW inode: with the default creation mode it
+        // would get the process's umask-based permissions (e.g. 0644) and
+        // the rename would silently change the mode the operator set on the
+        // live file. A missing live file means first-time creation, which
+        // keeps the default creation mode.
+        let existingMode: number | undefined;
+        try {
+            existingMode = fs.statSync(filename).mode & 0o777;
+        } catch {
+            // no live file yet
+        }
+        if (existingMode !== undefined) {
+            // Create owner-only so the temp file is never more permissive
+            // than the live file while it exists on disk, then chmod to the
+            // exact live mode — an open() mode is masked by the process
+            // umask, but a chmod is not.
+            fs.writeFileSync(tempPath, content, { mode: 0o600 });
+            fs.chmodSync(tempPath, existingMode);
+        } else {
+            fs.writeFileSync(tempPath, content);
+        }
         fs.renameSync(tempPath, filename);
         return true;
     } catch (error) {
