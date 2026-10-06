@@ -381,9 +381,16 @@ let settingsUpdateQueue: Promise<unknown> = Promise.resolve();
 
 /**
  * Partially update settings: merge `updates` into the existing cache, persist to PostgreSQL, and return the merged result.
- * If PostgreSQL is unavailable the update is DISCARDED (the cache is left unchanged)
- * and the error is rethrown so the caller can report 500 — it is not queued for
- * later persistence.
+ *
+ * Degraded mode (PostgreSQL was never initialized, so no pool exists): the
+ * update is RETAINED in the in-memory cache but NON-DURABLE — it resolves
+ * normally with the merged result, and the caller reports
+ * X-Settings-Persisted: false. It is not queued for later persistence; it
+ * would be lost on restart.
+ *
+ * Transient failure (a pool exists but the persistence query fails): the
+ * update is DISCARDED (the cache is left unchanged) and the error is
+ * rethrown so the caller can report 500.
  *
  * Updates are serialized: each patch observes the latest committed in-memory
  * state. A failed update rethrows to its own caller without breaking the

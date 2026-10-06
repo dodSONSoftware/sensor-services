@@ -33,6 +33,7 @@ function createTestApp(fetchMock?: jest.Mock): express.Application {
     true,
     MOCK_FETCH_TIMEOUT_MS
   );
+  pingerRoutes.register();
   if (fetchMock) {
     global.fetch = fetchMock;
   }

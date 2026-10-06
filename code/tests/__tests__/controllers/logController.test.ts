@@ -27,7 +27,8 @@ function makeApp(): express.Application {
     app.use(express.json());
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { CreateLogRoutes } = require("../../../src/routes/logRoutes");
-    new CreateLogRoutes(app);
+    const logRoutes = new CreateLogRoutes(app);
+    logRoutes.register();
     return app;
 }
 
@@ -288,7 +289,8 @@ describe("logController (loki-url is never logged verbatim)", () => {
         app.use(express.json());
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { CreateLogRoutes } = require("../../../src/routes/logRoutes");
-        new CreateLogRoutes(app);
+        const logRoutes = new CreateLogRoutes(app);
+        logRoutes.register();
         fetchMock = jest.fn().mockResolvedValue({
             ok: true,
             json: async () => ({ data: { resultType: "streams", result: [] } }),

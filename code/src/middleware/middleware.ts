@@ -15,34 +15,24 @@ import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
 import type { AppRequest } from "../common/app-request";
 
-// Module-level config reference — set in constructor before super() so
-// createRoutes() (called from super()) can access it. Safe in Node.js (single-threaded).
-let _config: z.infer<typeof configSchema>;
-
-// Module-level metrics middleware reference — same reason as _config above:
-// createRoutes() runs from super(), before any derived-class instance field
-// (e.g. a `private` parameter property) has been assigned. Stored here so the
-// optional API-metrics middleware can be installed at its (deliberately early)
-// position in the chain.
-let _metricsMiddleware: express.RequestHandler | undefined;
-
 // **** public classes
 
 export class CreateMiddleware extends RoutesCreatorBase {
     // **** ctor
+    //
+    // Routes/middleware are installed when register() is called (after this
+    // constructor finishes), so all dependencies are plain instance fields —
+    // no module-level shims needed.
 
     constructor(
         protected app: express.Application,
-        config: z.infer<typeof configSchema>,
+        private config: z.infer<typeof configSchema>,
         // Optional API-metrics middleware (createApiMetricsMiddleware in
         // common/metrics.ts). Passed in by index.ts so it can be installed
         // AHEAD of the rate limiter — the order is what makes 429 responses
         // observable (P3-2). Tests that don't care about metrics omit it.
-        metricsMiddleware?: express.RequestHandler
+        private metricsMiddleware?: express.RequestHandler
     ) {
-        _config = config;
-        _metricsMiddleware = metricsMiddleware;
-
         // ----
         super(app);
     }
@@ -70,8 +60,8 @@ export class CreateMiddleware extends RoutesCreatorBase {
         this.app.use(this._requestIdMiddleware.bind(this));
 
         // 2. HTTP metrics — before rate limiting so 429s are counted.
-        if (_metricsMiddleware) {
-            this.app.use(_metricsMiddleware);
+        if (this.metricsMiddleware) {
+            this.app.use(this.metricsMiddleware);
         }
 
         // 3. add CORS — restricted to the configured allowed origins (P3-5).
@@ -84,15 +74,15 @@ export class CreateMiddleware extends RoutesCreatorBase {
         //    (secure default): set the web UI origin(s) in config to enable it.
         //    Only `origin` is constrained; the default allowed methods/headers are
         //    left unchanged so existing clients keep working.
-        const allowedOrigins = _config["cors-allowed-origins"] ?? [];
+        const allowedOrigins = this.config["cors-allowed-origins"] ?? [];
         this.app.use(cors({ origin: allowedOrigins }));
 
         // 4. add rate limiting (configurable, default 100 requests per 15
         //    minutes). Runs BEFORE the JSON body parser (below) so an over-limit
         //    client's (potentially oversized) body is rejected without being
         //    parsed.
-        const windowMs = _config["rate-limit-window-ms"] ?? 900_000;
-        const max = _config["rate-limit-max"] ?? 100;
+        const windowMs = this.config["rate-limit-window-ms"] ?? 900_000;
+        const max = this.config["rate-limit-max"] ?? 100;
         this.app.use(rateLimit({
             windowMs,
             max,
@@ -108,7 +98,7 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
         // 5. add JSON (configurable body limit, default 1mb) — after rate
         //    limiting, so a 429'd request's body is never parsed.
-        const bodyLimit = _config["express-body-limit"] ?? "1mb";
+        const bodyLimit = this.config["express-body-limit"] ?? "1mb";
         this.app.use(express.json({ limit: bodyLimit }));
 
         // 6. add request logger (request ID is already in AsyncLocalStorage)

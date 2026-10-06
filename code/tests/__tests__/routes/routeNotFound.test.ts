@@ -11,7 +11,8 @@ import { CreateRouteNotFound } from "../../../src/routes/routeNotFound";
 function createTestApp(): express.Application {
   const app = express();
   app.use(express.json());
-  new CreateRouteNotFound(app);
+  const routeNotFound = new CreateRouteNotFound(app);
+  routeNotFound.register();
   return app;
 }
 

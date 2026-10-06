@@ -38,7 +38,8 @@ function createTestApp(mqttConnected: boolean = true): express.Application {
   const networking = createMockMqttNetworking({
     is_connected: jest.fn().mockReturnValue(mqttConnected),
   });
-  new CreateGeneralRoutes(app, networking);
+  const generalRoutes = new CreateGeneralRoutes(app, networking);
+  generalRoutes.register();
   return app;
 }
 

@@ -131,7 +131,11 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         // be counted (P3-2). Registry and metrics live in common/metrics.ts so
         // they can also be used by route handlers (e.g. generalRoutes.ts).
         // Unmatched requests are recorded under the bounded "unmatched" label.
-        new middleware.CreateMiddleware(app, config, createApiMetricsMiddleware());
+        // RoutesCreatorBase does not self-register in its constructor (no
+        // virtual dispatch before derived fields are initialized), so every
+        // creator is followed by an explicit .register() call below.
+        const appMiddleware = new middleware.CreateMiddleware(app, config, createApiMetricsMiddleware());
+        appMiddleware.register();
 
         // setup swagger AFTER the global middleware so it does not bypass the
         // request-ID / metrics / CORS / rate-limit / body-validation pipeline
@@ -147,16 +151,23 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         const ip_pinger_web_api = config["ip-pinger-web-api"];
         const case_sensitive = config["case-sensitive"];
 
-        new generalRoutes.CreateGeneralRoutes(app, networking);
-        new sensorRoutes.CreateSensorRoutes(app, networking);
+        const general = new generalRoutes.CreateGeneralRoutes(app, networking);
+        general.register();
+        const sensors = new sensorRoutes.CreateSensorRoutes(app, networking);
+        sensors.register();
         // ippinger-fetch-timeout-ms (Optional-2) with the deprecated
         // fetch-timeout-ms alias and the 10-second default.
-        new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, resolveIppingerFetchTimeoutMs(config));
+        const pinger = new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, resolveIppingerFetchTimeoutMs(config));
+        pinger.register();
 
-        new settingsRoutes.CreateSettingsRoutes(app);
-        new configRoutes.CreateConfigRoutes(app);
-        new logRoutes.CreateLogRoutes(app);
-        new CreateRouteNotFound(app);
+        const settings = new settingsRoutes.CreateSettingsRoutes(app);
+        settings.register();
+        const configRoutesInstance = new configRoutes.CreateConfigRoutes(app);
+        configRoutesInstance.register();
+        const logRoutesInstance = new logRoutes.CreateLogRoutes(app);
+        logRoutesInstance.register();
+        const routeNotFound = new CreateRouteNotFound(app);
+        routeNotFound.register();
 
         // Validate __routesHelp entries match __routes arrays (per-module
         // static consistency: every declared route has help text and vice versa).

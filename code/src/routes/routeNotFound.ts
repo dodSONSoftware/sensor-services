@@ -13,12 +13,13 @@ export class CreateRouteNotFound extends RoutesCreatorBase {
 
     constructor(protected app: express.Application) {
         super(app);
-        this.routeNotFound();
     }
 
     // **** protected functions
 
-    protected createRoutes() { }
+    protected createRoutes() {
+        this.routeNotFound();
+    }
 
     // **** private functions
 

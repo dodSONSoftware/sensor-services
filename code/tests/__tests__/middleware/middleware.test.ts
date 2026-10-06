@@ -50,7 +50,8 @@ const config: z.infer<typeof configSchema> = validateConfig({
 // req.body) and the real GET routes after.
 function buildApp(): express.Application {
     const app = express();
-    new CreateMiddleware(app, config);
+    const middleware = new CreateMiddleware(app, config);
+    middleware.register();
 
     // Echoes back the (validated) body — proves a valid object body reached the
     // route handler intact, with req.body replaced by the parsed object.
@@ -74,7 +75,8 @@ function buildApp(): express.Application {
         res.status(200).json({ ok: true });
     });
 
-    new CreateGeneralRoutes(app, createMockMqttNetworking());
+    const generalRoutes = new CreateGeneralRoutes(app, createMockMqttNetworking());
+    generalRoutes.register();
     return app;
 }
 
@@ -231,8 +233,10 @@ describe("CreateMiddleware — rate-limit exemption for /health and /metrics (P2
             "rate-limit-max": 2,
         });
         const app = express();
-        new CreateMiddleware(app, limitedConfig);
-        new CreateGeneralRoutes(app, createMockMqttNetworking());
+        const middleware = new CreateMiddleware(app, limitedConfig);
+        middleware.register();
+        const generalRoutes = new CreateGeneralRoutes(app, createMockMqttNetworking());
+        generalRoutes.register();
         return app;
     }
 
@@ -282,8 +286,10 @@ describe("CreateMiddleware — middleware ordering (P3-2)", () => {
             "rate-limit-max": 2,
         });
         const app = express();
-        new CreateMiddleware(app, limitedConfig, createApiMetricsMiddleware());
-        new CreateGeneralRoutes(app, createMockMqttNetworking());
+        const middleware = new CreateMiddleware(app, limitedConfig, createApiMetricsMiddleware());
+        middleware.register();
+        const generalRoutes = new CreateGeneralRoutes(app, createMockMqttNetworking());
+        generalRoutes.register();
         return app;
     }
 
@@ -337,7 +343,8 @@ describe("CreateMiddleware — middleware ordering (P3-2)", () => {
         // bypasses the request-ID / metrics / CORS / rate-limit / body-validation
         // pipeline. A swagger asset must come back with a request ID.
         const app = express();
-        new CreateMiddleware(app, config, createApiMetricsMiddleware());
+        const middleware = new CreateMiddleware(app, config, createApiMetricsMiddleware());
+        middleware.register();
         // code/ directory — the glob scans src/routes/**/*.ts (see swagger.test.ts)
         const codeRoot = join(__dirname, "..", "..", "..");
         setupSwagger(app, 32000, codeRoot, "http://127.0.0.1:32000/");
@@ -361,7 +368,8 @@ describe("CreateMiddleware — middleware ordering (P3-2)", () => {
             "express-body-limit": "10",
         });
         const app = express();
-        new CreateMiddleware(app, limitedConfig);
+        const middleware = new CreateMiddleware(app, limitedConfig);
+        middleware.register();
         app.post("/big", (_req, res) => res.status(200).json({ ok: true }));
 
         const r1 = await request(app).post("/big").send({ a: 1 });
@@ -383,8 +391,10 @@ describe("CreateMiddleware — CORS origin restriction (P3-5)", () => {
             "cors-allowed-origins": allowedOrigins,
         });
         const app = express();
-        new CreateMiddleware(app, corsConfig);
-        new CreateGeneralRoutes(app, createMockMqttNetworking());
+        const middleware = new CreateMiddleware(app, corsConfig);
+        middleware.register();
+        const generalRoutes = new CreateGeneralRoutes(app, createMockMqttNetworking());
+        generalRoutes.register();
         return app;
     }
 

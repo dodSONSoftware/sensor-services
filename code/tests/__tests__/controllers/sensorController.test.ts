@@ -221,7 +221,8 @@ describe("sensor controller integration (error paths, already-running)", () => {
     app.use(express.json());
     // Import the route creator which wires up the handlers
     const { CreateSensorRoutes } = require("../../../src/routes/sensorRoutes");
-    new CreateSensorRoutes(app, network);
+    const sensorRoutes = new CreateSensorRoutes(app, network);
+    sensorRoutes.register();
     return request(app).get(path);
   }
 
@@ -231,7 +232,8 @@ describe("sensor controller integration (error paths, already-running)", () => {
     const app = express();
     app.use(express.json());
     const { CreateSensorRoutes } = require("../../../src/routes/sensorRoutes");
-    new CreateSensorRoutes(app, network);
+    const sensorRoutes = new CreateSensorRoutes(app, network);
+    sensorRoutes.register();
     const req = request(app).post(path);
     if (body) req.send(body);
     return req;
@@ -423,7 +425,8 @@ describe("sensor controller integration (error paths, already-running)", () => {
       } as unknown as MqttNetworking;
 
       const { CreateSensorRoutes } = require("../../../src/routes/sensorRoutes");
-      new CreateSensorRoutes(app, network);
+      const sensorRoutes = new CreateSensorRoutes(app, network);
+      sensorRoutes.register();
 
       const [r1, r2] = await Promise.all([
         request(app).get("/sensors/get-details"),

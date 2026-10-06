@@ -16,7 +16,8 @@ function createTestApp(): express.Application {
   const app = express();
   app.use(express.json());
   const networking = createMockMqttNetworking();
-  new CreateSensorRoutes(app, networking);
+  const sensorRoutes = new CreateSensorRoutes(app, networking);
+  sensorRoutes.register();
   return app;
 }
 
@@ -127,7 +128,8 @@ describe("Sensor Routes", () => {
       const networking = createMockMqttNetworking();
       const app = express();
       app.use(express.json());
-      new CreateSensorRoutes(app, networking);
+      const sensorRoutes = new CreateSensorRoutes(app, networking);
+      sensorRoutes.register();
 
       const res = await request(app).post("/sensors/reboot");
 
@@ -147,7 +149,8 @@ describe("Sensor Routes", () => {
       const networking = createMockMqttNetworking();
       const app = express();
       app.use(express.json());
-      new CreateSensorRoutes(app, networking);
+      const sensorRoutes = new CreateSensorRoutes(app, networking);
+      sensorRoutes.register();
 
       const res = await request(app).post("/sensors/reboot/air-temp-1");
 
@@ -246,8 +249,10 @@ describe("Sensor Routes", () => {
   describe("POST body validation (P3-9 — production middleware stack)", () => {
     function createProductionApp(): express.Application {
       const app = express();
-      new CreateMiddleware(app, config);
-      new CreateSensorRoutes(app, createMockMqttNetworking());
+      const middleware = new CreateMiddleware(app, config);
+      middleware.register();
+      const sensorRoutes = new CreateSensorRoutes(app, createMockMqttNetworking());
+      sensorRoutes.register();
       return app;
     }
 

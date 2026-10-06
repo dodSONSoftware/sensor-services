@@ -39,13 +39,20 @@ function buildFullApp(): express.Application {
     const app = express();
     app.use(express.json());
     const networking = createMockMqttNetworking();
-    new generalRoutes.CreateGeneralRoutes(app, networking);
-    new sensorRoutes.CreateSensorRoutes(app, networking);
-    new pingerRoutes.CreatePingerRoutes(app, networking, "http://127.0.0.1:3300", true, 10_000);
-    new settingsRoutes.CreateSettingsRoutes(app);
-    new configRoutes.CreateConfigRoutes(app);
-    new logRoutes.CreateLogRoutes(app);
-    new CreateRouteNotFound(app);
+    const general = new generalRoutes.CreateGeneralRoutes(app, networking);
+    general.register();
+    const sensors = new sensorRoutes.CreateSensorRoutes(app, networking);
+    sensors.register();
+    const pinger = new pingerRoutes.CreatePingerRoutes(app, networking, "http://127.0.0.1:3300", true, 10_000);
+    pinger.register();
+    const settings = new settingsRoutes.CreateSettingsRoutes(app);
+    settings.register();
+    const config = new configRoutes.CreateConfigRoutes(app);
+    config.register();
+    const log = new logRoutes.CreateLogRoutes(app);
+    log.register();
+    const notFound = new CreateRouteNotFound(app);
+    notFound.register();
     return app;
 }
 

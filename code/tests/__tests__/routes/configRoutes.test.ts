@@ -41,7 +41,8 @@ db-password: "testpass"
         const { setTestConfigPath } = require("../../../src/controllers/configController");
         // Override the test path in the controller
         setTestConfigPath(TEST_CONFIG_PATH);
-        new CreateConfigRoutes(app);
+        const configRoutes = new CreateConfigRoutes(app);
+        configRoutes.register();
     });
 
     afterEach(() => {

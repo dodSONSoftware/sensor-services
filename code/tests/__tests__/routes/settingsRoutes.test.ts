@@ -41,7 +41,8 @@ describe("settings routes", () => {
         app = express();
         // Apply minimal middleware so body parsing works
         app.use(express.json());
-        new CreateSettingsRoutes(app);
+        const settingsRoutes = new CreateSettingsRoutes(app);
+        settingsRoutes.register();
     });
 
     describe("GET /ui/settings", () => {
