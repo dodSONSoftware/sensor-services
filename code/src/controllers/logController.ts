@@ -53,18 +53,9 @@ function getLokiConfig(): LokiConfig | null {
     _log().write_debug("getLokiConfig", `loki-url ${((config as Record<string, unknown>)["loki-url"] ?? undefined) === undefined ? "is not set" : "is set"}`);
     _log().write_debug("getLokiConfig", `loki-enabled value: ${(config as Record<string, unknown>)["loki-enabled"]}`);
 
-    // Check for loki configuration - support both nested "loki" object and flat "loki-url"
-    let url: unknown;
-
-    const lokiConfig = (config as Record<string, unknown>)["loki"];
-    if (lokiConfig && typeof lokiConfig === "object") {
-        url = (lokiConfig as Record<string, unknown>)["url"];
-        _log().write_debug("getLokiConfig", "Found nested loki.url");
-    } else {
-        // Fall back to flat loki-url setting (value not logged — may embed credentials)
-        url = (config as Record<string, unknown>)["loki-url"];
-        _log().write_debug("getLokiConfig", "Using flat loki-url setting");
-    }
+    // Check for loki configuration — the flat "loki-url" setting
+    // (value not logged — may embed credentials)
+    const url: unknown = (config as Record<string, unknown>)["loki-url"];
 
     if (typeof url !== "string" || !url) {
         _log().write_error("getLokiConfig", `URL is not a valid string: ${url}`);

@@ -31,7 +31,7 @@ export interface ILogger {
 
 export interface IMqttNetworking {
   //start_networking(): void;
-  publish_mqtt_message(topic: string, message: Record<string, any>): Promise<void>;
+  publish_mqtt_message(topic: string, message: Record<string, unknown>): Promise<void>;
   is_connected(): boolean;
   close(): Promise<void>;
   // on_connect(): void;

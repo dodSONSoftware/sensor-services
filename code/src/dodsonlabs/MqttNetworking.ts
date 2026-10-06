@@ -11,6 +11,37 @@ import { MqttCommandControl } from "./MqttCommandControl";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
 
+/**
+ * V3 MQTT message envelope — the JSON document published on the broker.
+ *
+ * The broker is unauthenticated, so every field is a claim from the sender,
+ * not a fact: each handler re-validates the fields it relies on at runtime
+ * before use. All fields are optional because dispatch is on message_type
+ * alone (never topic-correlated) and a legacy or malformed document may
+ * omit the rest — the legacy flat log shape carries level/message at top
+ * level and has no payload or message_schema_version. `payload` stays
+ * unknown until a handler's runtime checks establish the variant's shape.
+ *
+ * Declared as a type (not an interface) so it is assignable to
+ * Record<string, unknown> — the parameter type of getField()/
+ * getNumericField() — via the implicit index signature type literals get.
+ */
+type MqttV3Envelope = {
+    message_type?: string | number;
+    message_schema_version?: number;
+    source?: string;
+    request_id?: string;
+    request_type?: string;
+    firmware_version?: string;
+    runtime_id?: string;
+    uptime_ms?: number;
+    timestamp?: string;
+    sequence?: number;
+    level?: string;
+    message?: unknown;
+    payload?: unknown;
+};
+
 
 
 export class MqttNetworking implements IMqttNetworking {
@@ -224,7 +255,7 @@ export class MqttNetworking implements IMqttNetworking {
         }
     }
 
-    public async publish_mqtt_message(topic: string, message: Record<string, any>): Promise<void> {
+    public async publish_mqtt_message(topic: string, message: Record<string, unknown>): Promise<void> {
 
         // Log a safe representation of the message being published (for
         // debugging). A write-config command carries the sensor's complete
@@ -273,7 +304,7 @@ export class MqttNetworking implements IMqttNetworking {
      * payload holds the full config with secrets; other commands log a
      * recursively-redacted copy. Never mutates the input.
      */
-    private format_publish_log(message: Record<string, any>): string {
+    private format_publish_log(message: Record<string, unknown>): string {
         const command = message["command"];
         if (command !== undefined && String(command).toLowerCase() === "write-config") {
             const meta: Record<string, unknown> = {
@@ -365,7 +396,7 @@ export class MqttNetworking implements IMqttNetworking {
         }
     }
 
-    private on_error(error: any): void {
+    private on_error(error: unknown): void {
         this.logger.write_error(
             this.originator,
             `<on_error> => Cannot connect! ERROR=${sysFunc.ensureError(error).message}`
@@ -381,9 +412,17 @@ export class MqttNetworking implements IMqttNetworking {
     // ****************************************************************
     // ******** PROCESSING MQTT MESSAGES
 
-    private async handle_mqtt_message(json_doc: any): Promise<void> {
+    private async handle_mqtt_message(json_doc: unknown): Promise<void> {
     // initialize
-        const msg_type_raw = json_doc["message_type"];
+        // JSON.parse accepts any JSON value — "null", "42", "[1]" — and the
+        // broker is unauthenticated, so the document must be established as
+        // a plain object before its envelope fields are read.
+        if (typeof json_doc !== "object" || json_doc === null || Array.isArray(json_doc)) {
+            this.logger.write_error(this.originator, "<handle_mqtt_message> => Message is not a JSON object, dropping message");
+            return;
+        }
+        const envelope = json_doc as MqttV3Envelope;
+        const msg_type_raw = envelope["message_type"];
         if (msg_type_raw === undefined) {
             this.logger.write_error(this.originator, "<handle_mqtt_message> => Missing 'message_type' key, dropping message");
             return;
@@ -394,16 +433,16 @@ export class MqttNetworking implements IMqttNetworking {
         switch (msg_type) {
         case "log":
             if (this.forward_sensor_logs) {
-                this.handle_mqtt_message_log(json_doc);
+                this.handle_mqtt_message_log(envelope);
             }
             break;
 
         case "command_response":
-            this.handle_mqtt_message_command_response(json_doc);
+            this.handle_mqtt_message_command_response(envelope);
             break;
 
         case "info_request":
-            this.handle_mqtt_message_info_request_v3(json_doc);
+            this.handle_mqtt_message_info_request_v3(envelope);
             break;
 
         default:
@@ -420,14 +459,16 @@ export class MqttNetworking implements IMqttNetworking {
     // ****************************************************************
     // ******** HANDLE MQTT LOG MESSAGES
 
-    private handle_mqtt_message_log(json_doc: any): void {
+    private handle_mqtt_message_log(json_doc: MqttV3Envelope): void {
         this.logger.write_debug(this.originator, "<handle_message_log>: message_type: LOG");
 
         // V3 log messages nest level/message/event/module in payload; fall back
         // to top level for anything that isn't in the documented shape
-        const log_payload = json_doc["payload"] !== null && typeof json_doc["payload"] === "object" && !Array.isArray(json_doc["payload"])
-            ? json_doc["payload"]
-            : {};
+        const raw_log_payload = json_doc["payload"];
+        const log_payload: Record<string, unknown> =
+            raw_log_payload !== null && typeof raw_log_payload === "object" && !Array.isArray(raw_log_payload)
+                ? raw_log_payload as Record<string, unknown>
+                : {};
 
         const source = json_doc["source"] ?? "unknown";
         const level = log_payload["level"] ?? json_doc["level"] ?? "info";
@@ -531,7 +572,7 @@ export class MqttNetworking implements IMqttNetworking {
      * Get a value from an object using snake_case field names (V2 format).
      * Supports both snake_case and camelCase for backward compatibility.
      */
-    private getField(obj: any, ...fieldNames: string[]): any {
+    private getField(obj: Record<string, unknown>, ...fieldNames: string[]): unknown {
         for (const fieldName of fieldNames) {
             const value = obj[fieldName];
             if (value !== undefined && value !== null) {
@@ -542,7 +583,7 @@ export class MqttNetworking implements IMqttNetworking {
     }
 
     private handle_mqtt_message_command_response(
-        json_doc: Record<string, any>
+        json_doc: MqttV3Envelope
     ): void {
 
         const source_raw = this.getField(json_doc, "source");
@@ -552,11 +593,14 @@ export class MqttNetworking implements IMqttNetworking {
         }
         const source = String(source_raw);
 
-        const payload = json_doc["payload"];
-        if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+        const raw_payload = json_doc["payload"];
+        if (raw_payload === null || typeof raw_payload !== "object" || Array.isArray(raw_payload)) {
             this.logger.write_error(this.originator, "<handle_mqtt_message_command_response> => Missing or invalid 'payload' object, dropping message");
             return;
         }
+        // The guards above establish a plain object; the cast records the
+        // variant's shape for the field reads below
+        const payload: Record<string, unknown> = raw_payload as Record<string, unknown>;
 
         // V3: the command name lives in payload.command (no top-level 'type' field)
         const cmd_type_raw = this.getField(payload, "command");
@@ -566,8 +610,10 @@ export class MqttNetworking implements IMqttNetworking {
         }
         const cmd_type = cmd_type_raw.toLowerCase();
 
-        // V3: command_id lives inside payload
-        const command_id = this.getField(payload, "command_id");
+        // V3: command_id lives inside payload (normalize at the origin — the
+        // protocol id is a UUID; a non-string here is a protocol violation)
+        const raw_command_id = this.getField(payload, "command_id");
+        const command_id: string | undefined = raw_command_id !== undefined ? String(raw_command_id) : undefined;
 
         // Log with a redacted deep copy so credentials never reach the logs.
         // redactSecrets() masks sensitive keys (wifi-password, password,
@@ -636,8 +682,8 @@ export class MqttNetworking implements IMqttNetworking {
     private handle_mqtt_command_response_message(
         dude: IMqttCommandControl,
         source: string,
-        payload: Record<string, any>,
-        json_doc: Record<string, any>,
+        payload: Record<string, unknown>,
+        json_doc: MqttV3Envelope,
         command_id?: string
     ): void {
         if (!this.accepts_command_response(dude, source, command_id)) {
@@ -658,8 +704,8 @@ export class MqttNetworking implements IMqttNetworking {
      */
     private create_command_result(
         source: string,
-        payload: Record<string, any>,
-        json_doc: Record<string, any>,
+        payload: Record<string, unknown>,
+        json_doc: MqttV3Envelope,
         command_id?: string
     ): MqttCommandResult {
         // V3 metadata: targeted and command_id live in payload, the rest in the envelope
@@ -720,7 +766,7 @@ export class MqttNetworking implements IMqttNetworking {
      * For time-related fields (milliseconds), truncates to integer.
      * Returns undefined if not found or not a valid finite number.
      */
-    private getNumericField(obj: any, ...fieldNames: string[]): number | undefined {
+    private getNumericField(obj: Record<string, unknown>, ...fieldNames: string[]): number | undefined {
         for (const fieldName of fieldNames) {
             const value = obj[fieldName];
             if (value !== undefined && value !== null) {
@@ -746,14 +792,17 @@ export class MqttNetworking implements IMqttNetworking {
      * @param payload The original payload
      * @returns A new payload with enriched air data
      */
-    private enrichAirDataWithFeelsLike(payload: Record<string, any>): Record<string, any> {
+    private enrichAirDataWithFeelsLike(payload: Record<string, unknown>): Record<string, unknown> {
         // Deep clone to avoid mutating the original payload
         const enrichedPayload = structuredClone(payload);
 
-        const air = enrichedPayload?.["air"];
-        if (!air) {
+        // 'air' is an untrusted nested value — establish it as a plain
+        // object before indexing
+        const raw_air = enrichedPayload["air"];
+        if (raw_air === null || typeof raw_air !== "object" || Array.isArray(raw_air)) {
             return enrichedPayload;
         }
+        const air: Record<string, unknown> = raw_air as Record<string, unknown>;
 
         // If feels-like is already present, don't recalculate
         if (air["feels_like_c"] !== undefined) {
@@ -785,8 +834,8 @@ export class MqttNetworking implements IMqttNetworking {
     private handle_mqtt_command_response_reboot(
         dude: IMqttCommandControl,
         source: string,
-        payload: Record<string, any>,
-        json_doc: Record<string, any>,
+        payload: Record<string, unknown>,
+        json_doc: MqttV3Envelope,
         command_id?: string
     ): void {
         if (!this.accepts_command_response(dude, source, command_id)) {
@@ -809,7 +858,7 @@ export class MqttNetworking implements IMqttNetworking {
      * The firmware publishes info_request on iot/v3/info-request to query
      * the server for UTC time. Only supports utc_time request_type.
      */
-    private handle_mqtt_message_info_request_v3(json_doc: Record<string, any>): void {
+    private handle_mqtt_message_info_request_v3(json_doc: MqttV3Envelope): void {
         // Validate message_schema_version == 3
         const schema_version = json_doc["message_schema_version"];
         if (schema_version !== 3) {
@@ -891,7 +940,7 @@ export class MqttNetworking implements IMqttNetworking {
         };
 
         // Build V3 response header
-        const response_header: Record<string, any> = {
+        const response_header: Record<string, unknown> = {
             "message_type": "info_response",
             "message_schema_version": 3,
             "source": "server",
