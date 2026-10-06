@@ -422,3 +422,168 @@ describe("logController (loki-url is never logged verbatim)", () => {
         }
     });
 });
+
+/**
+ * Runtime validation of Loki entry timestamps.
+ *
+ * Loki's query_range `values` are [nanosecond-timestamp, log-line] pairs. The
+ * timestamp is only compile-time typed (LokiResponse), so a malformed or
+ * incompatible response can carry a value that is not a valid decimal
+ * nanosecond string. BigInt() would throw on such a value and discard the
+ * WHOLE response. The controller must instead skip the individual entry, warn
+ * (without logging the entry's content), and continue — one bad entry must not
+ * discard the otherwise-valid ones, and an all-malformed response is a normal
+ * empty result (200), not a 500. Transport/parse/top-level-structure failures
+ * are unchanged (see the earlier describe blocks).
+ */
+describe("logController (malformed Loki timestamp handling)", () => {
+    let app: import("express").Application;
+    let fetchMock: jest.Mock;
+    const originalFetch = globalThis.fetch;
+
+    // Captured logger messages (write_* spied on the real global logger).
+    let captured: string[];
+
+    function lokiResponseWithValues(values: unknown[]): object {
+        return {
+            data: {
+                resultType: "streams",
+                result: [{ stream: { source: "A" }, values }],
+            },
+        };
+    }
+
+    beforeEach(() => {
+        const express = require("express");
+        app = express();
+        app.use(express.json());
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { CreateLogRoutes } = require("../../../src/routes/logRoutes");
+        const logRoutes = new CreateLogRoutes(app);
+        logRoutes.register();
+
+        // Set a real (spy-able) global logger so the malformed-entry warning is
+        // captured. loki-url is set (so the controller treats Loki as
+        // configured) but loki-enabled is left undefined — that keeps the Logger
+        // from constructing a Loki network transport in the test.
+        const { createLogger, setConfig: setCfg } = require("../../../src/common/global");
+        const { validateConfig } = require("../../../src/schemas/config");
+        const config = validateConfig({
+            "log-level": "debug",
+            "express-port": 32000,
+            "mqtt-broker-ip-address": "10.10.10.64",
+            "mqtt-topic-command": "iot/v3/command",
+            "mqtt-topic-command-response": "iot/v3/command-response",
+            "ip-pinger-web-api": "http://10.10.10.64:3300",
+            "case-sensitive": true,
+            "db-host": "localhost",
+            "db-port": 5432,
+            "db-name": "sensor_db",
+            "db-user": "sensor_user",
+            "db-password": "sensor_pass",
+            "loki-url": "http://loki.test:3100",
+        });
+        setCfg(config);
+        const inst = createLogger(config);
+        captured = [];
+        for (const method of ["write_error", "write_warn", "write_info", "write_debug"] as const) {
+            jest.spyOn(inst, method).mockImplementation((_origin: string, message: string) => {
+                captured.push(`${method}: ${message}`);
+            });
+        }
+
+        fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { result: [] } }) });
+        (globalThis as any).fetch = fetchMock;
+    });
+
+    afterEach(() => {
+        (globalThis as any).fetch = originalFetch;
+        require("../../../src/common/global").setConfig(undefined as any);
+        jest.restoreAllMocks();
+    });
+
+    it("accepts a valid decimal nanosecond timestamp and processes the entry", async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => lokiResponseWithValues([
+                ["1791292456123456789", JSON.stringify({ level: "info", message: "ok entry" })],
+            ]),
+        });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(200);
+        const expectedMs = Number(BigInt("1791292456123456789") / BigInt(1_000_000));
+        expect(res.body).toEqual([
+            { timestamp: new Date(expectedMs).toISOString(), level: "info", message: "ok entry" },
+        ]);
+        // A valid entry must not trigger a malformed-entry warning
+        expect(captured.some((m) => m.includes("malformed timestamp"))).toBe(false);
+    });
+
+    const INVALID_TIMESTAMPS: Array<[string, unknown]> = [
+        ["non-numeric text", "not-a-timestamp"],
+        ["null", null],
+        ["undefined", undefined],
+        ["a number (123)", 123],
+        ["an object", {}],
+        ["a float string", "123.456"],
+        ["a negative string", "-123"],
+        ["an empty string", ""],
+    ];
+
+    it.each(INVALID_TIMESTAMPS)(
+        "skips an entry whose timestamp is %s (200 + empty, no uncaught throw)",
+        async (_label, badTimestamp) => {
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: async () => lokiResponseWithValues([[badTimestamp, "payload-must-not-leak"]]),
+            });
+            const request = require("supertest");
+            const res = await request(app).get("/sensors/logs/Air-1");
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual([]);
+            // The skipped entry's content must not leak into the logs
+            expect(captured.join("\n")).not.toContain("payload-must-not-leak");
+        }
+    );
+
+    it("returns the valid entries and omits a malformed one in the same response", async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => lokiResponseWithValues([
+                ["1791292456000000000", JSON.stringify({ level: "info", message: "valid-A" })],
+                ["not-a-timestamp", JSON.stringify({ level: "error", message: "malformed-DO-NOT-LEAK" })],
+                ["1791292456123456789", JSON.stringify({ level: "warn", message: "valid-B" })],
+            ]),
+        });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(200);
+        // Newest-first: valid-B (larger timestamp) before valid-A; the
+        // malformed entry is omitted
+        expect(res.body).toHaveLength(2);
+        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["valid-B", "valid-A"]);
+        // Exactly one warning, carrying the value's type for diagnosis — not the
+        // entry's (potentially sensitive) content
+        const warnings = captured.filter((m) => m.includes("malformed timestamp"));
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("got string");
+        expect(captured.join("\n")).not.toContain("malformed-DO-NOT-LEAK");
+    });
+
+    it("returns 200 with an empty result set (not 500) when every entry is malformed", async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => lokiResponseWithValues([
+                ["not-a-timestamp", JSON.stringify({ level: "info", message: "bad1" })],
+                [123, JSON.stringify({ level: "info", message: "bad2" })],
+            ]),
+        });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual([]);
+        // One warning per malformed entry
+        expect(captured.filter((m) => m.includes("malformed timestamp"))).toHaveLength(2);
+    });
+});

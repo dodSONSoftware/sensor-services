@@ -166,13 +166,22 @@ export function enrichResultsWithMetadata(
 }
 
 async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl) {
-    // Event-based wait: resolves when no more responses arrive within the timeout window,
-    // or when deinitialize() is called. Eliminates the 1-second polling loop.
+    // Event-based wait: resolves when no more responses arrive within the timeout
+    // window, or when deinitialize() is called. Eliminates the 1-second polling loop.
+    //
+    // This function ONLY waits — it must NOT release the command slot. The slot is
+    // released by the caller that OWNS it (the active command, in
+    // mqtt_command_start_and_wait). A waiting caller (mqtt_command_acquire_slot)
+    // also waits here; if it deinited, it would release the slot of whichever
+    // command had just claimed it — with 3+ concurrent same-type commands that
+    // lets two callers both believe they own the slot, so one command's responses
+    // are rejected (dropped) and the control state wedges.
     const completion = dude.waitForCompletion();
 
     // Hard safety cap: if restart_clock() keeps resetting the timeout,
     // we must eventually exit to avoid hanging the caller forever.
     // Uses AbortController so the setTimeout is cancelled when the race resolves.
+    // (The caller releases the slot after the wait resolves — see the note above.)
     const controller = new AbortController();
     const hard_timeout = new Promise<void>((resolve) => {
         const tid = setTimeout(() => {
@@ -180,7 +189,6 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
                 "sensorController.ts/mqtt_command_wait_for_command_completion",
                 `Command timed out after ${__max_wait_ms}ms hard cap`
             );
-            dude.deinitialize();
             resolve();
         }, __max_wait_ms);
         controller.signal.addEventListener("abort", () => clearTimeout(tid), { once: true });
@@ -188,17 +196,16 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
 
     await Promise.race([completion, hard_timeout]);
     controller.abort();
-    dude.deinitialize();
 }
 
 /**
  * Publish the command (initialize + publish) and wait for its responses.
- * Caller must hold the slot (see mqtt_command_acquire_slot); the wait
- * releases it via deinitialize().
+ * Caller must hold the slot (see mqtt_command_acquire_slot); this function
+ * releases it via deinitialize() once the wait resolves.
  *
- * Returns a snapshot of the results: once the wait releases the slot, a
- * waiting caller can immediately start its own command, whose initialize()
- * REASSIGNS dude.results — the array captured here stays intact.
+ * Returns a snapshot of the results: once the slot is released, a waiting
+ * caller can immediately start its own command, whose initialize() REASSIGNS
+ * dude.results — the array captured here stays intact.
  */
 async function mqtt_command_start_and_wait(
     dude: IMqttCommandControl,
@@ -218,7 +225,13 @@ async function mqtt_command_start_and_wait(
     // wait-for-it
     await mqtt_command_wait_for_command_completion(dude);
 
-    // snapshot before the slot can be claimed by the next caller
+    // Release the slot. Only the ACTIVE command releases it — a waiting caller
+    // (mqtt_command_acquire_slot) must never deinitialize, because it would
+    // release the slot of whichever command had just claimed it (see
+    // mqtt_command_wait_for_command_completion). Capture the results snapshot
+    // synchronously right after the release, before any waiter can claim the
+    // now-free slot and reassign dude.results via initialize().
+    dude.deinitialize();
     return dude.results;
 }
 

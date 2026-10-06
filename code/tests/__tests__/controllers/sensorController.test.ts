@@ -198,7 +198,20 @@ describe("sensor controller integration (error paths, already-running)", () => {
       clear_results: jest.fn(),
       restart_clock: jest.fn(),
       cancel_clock: jest.fn(),
-      waitForCompletion: jest.fn().mockResolvedValue(undefined),
+      // Models the real completion semantics: when the wait for an in-flight
+      // command resolves, that command has finished and released the slot. In
+      // the real MqttCommandControl the ACTIVE command calls deinitialize()
+      // after its own wait resolves — a waiting caller never does (see
+      // mqtt_command_wait_for_command_completion). This mock collapses
+      // "active command completed" into the wait resolving so a waiting caller
+      // (is_running initially true) can proceed to claim; for a caller that
+      // already holds the slot it is a harmless no-op (start_and_wait deinits).
+      waitForCompletion: jest.fn().mockImplementation(function (this: IMqttCommandControl) {
+        if (this.is_running) {
+          this.deinitialize();
+        }
+        return Promise.resolve();
+      }),
     };
 
     return {
@@ -440,6 +453,261 @@ describe("sensor controller integration (error paths, already-running)", () => {
       expect(r1.body).toEqual([{ source: "sensor-1", payload: { seq: 1 } }]);
       expect(r2.body).toEqual([{ source: "sensor-2", payload: { seq: 2 } }]);
     }, 10000);
+  });
+
+  // ****************************************************************
+  // **** high-contention serialization regression (3 concurrent same-type)
+
+  describe("high-contention serialization (3 concurrent same-type commands)", () => {
+    // A MqttCommandControl that records its own start/end lifecycle so the
+    // tests can assert the serialization invariant directly: at most one
+    // command may be active at a time (never two owners simultaneously), and
+    // every claimed slot must be released by the end.
+    class LifecycleControl extends MqttCommandControl {
+      lifecycle: Array<{ type: "start" | "end"; commandId?: string }> = [];
+      initialize(commandId?: string) {
+        this.lifecycle.push({ type: "start", commandId });
+        super.initialize(commandId);
+      }
+      deinitialize() {
+        // Only the active command (and the publish/connectivity failure paths)
+        // deinitialize — waiting callers no longer do (see
+        // mqtt_command_wait_for_command_completion). Record the "end" only on
+        // the first transition out of the running state so it is never
+        // double-recorded if deinitialize() runs more than once — keyed by the
+        // command_id that was active, which is what the caller observes.
+        if (this.is_running) {
+          this.lifecycle.push({ type: "end", commandId: this.active_command_id });
+        }
+        super.deinitialize();
+      }
+    }
+
+    // Mirror of MqttNetworking.accepts_command_response + result recording: a
+    // command response is accepted only when a command is active AND its
+    // command_id matches the active one. (The real correlation logic is
+    // unit-tested in MqttNetworking.test.ts; here we drive the REAL control
+    // state so the tests pin the controller's interaction with it.) Returns
+    // whether the response was accepted.
+    function simulateResponse(control: MqttCommandControl, commandId: string | undefined, source: string): boolean {
+      if (!control.is_running) {
+        return false;
+      }
+      if (commandId === undefined || control.active_command_id === undefined || commandId !== control.active_command_id) {
+        return false;
+      }
+      control.results.push({ source, payload: { command_id: commandId } });
+      control.restart_clock();
+      return true;
+    }
+
+    // Poll until cond() is true — a coordination aid (not a timing assertion),
+    // so the tests can drive a step between one command completing and the
+    // next claim without racing the event loop.
+    async function waitUntil(cond: () => boolean, timeoutMs = 4000, intervalMs = 5): Promise<void> {
+      const start = Date.now();
+      while (!cond()) {
+        if (Date.now() - start > timeoutMs) {
+          throw new Error(`waitUntil timed out after ${timeoutMs}ms`);
+        }
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+    }
+
+    // supertest does not send a request until the returned Test is awaited (or
+    // .end() is called). To observe mid-flight state (e.g. a publish) we must
+    // start the request WITHOUT awaiting it: awaiting inside an async closure
+    // triggers the send immediately, and the resulting promise is handed back
+    // for the test to await later. (request/app are the require()d supertest /
+    // express — typed any, matching makeHarness.)
+    function fireGet(request: any, app: any, url: string): Promise<any> {
+      return (async () => (await request(app).get(url)))();
+    }
+
+    // Build an Express app wired to a mock network whose publish_mqtt_message
+    // records each published command_id and schedules the sensor's reply (10ms
+    // later) through simulateResponse. silenceMs is the command-silence
+    // timeout (kept well above the 10ms reply delay so the reply is always
+    // accepted before the command completes).
+    function makeHarness(silenceMs: number, opts: { failFirstPublish?: boolean } = {}) {
+      const control = new LifecycleControl(silenceMs);
+      const publishes: string[] = [];
+      let publishCount = 0;
+
+      const network: MqttNetworking = {
+        mqtt_topic_command: "iot/v3/command",
+        mqtt_topic_command_response: "iot/v3/command-response",
+        is_connected: jest.fn().mockReturnValue(true),
+        prometheus_server_ready: jest.fn().mockReturnValue(true),
+        publish_mqtt_message: jest.fn((_topic: string, msg: Record<string, unknown>) => {
+          publishCount += 1;
+          const commandId = String(msg["command_id"]);
+          publishes.push(commandId);
+          if (opts.failFirstPublish && publishCount === 1) {
+            // The slot was claimed/initialized but the publish failed — the
+            // controller must release the slot and surface the error.
+            throw new Error("simulated publish failure");
+          }
+          // Simulate the sensor replying 10ms after the command is published.
+          setTimeout(() => {
+            simulateResponse(control, commandId, `sensor-${commandId.slice(0, 8)}`);
+          }, 10);
+          return Promise.resolve();
+        }),
+        close: jest.fn(),
+        get_cr_dude: jest.fn().mockReturnValue(control),
+      } as unknown as MqttNetworking;
+
+      const express = require("express");
+      const app = express();
+      app.use(express.json());
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { CreateSensorRoutes } = require("../../../src/routes/sensorRoutes");
+      const sensorRoutes = new CreateSensorRoutes(app, network);
+      sensorRoutes.register();
+      const request = require("supertest");
+
+      return { control, publishes, network, app, request };
+    }
+
+    // Prove the lifecycle never has two commands active at once (depth <= 1)
+    // and that every claimed slot is released by the end (depth == 0).
+    function assertSerialized(lifecycle: Array<{ type: "start" | "end"; commandId?: string }>): void {
+      let depth = 0;
+      let maxDepth = 0;
+      for (const ev of lifecycle) {
+        depth += ev.type === "start" ? 1 : -1;
+        expect(depth).toBeGreaterThanOrEqual(0);
+        maxDepth = Math.max(maxDepth, depth);
+      }
+      expect(maxDepth).toBeLessThanOrEqual(1);
+      expect(depth).toBe(0);
+    }
+
+    it("serializes three concurrent requests: one owner at a time, unique command_ids, isolated results", async () => {
+      const { control, publishes, app, request } = makeHarness(50);
+
+      const [rA, rB, rC] = await Promise.all([
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+      ]);
+
+      expect(rA.status).toBe(200);
+      expect(rB.status).toBe(200);
+      expect(rC.status).toBe(200);
+
+      // Three commands were published (one per request), all with unique ids
+      expect(publishes).toHaveLength(3);
+      expect(new Set(publishes).size).toBe(3);
+
+      // Never two active commands at once; every slot released at the end
+      assertSerialized(control.lifecycle);
+
+      // Each request received exactly one result, and the three results are
+      // the three distinct commands (no caller saw another caller's data)
+      const resultIds = [rA, rB, rC].map((r) => {
+        expect(Array.isArray(r.body)).toBe(true);
+        expect(r.body).toHaveLength(1);
+        return (r.body[0] as { payload: { command_id: string } }).payload.command_id;
+      });
+      expect(new Set(resultIds).size).toBe(3);
+      expect(resultIds.slice().sort()).toEqual(publishes.slice().sort());
+    }, 15000);
+
+    it("does not let a queued request publish before the active command completes", async () => {
+      const { control, publishes, app, request } = makeHarness(50);
+
+      await Promise.all([
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+      ]);
+
+      expect(publishes).toHaveLength(3);
+
+      // The publish order must equal the start order: a publish only happens
+      // right after its command claims and initializes, and a command can only
+      // claim after the previous one has fully released the slot. So command N
+      // could never have published while command N-1 was still active.
+      const startIds = control.lifecycle.filter((e) => e.type === "start").map((e) => e.commandId);
+      expect(startIds).toEqual(publishes);
+      assertSerialized(control.lifecycle);
+    }, 15000);
+
+    it("a delayed response from a completed command cannot contaminate the next command", async () => {
+      const { control, publishes, app, request } = makeHarness(100);
+
+      // Request A runs to completion (fireGet starts the request immediately so
+      // we can observe its publish before awaiting the response)
+      const resA = fireGet(request, app, "/sensors/get-details");
+      await waitUntil(() => publishes.length === 1);
+      const cmdA = publishes[0];
+      await resA;
+      expect(control.is_running).toBe(false); // A released the slot
+
+      // Request B starts and becomes active with a fresh command id
+      const resB = fireGet(request, app, "/sensors/get-details");
+      await waitUntil(() => publishes.length === 2);
+      const cmdB = publishes[1];
+      expect(cmdB).not.toBe(cmdA);
+      expect(control.is_running).toBe(true); // B owns the slot
+      expect(control.active_command_id).toBe(cmdB);
+
+      // A DELAYED response from A (carrying cmdA) arrives while B is active —
+      // it must be rejected: B's result set must never receive A's data
+      const accepted = simulateResponse(control, cmdA, "sensor-late-A");
+      expect(accepted).toBe(false);
+      expect(control.results.every((r) => r.payload.command_id !== cmdA)).toBe(true);
+
+      // B completes with only its own result
+      const bodyB = await resB;
+      expect(bodyB.status).toBe(200);
+      expect(bodyB.body).toHaveLength(1);
+      expect((bodyB.body[0] as { payload: { command_id: string } }).payload.command_id).toBe(cmdB);
+    }, 15000);
+
+    it("a failed command releases the slot so the queued requests still complete", async () => {
+      const { control, publishes, app, request } = makeHarness(50, { failFirstPublish: true });
+
+      const [rA, rB, rC] = await Promise.all([
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+      ]);
+
+      // The failed command surfaces as a 500; it must not poison the queue
+      expect(rA.status).not.toBe(200);
+      // The other two still complete successfully (the slot was released)
+      const succeeded = [rB, rC].filter((r) => r.status === 200);
+      expect(succeeded.length).toBe(2);
+      // Three commands were attempted (each published its own command_id)
+      expect(publishes).toHaveLength(3);
+      expect(new Set(publishes).size).toBe(3);
+      // Every slot is released at the end (the failure did not wedge the slot)
+      assertSerialized(control.lifecycle);
+    }, 15000);
+
+    it("the slot is free after all three complete: a fourth request proceeds normally", async () => {
+      const { control, publishes, app, request } = makeHarness(50);
+
+      const [rA, rB, rC] = await Promise.all([
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+        request(app).get("/sensors/get-details"),
+      ]);
+      expect([rA.status, rB.status, rC.status]).toEqual([200, 200, 200]);
+
+      // The slot is released after the third command
+      expect(control.is_running).toBe(false);
+
+      // A fourth request claims the slot normally and completes (no hang)
+      const rD = await request(app).get("/sensors/get-details");
+      expect(rD.status).toBe(200);
+      expect(publishes).toHaveLength(4);
+      expect(new Set(publishes).size).toBe(4);
+      expect((rD.body[0] as { payload: { command_id: string } }).payload.command_id).toBe(publishes[3]);
+    }, 15000);
   });
 
   describe("reboot command message", () => {

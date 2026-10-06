@@ -8,6 +8,7 @@ import { Json, OK } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import { getSettings, patchSettings, isPersistenceAvailable } from "../services/settingsStore";
 import { appSettingsUpdateSchema, SETTINGS_SCHEMA } from "../schemas/settings";
+import { ensureError } from "../dodsonlabs/SystemFunctions";
 import type { ZodIssue } from "zod";
 
 // Use the update schema for validation of partial updates (no defaults applied)
@@ -111,7 +112,12 @@ export async function updateSettings(req: express.Request, res: express.Response
         res.contentType(Json);
         res.send(merged);
     } catch (err) {
-        const message = `Failed to update settings: ${(err as Error).message}`;
+        // Normalize the rejection — JS permits `throw "..."` / `throw null` /
+        // `throw {...}`, none of which have a `.message`. ensureError() yields
+        // a real Error so a non-Error rejection never produces "undefined" in
+        // the response (and never throws a secondary error in the catch block).
+        const error = ensureError(err);
+        const message = `Failed to update settings: ${error.message}`;
         logger()?.write_error("settingsController.ts/updateSettings", message);
         res.status(500);
         res.contentType(Json);

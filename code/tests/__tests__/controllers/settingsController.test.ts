@@ -353,6 +353,73 @@ describe("updateSettings - persistence reporting (P3-6)", () => {
 });
 
 /**
+ * Error normalization: a persistence rejection is not guaranteed to be an
+ * Error — JS permits `throw "..."`, `throw null`, or `throw { ... }`. The
+ * controller must normalize via ensureError() so a non-Error rejection never
+ * produces "undefined" in the response (the old `(err as Error).message` cast
+ * did) and never throws a secondary error inside the catch block. The HTTP
+ * contract (500 + a single `error` key) is unchanged.
+ */
+describe("updateSettings - error normalization (ensureError)", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        currentMockCache = { ...baseMockCache };
+    });
+
+    function rejectWith(value: unknown) {
+        (settingsStore.patchSettings as jest.Mock).mockRejectedValueOnce(value);
+    }
+
+    async function patchAndCapture() {
+        const { res, statusCalls, sendCalls } = createMockRes();
+        const req = createMockReq({ body: { theme: "dark" } }) as Request;
+        await updateSettings(req, res as Response);
+        const body = sendCalls[0] as Record<string, unknown>;
+        return { statusCalls, body };
+    }
+
+    it("normal Error: behavior and message are unchanged", async () => {
+        rejectWith(new Error("database unavailable"));
+        const { statusCalls, body } = await patchAndCapture();
+
+        expect(statusCalls).toContain(500);
+        expect(String(body.error)).toBe("Failed to update settings: database unavailable");
+    });
+
+    it("string rejection: no 'undefined', reason preserved, shape unchanged", async () => {
+        rejectWith("database unavailable");
+        const { statusCalls, body } = await patchAndCapture();
+
+        expect(statusCalls).toContain(500);
+        // The fix: a non-Error rejection must not yield "undefined"
+        expect(String(body.error)).not.toContain("undefined");
+        // The reason text is still carried through
+        expect(String(body.error)).toContain("database unavailable");
+        // Response shape unchanged: a single error key
+        expect(Object.keys(body)).toEqual(["error"]);
+    });
+
+    it("object rejection: handled safely, no 'undefined', no secondary throw", async () => {
+        rejectWith({ reason: "database unavailable" });
+        const { statusCalls, body } = await patchAndCapture();
+
+        expect(statusCalls).toContain(500);
+        expect(String(body.error)).not.toContain("undefined");
+        expect(String(body.error)).toContain("database unavailable");
+        expect(Object.keys(body)).toEqual(["error"]);
+    });
+
+    it("null rejection: handled safely, no 'undefined'", async () => {
+        rejectWith(null);
+        const { statusCalls, body } = await patchAndCapture();
+
+        expect(statusCalls).toContain(500);
+        expect(String(body.error)).not.toContain("undefined");
+        expect(Object.keys(body)).toEqual(["error"]);
+    });
+});
+
+/**
  * P3-7: the update schema is strict, so an unknown key (e.g. a typo) fails
  * the request with 400 instead of being silently dropped.
  */

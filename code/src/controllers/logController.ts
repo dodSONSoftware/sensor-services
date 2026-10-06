@@ -39,6 +39,16 @@ const ALLOWED_LEVELS: ReadonlySet<string> = new Set(["debug", "info", "warn", "e
 // the external health checks in generalController.ts).
 const LOKI_FETCH_TIMEOUT_MS = 10_000;
 
+// Loki's query_range `values` are [nanosecond-timestamp, log-line] pairs where
+// the timestamp is a decimal-integer string (e.g. "1791292456123456789"). Loki
+// is an external runtime boundary — the LokiResponse types are compile-time
+// only, so a malformed or incompatible response can carry a timestamp that is
+// not a valid decimal string. Validating it before BigInt() keeps one bad entry
+// from throwing and discarding the rest of the response.
+function isNanosecondTimestamp(value: unknown): value is string {
+    return typeof value === "string" && /^\d+$/.test(value);
+}
+
 // Get Loki config from global config
 function getLokiConfig(): LokiConfig | null {
     const config = require("../common/global").getConfig();
@@ -200,6 +210,19 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
                 if (Array.isArray(value) && value.length >= 2) {
                     const timestamp = value[0];
                     const rawMessage = value[1];
+
+                    // A malformed timestamp must not throw in BigInt() and
+                    // discard the whole response. Skip just this entry, warn
+                    // (with only the value's TYPE — the entry's content may be
+                    // large or sensitive and must not be logged for this), and
+                    // continue with the remaining entries.
+                    if (!isNanosecondTimestamp(timestamp)) {
+                        _log().write_warn(
+                            "logController.ts/fetchLokiLogs",
+                            `Discarded Loki log entry with a malformed timestamp (got ${typeof timestamp}, expected a decimal nanosecond string)`
+                        );
+                        continue;
+                    }
 
                     // Try to parse the JSON message
                     let message = String(rawMessage);
