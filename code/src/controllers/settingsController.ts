@@ -57,8 +57,8 @@ export async function getSettingsSchema(_req: express.Request, res: express.Resp
         range: meta.type === "number"
             ? { min: meta.min, max: meta.max, step: meta.step }
             : meta.type === "enum"
-              ? { options: meta.options }
-              : null,
+                ? { options: meta.options }
+                : null,
         description: meta.description,
     }));
 

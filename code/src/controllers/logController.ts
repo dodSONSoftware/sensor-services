@@ -121,10 +121,10 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
     if (source === "ip-pinger") {
         // IP pinger may use different labels - try both possible label sets
         // Grafana shows logs with service_name: ip-pinger
-        query = `{service_name="ip-pinger"}`;
+        query = "{service_name=\"ip-pinger\"}";
     } else {
         // Default to sensor-telemetry labels
-        query = `{service_name="sensor-telemetry",container="sensor-telemetry"}`;
+        query = "{service_name=\"sensor-telemetry\",container=\"sensor-telemetry\"}";
     }
 
     // Parse JSON first so we can filter on fields within the JSON
