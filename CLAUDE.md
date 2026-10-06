@@ -47,6 +47,7 @@ Node 22.22.0 / npm 10.9.4 (Volta). CommonJS (`module: "NodeNext"`, no `"type": "
 - Builder stage runs the canonical `npm run build`; final image copies only `dist/`, the `src/routes/` subset (Swagger scans it at startup), and `package*.json`; WORKDIR `/app`, non-root `appuser`, HEALTHCHECK on `/health`, exposes 32000.
 - Config resolution is identical to bare metal: `/app/configs/config.yml` (docker-compose mounts host `/mnt/sensor-services/` → `/app/configs/`), then CWD fallback `./dist/config.yml`. The mounted config always takes precedence.
 - The committed `config.yml` is a complete, independently valid configuration (it carries `db-password`), so a container with no mounted config **starts from the built-in `dist/config.yml`** — pinned by `tests/docker/verify.sh`, which also asserts a mounted config takes precedence over the built-in one.
+- Compose sets `stop_grace_period: 20s` — it must exceed the app's hard shutdown timeout (`HARD_SHUTDOWN_TIMEOUT_MS` in `src/common/shutdown.ts`, 15s); Docker's default 10s grace would SIGKILL the process mid-shutdown. Pinned by `tests/__tests__/docker/docker.test.ts`.
 
 ## Architecture
 

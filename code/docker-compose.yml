@@ -7,6 +7,10 @@ services:
     volumes:
       - /mnt/sensor-services/:/app/configs/
     restart: unless-stopped
+    # Must exceed the application's hard shutdown timeout (HARD_SHUTDOWN_TIMEOUT_MS,
+    # src/common/shutdown.ts) or Docker's SIGKILL lands mid-shutdown. Pinned by
+    # tests/__tests__/docker/docker.test.ts.
+    stop_grace_period: 20s
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:32000/health" ]
       interval: 30s

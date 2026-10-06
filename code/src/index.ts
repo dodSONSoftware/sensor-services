@@ -19,7 +19,7 @@ import { assertRoutesMatchDeclared } from "./routes/routeDrift";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { createApiMetricsMiddleware } from "./common/metrics";
-import { formatFatalError, runGracefulShutdown } from "./common/shutdown";
+import { formatFatalError, HARD_SHUTDOWN_TIMEOUT_MS, runGracefulShutdown } from "./common/shutdown";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
@@ -198,9 +198,6 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
     const start_time = Date.now();
 
-    // Hard shutdown timeout — if graceful shutdown hangs, force exit.
-    const __hard_shutdown_timeout_ms = 15_000;
-
     // Re-entrancy guard: a second signal or fatal error mid-shutdown must not
     // re-run the sequence (which would duplicate the logger close).
     let shutting_down = false;
@@ -218,11 +215,13 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
 
         // Set a hard timeout as a safety net to prevent hanging forever.
         // It is cleared before the exit so it can never fire after the logger
-        // has been closed by runGracefulShutdown().
+        // has been closed by runGracefulShutdown(). The compose service's
+        // stop_grace_period (20s) must stay above HARD_SHUTDOWN_TIMEOUT_MS,
+        // or Docker SIGKILLs the process before this net can fire.
         const hardTimeout = setTimeout(() => {
-            appLogger.write_error("index.ts", `Hard shutdown timeout reached (${__hard_shutdown_timeout_ms}ms). Forcing exit.`);
+            appLogger.write_error("index.ts", `Hard shutdown timeout reached (${HARD_SHUTDOWN_TIMEOUT_MS}ms). Forcing exit.`);
             process.exit(1);
-        }, __hard_shutdown_timeout_ms);
+        }, HARD_SHUTDOWN_TIMEOUT_MS);
         hardTimeout.unref();
 
         try {

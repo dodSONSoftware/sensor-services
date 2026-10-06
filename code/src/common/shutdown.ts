@@ -19,6 +19,16 @@ export interface ShutdownResources {
 }
 
 /**
+ * Hard shutdown timeout (ms): the safety-net duration index.ts arms while the
+ * graceful shutdown sequence runs. Anything that terminates this process must
+ * allow at least this long — docker-compose.yml therefore sets
+ * stop_grace_period: 20s (Docker's default of 10s would SIGKILL the process
+ * mid-shutdown). The compose value is pinned against this constant in
+ * tests/__tests__/docker/docker.test.ts.
+ */
+export const HARD_SHUTDOWN_TIMEOUT_MS = 15_000;
+
+/**
  * Normalize an arbitrary fatal-error value into a diagnostic log message
  * (Optional-1). The values reaching the `uncaughtException` /
  * `unhandledRejection` handlers are not guaranteed to be Error instances, so

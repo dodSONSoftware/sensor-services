@@ -7,6 +7,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import * as yaml from "js-yaml";
 import { validateConfig } from "../../../src/schemas/config";
+import { HARD_SHUTDOWN_TIMEOUT_MS } from "../../../src/common/shutdown";
 
 /**
  * P3-8 static guards for the Docker build.
@@ -23,10 +24,27 @@ import { validateConfig } from "../../../src/schemas/config";
  * - only the src/routes subset is copied for Swagger, not the entire source tree,
  * - the container WORKDIR keeps the canonical CWD-relative config fallback
  *   (./dist/config.yml) working, so a container without a mounted config starts
- *   exactly like bare metal (a mounted /app/configs/config.yml takes precedence).
+ *   exactly like bare metal (a mounted /app/configs/config.yml takes precedence),
+ * - the compose service sets a stop_grace_period that exceeds the application's
+ *   internal hard shutdown timeout (HARD_SHUTDOWN_TIMEOUT_MS) — Docker's
+ *   default 10s grace would SIGKILL the process mid-shutdown otherwise.
  */
 const codeRoot = join(__dirname, "..", "..", "..");
 const dockerfile = readFileSync(join(codeRoot, "Dockerfile"), "utf8");
+
+/**
+ * Parse a Docker Compose duration (bare number, or number + s/m/h unit) into
+ * milliseconds.
+ */
+function composeDurationToMs(value: string): number {
+    const match = /^(\d+)([smh])?$/.exec(value.trim());
+    if (!match) {
+        throw new Error(`unrecognized compose duration: "${value}"`);
+    }
+    const amount = Number(match[1]);
+    const unit = match[2] ?? "s";
+    return amount * (unit === "h" ? 3_600_000 : unit === "m" ? 60_000 : 1_000);
+}
 
 describe("Dockerfile (P3-8)", () => {
     it("runs the canonical build in the builder stage", () => {
@@ -70,5 +88,30 @@ describe("built-in configuration (P3-8)", () => {
         ) as Record<string, unknown>;
         const config = validateConfig(raw);
         expect(config["db-password"]).toBeTruthy();
+    });
+});
+
+describe("docker-compose.yml (shutdown budget)", () => {
+    // The graceful shutdown sequence (HTTP drain -> MQTT close (5s) -> settings
+    // store -> logger close) runs under a hard safety net of
+    // HARD_SHUTDOWN_TIMEOUT_MS. Docker Compose's default stop grace period is
+    // 10s — shorter — so an unconfigured `docker compose stop` SIGKILLs the
+    // process while it is still closing MQTT/settings or flushing the logger.
+    // The compose file must therefore carry an explicit stop_grace_period
+    // longer than the application's own hard cap.
+    const compose = yaml.load(
+        readFileSync(join(codeRoot, "docker-compose.yml"), "utf8")
+    ) as { services: Record<string, { stop_grace_period?: string }> };
+    const service = compose.services["sensor-services"];
+
+    it("declares a sensor-services service", () => {
+        expect(service).toBeDefined();
+    });
+
+    it("sets a stop_grace_period longer than the application's hard shutdown timeout", () => {
+        expect(service).toBeDefined();
+        expect(service!.stop_grace_period).toBeDefined();
+        const graceMs = composeDurationToMs(service!.stop_grace_period!);
+        expect(graceMs).toBeGreaterThan(HARD_SHUTDOWN_TIMEOUT_MS);
     });
 });

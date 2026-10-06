@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Carbon Falcon — firmware 4.12.33
+**Release:** Carbon Falcon — firmware 4.12.34
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -218,7 +218,7 @@ code/
 
 - **Event-based MQTT responses**: Uses `MqttCommandControl.waitForCompletion()` with configurable timeout and 10-second hard cap
 - **Separate metric registries**: API metrics (requests, duration, errors) isolated from sensor gauge metrics
-- **Graceful shutdown**: 15-second timeout, closes HTTP server then MQTT client
+- **Graceful shutdown**: 15-second timeout, closes HTTP server then MQTT client; `docker-compose.yml` sets `stop_grace_period: 20s` so Docker's stop never SIGKILLs the process mid-shutdown
 - **Request tracing**: `X-Request-ID` header propagated via AsyncLocalStorage
 - **Rate limiting**: Configurable
 - **Body validation**: All POST bodies validated with Zod schemas
