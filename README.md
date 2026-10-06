@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Graphite Falcon — firmware 4.13.8
+**Release:** Graphite Falcon — firmware 4.13.9
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)

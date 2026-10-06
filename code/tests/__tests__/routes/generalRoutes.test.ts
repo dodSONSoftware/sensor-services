@@ -8,6 +8,16 @@ import express from "express";
 import { CreateGeneralRoutes } from "../../../src/routes/generalRoutes";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
 
+// Mock settingsStore so /health doesn't depend on a real DB connection.
+// P2-1: /health reports degraded when persistence is unavailable; these
+// route tests exercise the fully-healthy branch (the degraded branch is
+// covered in controllers/generalController.test.ts).
+jest.mock("../../../src/services/settingsStore", () => ({
+  getSettings: jest.fn(() => ({})),
+  patchSettings: jest.fn(async () => ({})),
+  isPersistenceAvailable: jest.fn(() => true),
+}));
+
 beforeEach(() => {
   jest.spyOn(globalThis, "fetch").mockResolvedValue({
     ok: true,

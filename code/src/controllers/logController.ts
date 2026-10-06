@@ -97,6 +97,18 @@ interface LokiResponse {
     data?: LokiResponseData;
 }
 
+// Internal parsed log entry. Keeps the raw Loki nanosecond timestamp as a
+// bigint so entries from multiple streams can be globally ordered at full
+// Loki precision — collapsing to milliseconds first (as Date does) would
+// merge sub-millisecond timestamps and lose their ordering. The key is
+// stripped before the entries are returned to the API.
+interface ParsedLokiLog {
+    timestampNs: bigint;
+    timestamp: string;
+    level: string;
+    message: string;
+}
+
 /**
  * Fetch logs from Loki for a specific sensor source and log levels.
  * @param source The sensor source name (e.g., "Air-Light-1" or "ip-pinger")
@@ -178,12 +190,13 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
 
         const data = await response.json() as LokiResponse;
 
-        // Log result count for debugging
+        // Log result count for debugging (never the full response body —
+        // that would duplicate potentially large amounts of queried log
+        // content into the application log, which may itself be sent to Loki)
         const results = data.data?.result || [];
         _log().write_info("logController.ts/fetchLokiLogs", `Loki returned ${results.length} result stream(s)`);
-        _log().write_debug("logController.ts/fetchLokiLogs", `Loki full response: ${JSON.stringify(data)}`);
 
-        const logs: Array<{ timestamp: string; level: string; message: string }> = [];
+        const parsedLogs: ParsedLokiLog[] = [];
 
         for (const row of results) {
             const values = row.values || [];
@@ -221,23 +234,40 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
                         // Message wasn't JSON, use as-is
                     }
 
-                    // Loki returns timestamp as nanoseconds (string), convert to ISO string
-                    // Nanoseconds to milliseconds: divide by 1,000,000
-                    const nsTimestamp = parseFloat(timestamp);
-                    const msTimestamp = nsTimestamp / 1_000_000;
+                    // Loki returns timestamp as nanoseconds (string). Keep the
+                    // raw value for cross-stream ordering; the ISO string for
+                    // the API response derives from it (ns -> ms: /1,000,000)
+                    const timestampNs = BigInt(timestamp);
+                    const msTimestamp = Number(timestampNs / BigInt(1_000_000));
                     const isoTimestamp = new Date(msTimestamp).toISOString();
 
-                    logs.push({ timestamp: isoTimestamp, level, message });
+                    parsedLogs.push({ timestampNs, timestamp: isoTimestamp, level, message });
                 }
             }
         }
 
-        // Limit results to the requested count
-        // Loki's limit parameter limits streams, not individual log entries,
-        // so we need to manually slice the results
-        if (logs.length > limit) {
-            logs.splice(limit);
+        // Loki's query_range limit parameter caps the total number of log
+        // entries returned, and entries within one stream are ordered — but
+        // entries ACROSS streams are not globally timestamp-ordered. Sort all
+        // collected entries newest-first (dir=backward) before any
+        // truncation, so a defensive slice below keeps the globally newest
+        // entries. Comparing bigints directly (no subtraction) keeps full
+        // nanosecond precision.
+        parsedLogs.sort((a, b) => {
+            if (a.timestampNs === b.timestampNs) {
+                return 0;
+            }
+            return a.timestampNs > b.timestampNs ? -1 : 1;
+        });
+
+        // Defensive truncation — only meaningful if Loki returned more than
+        // requested
+        if (parsedLogs.length > limit) {
+            parsedLogs.splice(limit);
         }
+
+        // Drop the internal nanosecond sort key before returning
+        const logs = parsedLogs.map(({ timestampNs: _timestampNs, ...log }) => log);
 
         _log().write_info("logController.ts/fetchLokiLogs", `Returning ${logs.length} log entry(s) for source: ${source}`);
 

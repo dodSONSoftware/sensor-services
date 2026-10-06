@@ -8,6 +8,20 @@ import { getAbout, getDateCurrent, getDateUTC, getEndpoints, getHealth } from ".
 import { createMockRes, createMockReq } from "../../mocks/express";
 import { setConfig } from "../../../src/common/global";
 
+// Mock settingsStore so tests don't require a real DB connection. Only
+// isPersistenceAvailable is exercised here (the /health probe); the other
+// exports exist because settingsController, loaded via the __routesHelp
+// imports, pulls them from the same module.
+jest.mock("../../../src/services/settingsStore", () => ({
+  getSettings: jest.fn(() => ({})),
+  patchSettings: jest.fn(async () => ({})),
+  isPersistenceAvailable: jest.fn(() => mockPersistenceAvailable),
+}));
+
+// P2-1: controllable so tests can exercise both the persisted (true) and
+// degraded in-memory (false) branches of /health.
+let mockPersistenceAvailable = true;
+
 /**
  * Create a mock fetch response that resolves with a successful HTTP response.
  */
@@ -131,6 +145,8 @@ describe("getDateUTC", () => {
 
 describe("getHealth", () => {
   beforeEach(() => {
+    // Default to the persisted branch; individual tests flip it
+    mockPersistenceAvailable = true;
     // Set up a minimal config for health checks
     setConfig({
       "log-level": "debug",
@@ -171,7 +187,68 @@ describe("getHealth", () => {
     expect(body.ipPinger).toBe("healthy");
     expect(body).toHaveProperty("sensorTelemetry");
     expect(body.sensorTelemetry).toBe("healthy");
+    expect(body.settingsPersistence).toBe("healthy");
     expect(body).toHaveProperty("timestamp");
+  });
+
+  // P2-1: settings persistence loss is a degraded capability, not a service
+  // failure — the app deliberately runs in in-memory (non-durable) mode when
+  // PostgreSQL is unavailable, so it must map to degraded + HTTP 200, never
+  // unhealthy + 503.
+
+  it("P2-1: reports degraded with HTTP 200 when settings persistence is unavailable", async () => {
+    mockPersistenceAvailable = false;
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+    }) as Request & { mqtt_connected: boolean };
+
+    jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+
+    await getHealth(req, res as Response);
+
+    expect(statusCalls).toContain(200);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("degraded");
+    expect(body.mqtt).toBe("connected");
+    expect(body.ipPinger).toBe("healthy");
+    expect(body.sensorTelemetry).toBe("healthy");
+    expect(body.settingsPersistence).toBe("unavailable");
+  });
+
+  it("P2-1: allows a fully healthy status when persistence is available and everything else is up", async () => {
+    mockPersistenceAvailable = true;
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: true,
+    }) as Request & { mqtt_connected: boolean };
+
+    jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+
+    await getHealth(req, res as Response);
+
+    expect(statusCalls).toContain(200);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("healthy");
+    expect(body.settingsPersistence).toBe("healthy");
+  });
+
+  it("P2-1: MQTT disconnect remains unhealthy even when persistence is unavailable", async () => {
+    mockPersistenceAvailable = false;
+    const { res, statusCalls, sendCalls } = createMockRes();
+    const req = createMockReq({
+      mqtt_connected: false,
+    }) as Request & { mqtt_connected: boolean };
+
+    jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+
+    await getHealth(req, res as Response);
+
+    expect(statusCalls).toContain(503);
+    const body = sendCalls[0] as Record<string, unknown>;
+    expect(body.status).toBe("unhealthy");
+    expect(body.mqtt).toBe("disconnected");
+    expect(body.settingsPersistence).toBe("unavailable");
   });
 
   it("should report unhealthy status with HTTP 503 when mqtt is not connected", async () => {

@@ -12,6 +12,7 @@ import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 import { __routesHelp as configRoutesHelp } from "../routes/configRoutes";
 import { __routesHelp as logRoutesHelp } from "../routes/logRoutes";
+import { isPersistenceAvailable } from "../services/settingsStore";
 
 // **** public functions
 
@@ -170,13 +171,18 @@ export async function getHealth(req: express.Request, res: express.Response) {
         telemetryUrl ? checkSensorTelemetryHealth(telemetryUrl) : true,
     ]);
 
+    // Settings persistence loss is a degraded capability, not a service
+    // failure: the app deliberately runs in in-memory (non-durable) mode when
+    // PostgreSQL is unavailable, so it maps to degraded, never unhealthy.
+    const settingsPersistenceAvailable = isPersistenceAvailable();
+
     // MQTT is vital - if disconnected, status is unhealthy
     // If MQTT connected but other services down, status is degraded
     // If all services healthy, status is healthy
     let status: "healthy" | "degraded" | "unhealthy";
     if (!is_connected) {
         status = "unhealthy";
-    } else if (!ipPingerHealthy || !telemetryHealthy) {
+    } else if (!ipPingerHealthy || !telemetryHealthy || !settingsPersistenceAvailable) {
         status = "degraded";
     } else {
         status = "healthy";
@@ -187,6 +193,7 @@ export async function getHealth(req: express.Request, res: express.Response) {
         mqtt: is_connected ? "connected" : "disconnected",
         ipPinger: ipPingerHealthy ? "healthy" : "unreachable",
         sensorTelemetry: telemetryHealthy ? "healthy" : "unreachable",
+        settingsPersistence: settingsPersistenceAvailable ? "healthy" : "unavailable",
         timestamp: new Date().toISOString(),
         uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
     };
@@ -225,8 +232,8 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/health",
             verb: "GET",
             requestBody: "None",
-            responseBody: "{ status: \"healthy|degraded|unhealthy\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", timestamp: \"ISO-date-string\" }",
-            description: "Health check endpoint for container orchestration. HTTP 200 for healthy/degraded, HTTP 503 for unhealthy. Status is 'degraded' if a non-critical component is down and 'unhealthy' if MQTT is disconnected."
+            responseBody: "{ status: \"healthy|degraded|unhealthy\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", settingsPersistence: \"healthy|unavailable\", timestamp: \"ISO-date-string\", uptime_seconds: number }",
+            description: "Health check endpoint for container orchestration. HTTP 200 for healthy/degraded, HTTP 503 for unhealthy. Status is 'degraded' if a non-critical component is down or settings persistence is unavailable, and 'unhealthy' if MQTT is disconnected."
         },
         {
             "name": "Date Local (legacy)",

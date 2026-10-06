@@ -179,8 +179,11 @@ describe("logController (GET /sensors/logs/:source)", () => {
     });
 
     it("should slice the returned entries to the requested limit", async () => {
-        // Loki's limit parameter limits streams, not individual entries — the
-        // controller must slice the parsed entries itself.
+        // Truncation is defensive (Loki's query_range limit parameter caps
+        // the total number of log entries) and must run AFTER the global
+        // newest-first sort, so the surviving entries are the newest ones —
+        // here entry 4 and entry 3, even though the fixture lists them
+        // oldest-first.
         const values = Array.from({ length: 5 }, (_, i) => [
             String((1_700_000_000_000 + i * 1_000_000) * 1_000_000),
             JSON.stringify({ level: "info", message: `entry ${i}` }),
@@ -193,7 +196,76 @@ describe("logController (GET /sensors/logs/:source)", () => {
         const res = await request(app).get("/sensors/logs/Air-1?limit=2");
         expect(res.status).toBe(200);
         expect(res.body).toHaveLength(2);
-        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["entry 0", "entry 1"]);
+        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["entry 4", "entry 3"]);
+    });
+
+    // P2-2: Loki entries within a stream are timestamp-ordered, but entries
+    // ACROSS streams are not — the controller must sort the flattened result
+    // globally, newest-first (dir=backward), before truncating.
+
+    const MULTI_STREAM_RESPONSE = {
+        data: {
+            resultType: "streams",
+            result: [
+                {
+                    stream: { source: "A" },
+                    values: [
+                        ["1791277205000000000", "A5"],
+                        ["1791277201000000000", "A1"],
+                    ],
+                },
+                {
+                    stream: { source: "B" },
+                    values: [
+                        ["1791277204000000000", "B4"],
+                        ["1791277203000000000", "B3"],
+                    ],
+                },
+            ],
+        },
+    };
+
+    it("P2-2: globally orders interleaved multi-stream results newest-first", async () => {
+        fetchMock.mockResolvedValueOnce({ ok: true, json: async () => MULTI_STREAM_RESPONSE });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(200);
+        // Naive stream-order flattening would give A5, A1, B4, B3
+        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["A5", "B4", "B3", "A1"]);
+    });
+
+    it("P2-2: applies the limit to the globally newest entries, not per-stream order", async () => {
+        fetchMock.mockResolvedValueOnce({ ok: true, json: async () => MULTI_STREAM_RESPONSE });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1?limit=2");
+        expect(res.status).toBe(200);
+        // Stream-order truncation would wrongly return A5, A1
+        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["A5", "B4"]);
+    });
+
+    it("P2-2: preserves nanosecond ordering for timestamps within the same millisecond", async () => {
+        // Both timestamps collapse to the same JavaScript millisecond —
+        // sorting on the ISO string (or on ms) cannot order them; only the
+        // raw nanosecond value can.
+        const olderNs = "1791277200123456000";
+        const newerNs = "1791277200123456789";
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                data: {
+                    resultType: "streams",
+                    result: [{ stream: { source: "A" }, values: [[olderNs, "older-ns"], [newerNs, "newer-ns"]] }],
+                },
+            }),
+        });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(200);
+        expect(res.body.map((e: { message: string }) => e.message)).toEqual(["newer-ns", "older-ns"]);
+        // The internal nanosecond sort key must not leak into the API
+        for (const entry of res.body) {
+            expect(Object.keys(entry).sort()).toEqual(["level", "message", "timestamp"]);
+        }
     });
 
     it("should use the provided end timestamp with the wider 2-hour pagination window", async () => {
