@@ -126,8 +126,8 @@ function reloadFailure(message: string): ReloadResult {
  * and the log level is mutated on the existing logger instance. Restart-
  * required values stay in the file (desired state) until a restart; they must
  * not leak into the active config, because long-lived components keep their
- * construction-time snapshots and /api/read-config reports what is actually
- * running.
+ * construction-time snapshots and /api/read-running-config reports what is
+ * actually running (/api/read-config reports the persisted file).
  */
 async function doReloadConfig(): Promise<ReloadResult> {
     const configPath = findConfigPath();
@@ -193,14 +193,54 @@ export async function reloadConfig(_req: express.Request, res: express.Response)
 }
 
 /**
- * GET /read-config: Return the running (in-memory) configuration.
+ * GET /read-config: Return the persisted configuration (config.yml).
+ * Reads and validates the same single file the process started from and
+ * /api/write-config writes, so a read → modify → write round trip preserves
+ * pending (restart-required) changes instead of silently reverting them.
  * Pure read — no disk reload side effects (that is /reload-config's job).
  * Returns the COMPLETE configuration — including db-password and loki-url.
  * This trusted deployment's /api/write-config consumes the whole document,
- * so a read → modify → write round trip must preserve every value (secrets
- * are still kept out of logs via redactConfig()).
+ * so every value must survive the round trip (secrets are still kept out of
+ * logs via redactConfig()). The active in-memory configuration is
+ * /api/read-running-config's job.
  */
 export function readConfig(_req: express.Request, res: express.Response): void {
+    const configPath = findConfigPath();
+    if (!configPath) {
+        res.status(500).json({
+            error: "Could not find config file (tried: " + CONFIG_PATHS.join(", ") + ")"
+        });
+        return;
+    }
+
+    // Read the persisted config.yml directly — the same single file the
+    // process started with.
+    const configResult = read_file_yaml<Record<string, unknown>>(configPath);
+    if (configResult.data == null) {
+        res.status(500).json({
+            error: "Failed to read config: " + (configResult.error ?? "unknown error")
+        });
+        return;
+    }
+
+    try {
+        res.json(validateConfig(configResult.data));
+    } catch (err) {
+        // The thrown message already carries the "Config validation failed:"
+        // prefix — do not duplicate it.
+        res.status(500).json({ error: ensureError(err).message });
+    }
+}
+
+/**
+ * GET /read-running-config: Return the active in-memory (running)
+ * configuration. Only the hot-reloadable keys (log-level) track
+ * /api/write-config changes live; every other key reports the value the
+ * process is actually running (construction-time snapshot) until a restart.
+ * Returns the COMPLETE configuration — including db-password and loki-url.
+ * Use /api/read-config for the persisted (on-disk) configuration.
+ */
+export function readRunningConfig(_req: express.Request, res: express.Response): void {
     const config = getConfig();
 
     if (!config) {

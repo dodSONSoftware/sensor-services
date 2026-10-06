@@ -72,7 +72,7 @@ Single Express app on port 32000 (REST API + Swagger + API metrics at `/metrics`
 |------|--------|
 | General | `GET /about`, `/date_local` (`/date-local`), `/date_utc` (`/date-utc`), `/endpoints`, `/health` (200 healthy/degraded, 503 unhealthy), `/metrics` |
 | Settings | `GET /ui/settings`, `GET /ui/settings-schema`, `PATCH /ui/settings-update` |
-| Config | `GET /api/reload-config`, `GET /api/read-config`, `POST /api/write-config` |
+| Config | `GET /api/reload-config`, `GET /api/read-config` (persisted on-disk config), `GET /api/read-running-config` (active in-memory config), `POST /api/write-config` |
 | Sensors (MQTT) | `GET /sensors/get-details[/:source]`, `GET /sensors/read-config[/:source]`, `POST /sensors/reboot[/:source]` (GET accepted during compatibility period), `POST /sensors/write-config/:source` (rejects broadcast `*` — P1-2), `POST /sensors/update-config/:source` (501, deprecated), `GET /sensors/logs/:source` (Loki; optional `level`, `limit`) |
 | Pinger proxy | `/ippinger/{about,read-config,write-config,restart,ping[/:target]}` |
 | Pinger analysis | `GET /sensors/ippinger-analyze` (metadata lives in pingerRoutes, P3-4) |
@@ -80,7 +80,7 @@ Single Express app on port 32000 (REST API + Swagger + API metrics at `/metrics`
 
 ## Configuration
 
-**Single-file config:** `config.yml` is the only configuration document — the complete application configuration, including credentials (`db-password`, `loki-url`); trusted-LAN deployment assumes access to the file and the config API is controlled by the surrounding infrastructure. Startup and `doReloadConfig()` both read it directly via `read_file_yaml()` + `validateConfig()`; a missing required key (e.g. `db-password`) fails startup with a clear error. `redactConfig()` keeps those values out of logs/Loki; `/api/read-config` returns the complete config and `/api/write-config` consumes the complete document, so read → modify → write round trips preserve every value.
+**Single-file config:** `config.yml` is the only configuration document — the complete application configuration, including credentials (`db-password`, `loki-url`); trusted-LAN deployment assumes access to the file and the config API is controlled by the surrounding infrastructure. Startup and `doReloadConfig()` both read it directly via `read_file_yaml()` + `validateConfig()`; a missing required key (e.g. `db-password`) fails startup with a clear error. `redactConfig()` keeps those values out of logs/Loki. `/api/read-config` reads and validates the on-disk file directly (500 if missing, unreadable, or invalid) — as the source document for the full-document `/api/write-config`, a read → modify → write round trip preserves pending restart-required changes instead of silently reverting them. `/api/read-running-config` returns the active in-memory config instead (hot-reloaded `log-level` plus construction-time values for restart-required keys).
 
 **Required keys:** `express-port`, `log-level` (error/warn/info/debug), `mqtt-broker-ip-address`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api` (http(s) origin `scheme://host[:port]`, no path/trailing `/` — call sites append paths), `case-sensitive`, `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 

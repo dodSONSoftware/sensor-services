@@ -28,6 +28,7 @@ describe("setupSwagger", () => {
         expect(res.text).toContain('"/about"');
         expect(res.text).toContain('"/sensors/get-details"');
         expect(res.text).toContain('"/api/read-config"');
+        expect(res.text).toContain('"/api/read-running-config"');
         // These two paths were silently dropped from the spec when an unquoted
         // example value contained ": " (YAMLSemanticError in swagger-jsdoc).
         expect(res.text).toContain('"/api/reload-config"');

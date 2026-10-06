@@ -12,6 +12,7 @@ import * as config_controller from "../controllers/configController";
 export const __routes: string[] = [
     "/api/reload-config",
     "/api/read-config",
+    "/api/read-running-config",
     "/api/write-config",
 ];
 
@@ -24,7 +25,11 @@ export const __routesHelp: Record<string, unknown> = {
         },
         {
             "route": "/api/read-config",
-            "description": "GET Returns the current running application configuration as JSON, including all values (db-password, loki-url)."
+            "description": "GET Returns the persisted configuration from config.yml as JSON, including all values (db-password, loki-url) — the source document for read → modify → write round trips to /api/write-config; pending restart-required changes survive the round trip."
+        },
+        {
+            "route": "/api/read-running-config",
+            "description": "GET Returns the active in-memory (running) configuration as JSON, including all values (db-password, loki-url). Only log-level tracks live writes; other keys report construction-time values until a restart."
         },
         {
             "route": "/api/write-config",
@@ -105,12 +110,15 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          * @swagger
          * /api/read-config:
          *   get:
-         *     summary: Read current configuration
+         *     summary: Read persisted configuration
          *     description: >-
-         *       Returns the current running application configuration as a JSON
+         *       Returns the persisted configuration from config.yml as a JSON
          *       object. All values are returned as-is, including db-password and
-         *       loki-url — modify fields in the response and POST it back to
-         *       /api/write-config to save changes without losing any values.
+         *       loki-url. This is the source document for read → modify → write
+         *       round trips to /api/write-config, so pending (restart-required)
+         *       changes from a previous write are preserved. The active in-memory
+         *       configuration — which differs for restart-required keys until the
+         *       process restarts — is reported by /api/read-running-config.
          *     responses:
          *       200:
          *         description: Current configuration
@@ -148,8 +156,80 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   type: string
          *                 loki-enabled:
          *                   type: boolean
+         *       500:
+         *         description: Config file missing, unreadable, or invalid
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *                   example: Could not find config file
          */
         this.app.route("/api/read-config").get((req: express.Request, res: express.Response) => config_controller.readConfig(req, res));
+
+        // READ RUNNING CONFIG
+        /**
+         * @swagger
+         * /api/read-running-config:
+         *   get:
+         *     summary: Read the running (in-memory) configuration
+         *     description: >-
+         *       Returns the active in-memory configuration as a JSON object,
+         *       including db-password and loki-url. Only log-level tracks
+         *       /api/write-config changes live; every other key reports the value
+         *       the process is actually running until a restart. Use
+         *       /api/read-config for the persisted (on-disk) configuration.
+         *     responses:
+         *       200:
+         *         description: Active in-memory configuration
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 express-port:
+         *                   type: integer
+         *                 log-level:
+         *                   type: string
+         *                   enum: [error, warn, info, debug]
+         *                 mqtt-broker-ip-address:
+         *                   type: string
+         *                 mqtt-topic-command:
+         *                   type: string
+         *                 mqtt-topic-command-response:
+         *                   type: string
+         *                 ip-pinger-web-api:
+         *                   type: string
+         *                 case-sensitive:
+         *                   type: boolean
+         *                 db-host:
+         *                   type: string
+         *                 db-port:
+         *                   type: integer
+         *                 db-name:
+         *                   type: string
+         *                 db-user:
+         *                   type: string
+         *                 db-password:
+         *                   type: string
+         *                 loki-url:
+         *                   type: string
+         *                 loki-enabled:
+         *                   type: boolean
+         *       500:
+         *         description: Configuration not initialized
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
+         *                   example: Configuration not initialized
+         */
+        this.app.route("/api/read-running-config").get((req: express.Request, res: express.Response) => config_controller.readRunningConfig(req, res));
 
         // WRITE CONFIG
         /**

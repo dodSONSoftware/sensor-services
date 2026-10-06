@@ -385,8 +385,16 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             route: "/api/read-config",
             verb: "GET",
             requestBody: "None",
-            responseBody: "Current application configuration as JSON",
-            description: "Returns the current application configuration."
+            responseBody: "Persisted application configuration as JSON",
+            description: "Returns the persisted configuration from config.yml; the source document for read → modify → write round trips to /api/write-config."
+        },
+        {
+            name: "Read Running Config",
+            route: "/api/read-running-config",
+            verb: "GET",
+            requestBody: "None",
+            responseBody: "Active in-memory application configuration as JSON",
+            description: "Returns the active in-memory configuration — log-level tracks live writes, all other keys report construction-time values until a restart."
         },
         {
             name: "Write Config",

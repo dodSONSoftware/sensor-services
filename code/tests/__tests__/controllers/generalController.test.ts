@@ -316,4 +316,11 @@ describe("getEndpoints", () => {
       expect(String(entry["responseBody"])).not.toMatch(/success:\s*boolean/i);
     }
   });
+
+  it("describes the config endpoints as persisted vs in-memory", () => {
+    const readConfig = getEndpoint("/api/read-config");
+    expect(String(readConfig["description"])).toMatch(/persisted/);
+    const readRunningConfig = getEndpoint("/api/read-running-config");
+    expect(String(readRunningConfig["description"])).toMatch(/in-memory/);
+  });
 });

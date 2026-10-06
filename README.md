@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Graphite Falcon — firmware 4.13.5
+**Release:** Graphite Falcon — firmware 4.13.6
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -160,7 +160,8 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/api/reload-config` | Reload configuration from disk; only `log-level` applies immediately — other changed keys are reported as restart-required (`restart_required`, `restart_keys`) |
-| GET | `/api/read-config` | Read the running (in-memory) configuration as JSON; the complete configuration is returned, including `db-password` and `loki-url` |
+| GET | `/api/read-config` | Read the persisted configuration from `config.yml` as JSON; the complete configuration is returned, including `db-password` and `loki-url` — the source document for read → modify → write round trips, so pending restart-required changes survive the round trip |
+| GET | `/api/read-running-config` | Read the active in-memory (running) configuration as JSON, including `db-password` and `loki-url`; only `log-level` tracks live writes, other keys report construction-time values until a restart |
 | POST | `/api/write-config` | Save new configuration and reload; only `log-level` applies immediately, other changed keys are reported as restart-required |
 
 ### Swagger

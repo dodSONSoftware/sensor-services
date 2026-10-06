@@ -76,8 +76,9 @@ if ! wait_for_app; then
     docker logs "$CONTAINER" >&2 || true
     exit 1
 fi
-# The built-in config.yml carries a non-empty db-password; the running config
-# must report it, proving the built-in file is a complete configuration.
+# The built-in config.yml carries a non-empty db-password; /api/read-config
+# (which reads the file directly) must report it, proving the built-in file
+# is a complete configuration.
 builtin_config="$(curl -sf "http://localhost:$PORT/api/read-config")"
 if ! printf '%s' "$builtin_config" | grep -Eq '"db-password":"[^"]+"'; then
     echo "      FAILED: /api/read-config reports no db-password — the built-in config.yml is not a complete configuration:" >&2
@@ -123,7 +124,7 @@ if ! wait_for_app; then
 fi
 mounted_config="$(curl -sf "http://localhost:$PORT/api/read-config")"
 if ! printf '%s' "$mounted_config" | grep -q '"db-password":"verify-test-only-not-a-real-secret"'; then
-    echo "      FAILED: running config does not report the mounted db-password — the mount did not take precedence:" >&2
+    echo "      FAILED: read-config does not report the mounted db-password — the mount did not take precedence:" >&2
     printf '%s' "$mounted_config" >&2
     exit 1
 fi

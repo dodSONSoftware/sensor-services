@@ -10,6 +10,7 @@ import type express from "express";
 import {
     diffConfigReload,
     readConfig,
+    readRunningConfig,
     reloadConfig,
     setTestConfigPath,
     writeConfig,
@@ -200,10 +201,10 @@ describe("hot reload runtime state (no split-brain config)", () => {
     // Regression: a reload whose file changed restart-required keys must NOT
     // install those values into the active in-memory config — long-lived
     // components (MqttNetworking, pinger routes, the settings store) keep
-    // their construction-time snapshots, and /api/read-config must report
-    // what is actually running. Only HOT_RELOADABLE_KEYS (log-level) may
-    // change, and the log level must change on the existing logger instance,
-    // not by replacing/closing it.
+    // their construction-time snapshots, and /api/read-running-config must
+    // report what is actually running. Only HOT_RELOADABLE_KEYS (log-level)
+    // may change, and the log level must change on the existing logger
+    // instance, not by replacing/closing it.
     const CONFIG_A = {
         ...BASE_CONFIG,
         "log-level": "info",
@@ -254,7 +255,7 @@ describe("hot reload runtime state (no split-brain config)", () => {
         runningLogger.write_info("test", "old logger still functional");
     });
 
-    it("should make /api/read-config report the effective active configuration", async () => {
+    it("should make /api/read-config report the persisted (on-disk) configuration", async () => {
         setConfig(validateConfig(CONFIG_A));
         require("../../../src/common/global").createLogger(validateConfig(CONFIG_A));
 
@@ -265,12 +266,68 @@ describe("hot reload runtime state (no split-brain config)", () => {
         readConfig(createMockReq() as express.Request, res as express.Response);
         const body = sendCalls[0] as Record<string, unknown>;
 
+        // Restart-required values are reported as the PERSISTED (new) file
+        // values — read-config is the source document for the full-document
+        // write-config; the complete config is returned (no masking).
+        expect(body["mqtt-broker-ip-address"]).toBe("10.0.0.22");
+        expect(body["ip-pinger-web-api"]).toBe("http://pinger-b:3300");
+        expect(body["loki-url"]).toBe("http://loki-b:3100");
+        expect(body["log-level"]).toBe("debug");
+    });
+
+    it("should make /api/read-running-config report the effective active configuration", async () => {
+        setConfig(validateConfig(CONFIG_A));
+        require("../../../src/common/global").createLogger(validateConfig(CONFIG_A));
+
+        writeConfigFile(CONFIG_B);
+        await reloadConfig(createMockReq() as express.Request, (createMockRes().res) as express.Response);
+
+        const { res, sendCalls } = createMockRes();
+        readRunningConfig(createMockReq() as express.Request, res as express.Response);
+        const body = sendCalls[0] as Record<string, unknown>;
+
         // Restart-required values are reported as ACTIVE (old) values, not the
         // new file values; the complete config is returned (no masking).
         expect(body["mqtt-broker-ip-address"]).toBe("10.0.0.11");
         expect(body["ip-pinger-web-api"]).toBe("http://pinger-a:3300");
         expect(body["loki-url"]).toBe("http://loki-a:3100");
         expect(body["log-level"]).toBe("debug");
+    });
+
+    it("keeps a pending restart-required change on disk across a read → modify → write round trip (regression)", async () => {
+        // Contract: /api/read-config is the source document for the full-document
+        // /api/write-config, so a round trip must never revert a restart-pending
+        // change on disk (the in-memory config is stale for those keys until the
+        // process restarts).
+        writeConfigFile(CONFIG_A);
+        setConfig(validateConfig(CONFIG_A));
+
+        // Operator writes CONFIG_B — the restart-required keys land on disk,
+        // the running config keeps its construction-time values.
+        const w1 = createMockRes();
+        await writeConfig(createMockReq({ body: CONFIG_B }) as express.Request, w1.res as express.Response);
+        expect((w1.sendCalls[0] as Record<string, unknown>).restart_required).toBe(true);
+
+        // Round trip: read the configuration, modify only an unrelated key,
+        // write the complete document back.
+        const readMock = createMockRes();
+        readConfig(createMockReq() as express.Request, readMock.res as express.Response);
+        const config = readMock.sendCalls[0] as Record<string, unknown>;
+        config["log-level"] = "warn";
+
+        const w2 = createMockRes();
+        await writeConfig(createMockReq({ body: config }) as express.Request, w2.res as express.Response);
+        expect((w2.sendCalls[0] as Record<string, unknown>).success).toBe(true);
+
+        // The pending restart-required values from CONFIG_B survived the round
+        // trip; only log-level changed.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const yaml = require("js-yaml") as { load: (v: string) => unknown };
+        const onDisk = yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+        expect(onDisk["mqtt-broker-ip-address"]).toBe("10.0.0.22");
+        expect(onDisk["loki-url"]).toBe("http://loki-b:3100");
+        expect(onDisk["ip-pinger-web-api"]).toBe("http://pinger-b:3300");
+        expect(onDisk["log-level"]).toBe("warn");
     });
 });
 
@@ -388,11 +445,14 @@ describe("writeConfig (POST /api/write-config)", () => {
 });
 
 describe("readConfig (GET /api/read-config)", () => {
-    it("should return the complete configuration, including db-password and loki-url", () => {
-        setConfig(validateConfig({
+    it("should return the complete persisted configuration, including db-password and loki-url", () => {
+        writeConfigFile({
             ...BASE_CONFIG,
             "loki-url": "http://loki:3100",
-        }));
+        });
+        // A divergent in-memory document proves the response comes from disk,
+        // not from the running config.
+        setConfig(validateConfig({ ...BASE_CONFIG, "db-password": "memory-only-password" }));
 
         const { res, sendCalls } = createMockRes();
         readConfig(createMockReq() as express.Request, res as express.Response);
@@ -408,21 +468,73 @@ describe("readConfig (GET /api/read-config)", () => {
 
     it("should not mutate the running config", () => {
         setConfig(validateConfig(BASE_CONFIG));
+        writeConfigFile({ ...BASE_CONFIG, "db-password": "disk-password" });
 
-        const { res } = createMockRes();
+        const { res, sendCalls } = createMockRes();
         readConfig(createMockReq() as express.Request, res as express.Response);
 
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body["db-password"]).toBe("disk-password");
         const { getConfig } = require("../../../src/common/global");
         expect(getConfig()["db-password"]).toBe("sensor_pass");
+    });
+
+    it("should return 500 when the config file cannot be found", () => {
+        fs.rmSync(configPath, { force: true });
+
+        const { res, statusCalls, sendCalls } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+
+        expect(statusCalls).toContain(500);
+        expect((sendCalls[0] as Record<string, unknown>).error).toContain("Could not find config file");
+    });
+
+    it("should return 500 when the config file is not valid YAML", () => {
+        fs.writeFileSync(configPath, "{{{");
+
+        const { res, statusCalls, sendCalls } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+
+        expect(statusCalls).toContain(500);
+        expect((sendCalls[0] as Record<string, unknown>).error).toContain("Failed to read config");
+    });
+
+    it("should return 500 when the config file fails schema validation", () => {
+        writeConfigFile({ ...BASE_CONFIG, "log-level": "bogus" });
+
+        const { res, statusCalls, sendCalls } = createMockRes();
+        readConfig(createMockReq() as express.Request, res as express.Response);
+
+        expect(statusCalls).toContain(500);
+        expect((sendCalls[0] as Record<string, unknown>).error).toMatch(/Config validation failed/);
+    });
+});
+
+describe("readRunningConfig (GET /api/read-running-config)", () => {
+    it("should return the complete in-memory configuration, including db-password and loki-url", () => {
+        setConfig(validateConfig({
+            ...BASE_CONFIG,
+            "loki-url": "http://loki:3100",
+        }));
+
+        const { res, sendCalls } = createMockRes();
+        readRunningConfig(createMockReq() as express.Request, res as express.Response);
+
+        const body = sendCalls[0] as Record<string, unknown>;
+        expect(body["db-password"]).toBe("sensor_pass");
+        expect(body["loki-url"]).toBe("http://loki:3100");
+        expect(body["db-host"]).toBe("localhost");
+        expect(body["mqtt-broker-ip-address"]).toBe("10.10.10.64");
     });
 
     it("should return 500 when the config is not initialized", () => {
         setConfig(undefined);
 
-        const { res, statusCalls } = createMockRes();
-        readConfig(createMockReq() as express.Request, res as express.Response);
+        const { res, statusCalls, sendCalls } = createMockRes();
+        readRunningConfig(createMockReq() as express.Request, res as express.Response);
 
         expect(statusCalls).toContain(500);
+        expect((sendCalls[0] as Record<string, unknown>).error).toBe("Configuration not initialized");
     });
 });
 
