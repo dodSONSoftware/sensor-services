@@ -304,7 +304,7 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          * /metrics:
          *   get:
          *     summary: Prometheus scrape endpoint for API metrics
-         *     description: Returns Prometheus-formatted metrics for HTTP requests, request duration, and 5xx errors. This endpoint serves API-specific metrics separately from the sensor metrics exposed by PrometheusWriter on port 3301.
+         *     description: Returns Prometheus-formatted metrics for HTTP requests, request duration, and 5xx errors. Sensor telemetry metrics are published by the sensor-telemetry-service, not by this app.
          *     responses:
          *       200:
          *         description: Prometheus-formatted API metrics text

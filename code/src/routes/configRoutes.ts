@@ -125,8 +125,6 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                   enum: [error, warn, info, debug]
          *                 mqtt-broker-ip-address:
          *                   type: string
-         *                 mqtt-topic-telemetry:
-         *                   type: string
          *                 mqtt-topic-command:
          *                   type: string
          *                 mqtt-topic-command-response:
@@ -174,7 +172,6 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *               - express-port
          *               - log-level
          *               - mqtt-broker-ip-address
-         *               - mqtt-topic-telemetry
          *               - mqtt-topic-command
          *               - mqtt-topic-command-response
          *               - ip-pinger-web-api
@@ -191,8 +188,6 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                 type: string
          *                 enum: [error, warn, info, debug]
          *               mqtt-broker-ip-address:
-         *                 type: string
-         *               mqtt-topic-telemetry:
          *                 type: string
          *               mqtt-topic-command:
          *                 type: string

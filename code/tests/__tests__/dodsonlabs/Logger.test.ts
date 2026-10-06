@@ -47,9 +47,7 @@ function lokiConfig(): z.infer<typeof configSchema> {
     return {
         "log-level": "info",
         "express-port": 32000,
-        "prometheus-port": 3301,
         "mqtt-broker-ip-address": "127.0.0.1",
-        "mqtt-topic-telemetry": "t",
         "mqtt-topic-command": "c",
         "mqtt-topic-command-response": "cr",
         "ip-pinger-web-api": "http://localhost:3300",

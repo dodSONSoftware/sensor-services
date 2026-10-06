@@ -20,7 +20,6 @@ describe("config routes", () => {
 express-port: 32000
 log-level: debug
 mqtt-broker-ip-address: "10.10.10.64"
-mqtt-topic-telemetry: "iot/telemetry"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
 ip-pinger-web-api: "http://10.10.10.50:3300"
@@ -79,7 +78,6 @@ db-password: "testpass"
 express-port: 32000
 log-level: debug
 mqtt-broker-ip-address: "10.10.10.64"
-mqtt-topic-telemetry: "iot/telemetry"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
 ip-pinger-web-api: "http://10.10.10.50:3300"
@@ -118,7 +116,6 @@ db-password: "testpass"
                 "express-port": 32001,
                 "log-level": "info",
                 "mqtt-broker-ip-address": "10.10.10.100",
-                "mqtt-topic-telemetry": "iot/new-telemetry",
                 "mqtt-topic-command": "iot/v2/new-command",
                 "mqtt-topic-command-response": "iot/v2/new-response",
                 "ip-pinger-web-api": "http://10.10.10.50:3300",
@@ -147,7 +144,6 @@ db-password: "testpass"
                 "mqtt-broker-ip-address",
                 "mqtt-topic-command",
                 "mqtt-topic-command-response",
-                "mqtt-topic-telemetry",
             ]);
             expect(res.body.applied_keys).toEqual(["log-level"]);
             expect(res.body.message).toContain("restart required for:");
@@ -163,7 +159,6 @@ db-password: "testpass"
                 "express-port": -1, // Invalid: must be positive
                 "log-level": "debug",
                 "mqtt-broker-ip-address": "10.10.10.64",
-                "mqtt-topic-telemetry": "iot/telemetry",
                 "mqtt-topic-command": "iot/v2/command",
                 "mqtt-topic-command-response": "iot/v2/command-response",
                 "ip-pinger-web-api": "http://10.10.10.50:3300",

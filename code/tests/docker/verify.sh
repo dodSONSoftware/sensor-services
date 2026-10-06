@@ -100,7 +100,6 @@ cat > "$CONFIG_DIR/config.yml" <<'YAML'
 log-level: info
 express-port: 32000
 mqtt-broker-ip-address: "127.0.0.1"
-mqtt-topic-telemetry: "iot/v3/telemetry"
 mqtt-topic-command: "iot/v3/command"
 mqtt-topic-command-response: "iot/v3/command-response"
 ip-pinger-web-api: "http://127.0.0.1:3300"

@@ -8,11 +8,10 @@ import { Registry, Counter, Histogram } from "prom-client";
 import { InternalServerError } from "../dodsonlabs/HttpConstants";
 
 /**
- * Dedicated Prometheus registry for API-specific metrics.
- *
- * Separated from the global register used by PrometheusWriter (sensor gauges)
- * so API metrics can be scraped independently at /metrics on the main
- * Express app (port 32000) versus sensor metrics at /metrics on port 3301.
+ * Dedicated Prometheus registry for API-specific metrics (HTTP requests,
+ * request duration, 5xx errors), exposed at /metrics on the main Express
+ * app (port 32000). Sensor telemetry metrics are published by the
+ * sensor-telemetry-service, not by this app.
  */
 export const apiMetricsRegistry: Registry = new Registry();
 

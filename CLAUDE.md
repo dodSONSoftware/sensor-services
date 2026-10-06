@@ -51,7 +51,7 @@ Node 22.22.0 / npm 10.9.4 (Volta). CommonJS (`module: "NodeNext"`, no `"type": "
 
 ## Architecture
 
-Single Express app on port 32000 (REST API + Swagger + API metrics at `/metrics`) and a Prometheus metrics server on port 3301 (10 sensor gauges). MQTT broker provides telemetry ingestion and command-response. PostgreSQL persists UI settings with graceful degradation to in-memory.
+Single Express app on port 32000 (REST API + Swagger + API metrics at `/metrics`). MQTT broker provides command-response, info-request, and log traffic; sensor telemetry (and its Prometheus metrics) is handled by sensor-telemetry-service, not this app. PostgreSQL persists UI settings with graceful degradation to in-memory.
 
 **Startup (`src/index.ts`):** read config (`/app/configs/config.yml` → `./dist/config.yml` fallback) via `read_file_yaml()`, validate with `validateConfig()` → create Winston logger (error/warn/info/debug, optional Loki) → `MqttNetworking` → `settingsStore.init()` → `CreateMiddleware` (order P3-2) → Swagger (mounted after middleware) → register route groups → route drift checks (per-module `__routes`↔`__routesHelp`, then `assertRoutesMatchDeclared()` against the live app) → listen → fatal/signal handlers.
 
@@ -76,14 +76,13 @@ Single Express app on port 32000 (REST API + Swagger + API metrics at `/metrics`
 | Sensors (MQTT) | `GET /sensors/get-details[/:source]`, `GET /sensors/read-config[/:source]`, `POST /sensors/reboot[/:source]` (GET accepted during compatibility period), `POST /sensors/write-config/:source` (rejects broadcast `*` — P1-2), `POST /sensors/update-config/:source` (501, deprecated), `GET /sensors/logs/:source` (Loki; optional `level`, `limit`) |
 | Pinger proxy | `/ippinger/{about,read-config,write-config,restart,ping[/:target]}` |
 | Pinger analysis | `GET /sensors/ippinger-analyze` (metadata lives in pingerRoutes, P3-4) |
-| Prometheus | `GET /metrics` on port 3301 (sensor gauges) |
 | Swagger | `GET /swagger` |
 
 ## Configuration
 
 **Single-file config:** `config.yml` is the only configuration document — the complete application configuration, including credentials (`db-password`, `loki-url`); trusted-LAN deployment assumes access to the file and the config API is controlled by the surrounding infrastructure. Startup and `doReloadConfig()` both read it directly via `read_file_yaml()` + `validateConfig()`; a missing required key (e.g. `db-password`) fails startup with a clear error. `redactConfig()` keeps those values out of logs/Loki; `/api/read-config` returns the complete config and `/api/write-config` consumes the complete document, so read → modify → write round trips preserve every value.
 
-**Required keys:** `express-port`, `log-level` (error/warn/info/debug), `prometheus-port`, `mqtt-broker-ip-address`, `mqtt-topic-telemetry`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive`, `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
+**Required keys:** `express-port`, `log-level` (error/warn/info/debug), `mqtt-broker-ip-address`, `mqtt-topic-command`, `mqtt-topic-command-response`, `ip-pinger-web-api`, `case-sensitive`, `db-host`, `db-port`, `db-name`, `db-user`, `db-password`.
 
 **Optional keys:** `swagger-server-url`, `loki-url`, `loki-enabled`, `mqtt-topic-log` (default `iot/v3/log`), `forward-sensor-logs` (default true), `forward-sensor-logs-level` (default debug), `express-body-limit` (default 1mb), `rate-limit-window-ms` / `rate-limit-max` (default 15min/100), `sensor-source-max-length` (default 30), `sensor-source-valid-chars-regex`, `ippinger-fetch-timeout-ms` (default 10000; old `fetch-timeout-ms` accepted as deprecated alias, new key wins — `resolveIppingerFetchTimeoutMs()`), `command-silence-timeout-ms` (default 1500, max 10000 — the 10s HTTP command hard cap), `cors-allowed-origins` (http(s) origins only; absent = no cross-origin browser origin authorized, secure default).
 
@@ -116,4 +115,4 @@ Single Express app on port 32000 (REST API + Swagger + API metrics at `/metrics`
 
 ## Tests
 
-`tests/__tests__/` mirrors `src/`: controller/route/middleware/schema/service unit + supertest integration tests, `dodsonlabs/` tests (Logger Loki shutdown ownership, MqttCommandControl with fake timers, MqttNetworking — real mqtt clients against 127.0.0.1 with a registry that force-closes orphaned clients; PrometheusWriter, SystemFunctions), `exitCodes.test.ts` (P2-2, spawns `dist/index.js`; skipped if unbuilt), `routeDrift.test.ts` (P3-4), `swagger.test.ts` (spec contains real route paths), `docker/docker.test.ts` (static P3-8 guards), plus `tests/docker/verify.sh` (e2e). Pinned behavior worth knowing: P3-9 body validation runs through the REAL `CreateMiddleware` (a body with an own `constructor` key → 400), P3-6/P3-7 settings strictness + `X-Settings-Persisted`, P2-4 health/metrics rate-limit exemption.
+`tests/__tests__/` mirrors `src/`: controller/route/middleware/schema/service unit + supertest integration tests, `dodsonlabs/` tests (Logger Loki shutdown ownership, MqttCommandControl with fake timers, MqttNetworking — real mqtt clients against 127.0.0.1 with a registry that force-closes orphaned clients; SystemFunctions), `exitCodes.test.ts` (P2-2, spawns `dist/index.js`; skipped if unbuilt), `routeDrift.test.ts` (P3-4), `swagger.test.ts` (spec contains real route paths), `docker/docker.test.ts` (static P3-8 guards), plus `tests/docker/verify.sh` (e2e). Pinned behavior worth knowing: P3-9 body validation runs through the REAL `CreateMiddleware` (a body with an own `constructor` key → 400), P3-6/P3-7 settings strictness + `X-Settings-Persisted`, P2-4 health/metrics rate-limit exemption.

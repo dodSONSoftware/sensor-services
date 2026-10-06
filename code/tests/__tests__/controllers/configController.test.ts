@@ -25,7 +25,6 @@ const BASE_CONFIG = {
     "log-level": "info",
     "express-port": 32000,
     "mqtt-broker-ip-address": "10.10.10.64",
-    "mqtt-topic-telemetry": "iot/v3/telemetry",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
     "ip-pinger-web-api": "http://10.10.10.64:3300",

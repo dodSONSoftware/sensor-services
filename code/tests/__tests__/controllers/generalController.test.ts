@@ -135,9 +135,7 @@ describe("getHealth", () => {
     setConfig({
       "log-level": "debug",
       "express-port": 32000,
-      "prometheus-port": 3301,
       "mqtt-broker-ip-address": "10.10.10.64",
-      "mqtt-topic-telemetry": "iot/telemetry",
       "mqtt-topic-command": "iot/v2/command",
       "mqtt-topic-command-response": "iot/v2/command-response",
       "ip-pinger-web-api": "http://10.10.10.64:3300",

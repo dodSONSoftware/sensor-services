@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Carbon Falcon — firmware 4.12.34
+**Release:** Carbon Falcon — firmware 4.12.35
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -17,9 +17,9 @@ Series 4 - SensorNET Services
 
 The Typescript SensorNET Services project provides an Express-based REST API for IoT sensor monitoring with:
 
-- **MQTT integration** for real-time sensor telemetry ingestion and command-response communication
+- **MQTT integration** for sensor command-response communication (telemetry ingestion is handled by the sensor-telemetry-service)
 - **PostgreSQL-backed settings persistence** for application configuration
-- **Prometheus metrics** for both API observability and sensor gauges
+- **Prometheus metrics** for API observability (sensor telemetry metrics are published by the sensor-telemetry-service)
 - **Swagger UI** for interactive API discovery
 
 ---
@@ -56,12 +56,8 @@ express-port: 32000
 # Logging (error, warn, info, debug)
 log-level: debug
 
-# Prometheus metrics server port
-prometheus-port: 3301
-
 # MQTT broker connection
 mqtt-broker-ip-address: "10.10.10.64"
-mqtt-topic-telemetry: "iot/v3/telemetry"
 mqtt-topic-command: "iot/v3/command"
 mqtt-topic-command-response: "iot/v3/command-response"
 

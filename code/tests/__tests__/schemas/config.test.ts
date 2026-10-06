@@ -10,7 +10,6 @@ describe("configSchema", () => {
     "log-level": "info" as const,
     "express-port": 32000,
     "mqtt-broker-ip-address": "127.0.0.1",
-    "mqtt-topic-telemetry": "iot/v3/telemetry",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
     "ip-pinger-web-api": "http://127.0.0.1:3300",
@@ -48,6 +47,22 @@ describe("configSchema", () => {
       "mqtt-topic-info-request": "iot/v2/info-request",
       "mqtt-topic-info-response": "iot/v2/info-response",
     };
+    expect(() => validateConfig(config)).toThrow(/Unrecognized key/);
+  });
+
+  it("should accept config without mqtt-topic-telemetry (telemetry moved to sensor-telemetry-service)", () => {
+    // Sensor telemetry/Prometheus publishing is owned by the
+    // sensor-telemetry-service; this app has no consumer for the topic, so
+    // the key must not be required for startup.
+    const result = validateConfig(baseConfig);
+    expect(result).toBeDefined();
+    expect("mqtt-topic-telemetry" in result).toBe(false);
+  });
+
+  it("should reject the removed mqtt-topic-telemetry key (strict)", () => {
+    // A deployment config still carrying the key fails startup loudly
+    // instead of being silently ignored.
+    const config = { ...baseConfig, "mqtt-topic-telemetry": "iot/v3/telemetry" };
     expect(() => validateConfig(config)).toThrow(/Unrecognized key/);
   });
 
@@ -320,7 +335,6 @@ describe("resolveIppingerFetchTimeoutMs (Optional-2 key rename precedence)", () 
     "log-level": "info" as const,
     "express-port": 32000,
     "mqtt-broker-ip-address": "127.0.0.1",
-    "mqtt-topic-telemetry": "iot/v3/telemetry",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
     "ip-pinger-web-api": "http://127.0.0.1:3300",

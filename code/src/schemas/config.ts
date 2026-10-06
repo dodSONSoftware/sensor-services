@@ -48,9 +48,6 @@ export const configSchema = z.strictObject({
     "mqtt-broker-ip-address": z.string({
         error: "mqtt-broker-ip-address must be a string",
     }).min(1, "mqtt-broker-ip-address must not be empty"),
-    "mqtt-topic-telemetry": z.string({
-        error: "mqtt-topic-telemetry must be a string",
-    }).min(1, "mqtt-topic-telemetry must not be empty"),
     "mqtt-topic-command": z.string({
         error: "mqtt-topic-command must be a string",
     }).min(1, "mqtt-topic-command must not be empty"),
