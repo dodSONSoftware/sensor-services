@@ -30,6 +30,88 @@ const corsOriginSchema = z.string().refine((value) => {
 }, "cors-allowed-origins entries must be http(s) origins of the form scheme://host[:port]");
 
 /**
+ * Parse a config value as a URL, returning undefined when it is not a
+ * parseable absolute URL.
+ */
+function parseConfigUrl(value: string): URL | undefined {
+    try {
+        return new URL(value);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Base URL of a downstream service (ip-pinger-web-api, sensor-telemetry-api).
+ *
+ * Must be an absolute http(s) origin: scheme://host[:port], with no path,
+ * query, credentials, fragment, or trailing "/". Call sites append paths
+ * directly (`${url}/health`, `${url}/read-config`), so any path component
+ * would produce a URL that 404s at runtime and surface only as a
+ * "service unavailable" degradation. Previously these keys accepted any
+ * non-empty string, so a mistyped scheme ("htp://..."), a missing scheme, or
+ * an accidental path only surfaced at runtime; the config boundary now
+ * rejects all of them at startup.
+ */
+const serviceOriginSchema = (key: string) =>
+    z.string({ error: `${key} must be a string` }).refine((value) => {
+        // URL parsing cannot distinguish "http://host:3300" from
+        // "http://host:3300/" (both normalize pathname to "/"), so the
+        // trailing slash — which would yield "host:3300//health" at the
+        // call site — is rejected on the raw value.
+        if (value.endsWith("/")) {
+            return false;
+        }
+        const u = parseConfigUrl(value);
+        return (
+            !!u &&
+            (u.protocol === "http:" || u.protocol === "https:") &&
+            u.hostname !== "" &&
+            u.username === "" &&
+            u.password === "" &&
+            u.pathname === "/" &&
+            u.search === "" &&
+            u.hash === ""
+        );
+    }, `${key} must be an http(s) origin of the form scheme://host[:port] with no path or trailing "/" (e.g. http://10.10.10.50:3300)`);
+
+/**
+ * Swagger server URL override (swagger-server-url).
+ *
+ * Used verbatim as the OpenAPI servers[0].url, and the auto-derived default
+ * (`http://<routable-ip>:<port>/`) carries a trailing slash — so unlike a
+ * service origin, any absolute http(s) URL with a hostname is accepted (a
+ * reverse-proxy mount path is legitimate). Credentials are rejected: they
+ * have no place in a UI-facing server URL.
+ */
+const swaggerServerUrlSchema = z.string({ error: "swagger-server-url must be a string" }).refine((value) => {
+    const u = parseConfigUrl(value);
+    return (
+        !!u &&
+        (u.protocol === "http:" || u.protocol === "https:") &&
+        u.hostname !== "" &&
+        u.username === "" &&
+        u.password === ""
+    );
+}, "swagger-server-url must be an absolute http(s) URL with a hostname (e.g. http://10.10.10.217:32000/)");
+
+/**
+ * Loki push endpoint (loki-url).
+ *
+ * A path is allowed (reverse-proxied Loki) and embedded credentials are
+ * deliberately allowed — loki-url is treated as a secret (redactConfig masks
+ * it before logging), so "user:pass@host:3100" remains a valid form.
+ */
+const lokiUrlSchema = z.string({ error: "loki-url must be a string" }).refine((value) => {
+    const u = parseConfigUrl(value);
+    return (
+        !!u &&
+        (u.protocol === "http:" || u.protocol === "https:") &&
+        u.hostname !== ""
+    );
+}, "loki-url must be an absolute http(s) URL with a hostname (e.g. http://10.10.10.60:3100)");
+
+/**
  * Zod schema for config.yml.
  * All required keys must match their expected types.
  * Strict: unknown keys are rejected rather than silently stripped, so a typo
@@ -54,15 +136,13 @@ export const configSchema = z.strictObject({
     "mqtt-topic-command-response": z.string({
         error: "mqtt-topic-command-response must be a string",
     }).min(1, "mqtt-topic-command-response must not be empty"),
-    "ip-pinger-web-api": z.string({
-        error: "ip-pinger-web-api must be a string",
-    }).min(1, "ip-pinger-web-api must not be empty"),
-    "sensor-telemetry-api": z.string().optional(),
+    "ip-pinger-web-api": serviceOriginSchema("ip-pinger-web-api"),
+    "sensor-telemetry-api": serviceOriginSchema("sensor-telemetry-api").optional(),
     "case-sensitive": z.boolean({
         error: "case-sensitive must be a boolean",
     }),
-    "swagger-server-url": z.string().optional(),
-    "loki-url": z.string().optional(),
+    "swagger-server-url": swaggerServerUrlSchema.optional(),
+    "loki-url": lokiUrlSchema.optional(),
     "loki-enabled": z.boolean().optional(),
     "mqtt-topic-log": z.string().optional(),
     "forward-sensor-logs": z.boolean().optional(),
