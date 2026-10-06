@@ -51,11 +51,12 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *     summary: Reload configuration from disk
          *     description: >-
          *       Reads the configuration file from disk, validates it, and updates the running
-         *       configuration reference. Only log-level takes effect immediately — the logger
-         *       is re-created. Every other key is captured at construction time by long-lived
-         *       components (MQTT client, middleware, routes, settings store) and takes effect
-         *       after a process restart; changed keys of that kind are reported in restart_keys
-         *       with restart_required set to true.
+         *       configuration reference. Only log-level takes effect immediately — the existing
+         *       logger instance is retained and its log level is updated in place; its Loki
+         *       transport settings require a restart. Every other key is captured at construction
+         *       time by long-lived components (MQTT client, middleware, routes, settings store)
+         *       and takes effect after a process restart; changed keys of that kind are reported
+         *       in restart_keys with restart_required set to true.
          *     responses:
          *       200:
          *         description: Configuration reloaded (check restart_required)

@@ -20,11 +20,12 @@ const CONFIG_PATHS = ["/app/configs/config.yml", "./dist/config.yml"];
  * updates only these in the active in-memory config and mutates the log level
  * on the existing logger instance (never re-creating it).
  *
- * Note: loki-url/loki-enabled intentionally require a restart. Although the
- * logger is re-created on reload (which would also swap the Loki transport),
- * allowing an unauthenticated /api/write-config caller to repoint Loki
- * immediately would let them stream every log line to an attacker-controlled
- * host in real time. Restarting makes that change operator-visible.
+ * Note: loki-url/loki-enabled intentionally require a restart. The Loki
+ * transport is built once at logger construction and reload leaves it
+ * untouched (the logger is never re-created). Applying them at reload would
+ * let an unauthenticated /api/write-config caller repoint Loki immediately,
+ * streaming every log line to an attacker-controlled host in real time.
+ * Restarting makes that change operator-visible.
  *
  * Every other key is captured at construction time by long-lived components
  * (MqttNetworking, middleware, pinger routes, the settings store, and the
