@@ -168,12 +168,6 @@ export const configSchema = z.strictObject({
         error: "rate-limit-max must be a number",
     }).int("rate-limit-max must be an integer")
         .positive("rate-limit-max must be greater than 0").optional(),
-    "sensor-source-max-length": z.number({
-        error: "sensor-source-max-length must be a number",
-    }).int("sensor-source-max-length must be an integer")
-        .positive("sensor-source-max-length must be greater than 0")
-        .optional(),
-    "sensor-source-valid-chars-regex": z.string().optional(),
     // IP-pinger fetch timeout (Optional-2): renamed fetch-timeout-ms ->
     // ippinger-fetch-timeout-ms because it only bounds the pinger proxy /
     // analyze fetches, not all outbound fetches. The old key stays a

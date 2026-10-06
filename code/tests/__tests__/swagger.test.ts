@@ -40,6 +40,9 @@ describe("setupSwagger", () => {
         expect(res.text).toContain('"/ui/settings-update"');
         // The server URL is populated from the explicit override
         expect(res.text).toContain("http://127.0.0.1:32000/");
+        // The dead sensor-source label-sanitization keys were removed from the
+        // schema, config.yml, and the docs — the spec must not advertise them.
+        expect(res.text).not.toContain("sensor-source-");
     });
 
     // P3-1: the API discovery docs must match the handlers. The reboot response

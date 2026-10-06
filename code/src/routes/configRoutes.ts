@@ -313,10 +313,6 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                 type: integer
          *               rate-limit-max:
          *                 type: integer
-         *               sensor-source-max-length:
-         *                 type: integer
-         *               sensor-source-valid-chars-regex:
-         *                 type: string
          *               ippinger-fetch-timeout-ms:
          *                 type: integer
          *               fetch-timeout-ms:

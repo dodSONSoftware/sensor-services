@@ -50,6 +50,20 @@ describe("configSchema", () => {
     expect(() => validateConfig(config)).toThrow(/Unrecognized key/);
   });
 
+  it("should reject the removed sensor-source label-sanitization keys (strict)", () => {
+    // Source-label sanitization for Prometheus is owned by the
+    // sensor-telemetry-service (its own sensorSourceMaxLength /
+    // sensorSourceValidCharsRegex keys); this app has no consumer for the
+    // kebab-case copies, so they must not be accepted — an operator setting
+    // them here would have changed nothing.
+    const config = {
+      ...baseConfig,
+      "sensor-source-max-length": 30,
+      "sensor-source-valid-chars-regex": "a-zA-Z0-9._-",
+    };
+    expect(() => validateConfig(config)).toThrow(/Unrecognized key/);
+  });
+
   it("should accept config without mqtt-topic-telemetry (telemetry moved to sensor-telemetry-service)", () => {
     // Sensor telemetry/Prometheus publishing is owned by the
     // sensor-telemetry-service; this app has no consumer for the topic, so
