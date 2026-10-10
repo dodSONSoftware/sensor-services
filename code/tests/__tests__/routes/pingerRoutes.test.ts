@@ -8,7 +8,7 @@ import express from "express";
 import { CreatePingerRoutes } from "../../../src/routes/pingerRoutes";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
 
-const MOCK_PINGER_API = "http://192.168.1.4:3300";
+const MOCK_PINGER_API = "http://192.168.1.4:32001";
 const MOCK_FETCH_TIMEOUT_MS = 10_000;
 
 // Mock fetch for all pinger route tests (they proxy to an external service)

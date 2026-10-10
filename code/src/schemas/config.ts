@@ -55,9 +55,9 @@ function parseConfigUrl(value: string): URL | undefined {
  */
 const serviceOriginSchema = (key: string) =>
     z.string({ error: `${key} must be a string` }).refine((value) => {
-        // URL parsing cannot distinguish "http://host:3300" from
-        // "http://host:3300/" (both normalize pathname to "/"), so the
-        // trailing slash — which would yield "host:3300//health" at the
+        // URL parsing cannot distinguish "http://host:32001" from
+        // "http://host:32001/" (both normalize pathname to "/"), so the
+        // trailing slash — which would yield "host:32001//health" at the
         // call site — is rejected on the raw value.
         if (value.endsWith("/")) {
             return false;
@@ -73,7 +73,7 @@ const serviceOriginSchema = (key: string) =>
             u.search === "" &&
             u.hash === ""
         );
-    }, `${key} must be an http(s) origin of the form scheme://host[:port] with no path or trailing "/" (e.g. http://10.10.10.50:3300)`);
+    }, `${key} must be an http(s) origin of the form scheme://host[:port] with no path or trailing "/" (e.g. http://10.10.10.50:32001)`);
 
 /**
  * Swagger server URL override (swagger-server-url).

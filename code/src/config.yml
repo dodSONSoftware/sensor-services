@@ -20,8 +20,8 @@ mqtt-topic-command-response: "iot/v3/command-response"
 # External services. Both must be http(s) origins of the form scheme://host[:port]
 # with no path or trailing "/" (paths are appended at call sites, so any path
 # here would 404). sensor-telemetry-api is optional.
-ip-pinger-web-api: "http://10.10.10.50:3300"
-sensor-telemetry-api: "http://10.10.10.50:3301"
+ip-pinger-web-api: "http://10.10.10.50:32001"
+sensor-telemetry-api: "http://10.10.10.50:32002"
 
 # Behavior
 case-sensitive: true

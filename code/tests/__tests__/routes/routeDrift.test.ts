@@ -43,7 +43,7 @@ function buildFullApp(): express.Application {
     general.register();
     const sensors = new sensorRoutes.CreateSensorRoutes(app, networking);
     sensors.register();
-    const pinger = new pingerRoutes.CreatePingerRoutes(app, networking, "http://127.0.0.1:3300", true, 10_000);
+    const pinger = new pingerRoutes.CreatePingerRoutes(app, networking, "http://127.0.0.1:32001", true, 10_000);
     pinger.register();
     const settings = new settingsRoutes.CreateSettingsRoutes(app);
     settings.register();

@@ -35,8 +35,8 @@ PORT="${VERIFY_PORT:-32099}"
 
 CONFIG_DIR=""
 # mktemp -d (when used) creates a 700 dir owned by the host user; the
-# container runs as non-root appuser (UID 100) and must be able to traverse
-# and read the mount.
+# container runs as the non-root node user (UID 1000) and must be able to
+# traverse and read the mount.
 cleanup() {
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
     docker rmi "$IMAGE" >/dev/null 2>&1 || true
@@ -103,7 +103,7 @@ express-port: 32000
 mqtt-broker-ip-address: "127.0.0.1"
 mqtt-topic-command: "iot/v3/command"
 mqtt-topic-command-response: "iot/v3/command-response"
-ip-pinger-web-api: "http://127.0.0.1:3300"
+ip-pinger-web-api: "http://127.0.0.1:32001"
 case-sensitive: true
 db-host: "127.0.0.1"
 db-port: 5432

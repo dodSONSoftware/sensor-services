@@ -42,9 +42,10 @@ RUN npm install --only=production && npm cache clean --force
 # WORKDIR is /app (not /app/dist) so the canonical CWD-relative config fallback
 # (./dist/config.yml) resolves exactly as it does on bare metal. A mounted
 # /app/configs/config.yml always takes precedence over the fallback.
-# Create non-root user and switch to it
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-USER appuser
+# Run as the node image's unprivileged node user (uid 1000, gid 1000). The
+# mounted /app/configs directory must be host-owned by uid/gid 1000:1000 so
+# /api/write-config can persist (temp file + rename) - see docker-refresh.sh.
+USER node
 
 # Exposed ports
 EXPOSE 32000

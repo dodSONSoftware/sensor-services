@@ -46,7 +46,7 @@ describe("config boundary: Zod-accepted values are consumable by their downstrea
     "mqtt-broker-ip-address": "127.0.0.1",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
-    "ip-pinger-web-api": "http://127.0.0.1:3300",
+    "ip-pinger-web-api": "http://127.0.0.1:32001",
     "case-sensitive": true,
     "db-host": "localhost",
     "db-port": 5432,
@@ -206,7 +206,7 @@ describe("config boundary: Zod-accepted values are consumable by their downstrea
   // ---- service URLs -> template-literal call sites
 
   describe("ip-pinger-web-api / sensor-telemetry-api -> template-literal URL building at the call sites", () => {
-    const serviceOrigins = ["http://10.10.10.50:3300", "https://pinger.example.com", "http://127.0.0.1:8080"];
+    const serviceOrigins = ["http://10.10.10.50:32001", "https://pinger.example.com", "http://127.0.0.1:8080"];
     // Every path the call sites append: `${origin}/health` (generalController),
     // `${origin}/about|read-config|write-config|restart|ping[/:target]` (pingerController).
     const appendedPaths = ["/about", "/health", "/ping", "/ping/10.0.0.5", "/read-config", "/restart", "/write-config"];

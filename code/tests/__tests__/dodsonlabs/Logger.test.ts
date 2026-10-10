@@ -50,7 +50,7 @@ function lokiConfig(): z.infer<typeof configSchema> {
         "mqtt-broker-ip-address": "127.0.0.1",
         "mqtt-topic-command": "c",
         "mqtt-topic-command-response": "cr",
-        "ip-pinger-web-api": "http://localhost:3300",
+        "ip-pinger-web-api": "http://localhost:32001",
         "case-sensitive": true,
         "db-host": "localhost",
         "db-port": 5432,

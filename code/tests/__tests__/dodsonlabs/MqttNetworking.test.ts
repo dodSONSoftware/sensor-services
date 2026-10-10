@@ -197,7 +197,7 @@ describe("MqttNetworking", () => {
             "mqtt-broker-ip-address": "127.0.0.1",
             "mqtt-topic-command": "iot/v3/command",
             "mqtt-topic-command-response": "iot/v3/command-response",
-            "ip-pinger-web-api": "http://127.0.0.1:3300",
+            "ip-pinger-web-api": "http://127.0.0.1:32001",
             "case-sensitive": true,
         } as any;
 
@@ -529,7 +529,7 @@ describe("MqttNetworking", () => {
             "mqtt-topic-command": "iot/v3/command",
             "mqtt-topic-command-response": "iot/v3/command-response",
             "mqtt-topic-log": "custom/log-topic",
-            "ip-pinger-web-api": "http://127.0.0.1:3300",
+            "ip-pinger-web-api": "http://127.0.0.1:32001",
             "case-sensitive": true,
         } as any;
         const withLogTopic = new MqttNetworking(config, logger);
@@ -1013,7 +1013,7 @@ describe("MqttNetworking", () => {
                 "mqtt-topic-command-response": "iot/v3/command-response",
                 "forward-sensor-logs": true,
                 "forward-sensor-logs-level": "warn",
-                "ip-pinger-web-api": "http://127.0.0.1:3300",
+                "ip-pinger-web-api": "http://127.0.0.1:32001",
                 "case-sensitive": true,
             } as any;
             const gated = new MqttNetworking(config, logger);

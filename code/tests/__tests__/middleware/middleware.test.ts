@@ -36,7 +36,7 @@ const config: z.infer<typeof configSchema> = validateConfig({
     "mqtt-broker-ip-address": "10.10.10.64",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
-    "ip-pinger-web-api": "http://10.10.10.50:3300",
+    "ip-pinger-web-api": "http://10.10.10.50:32001",
     "case-sensitive": true,
     "db-host": "10.10.10.64",
     "db-port": 5432,

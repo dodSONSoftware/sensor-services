@@ -23,7 +23,7 @@ log-level: debug
 mqtt-broker-ip-address: "10.10.10.64"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
-ip-pinger-web-api: "http://10.10.10.50:3300"
+ip-pinger-web-api: "http://10.10.10.50:32001"
 case-sensitive: true
 db-host: "10.10.10.64"
 db-port: 5432
@@ -85,7 +85,7 @@ log-level: debug
 mqtt-broker-ip-address: "10.10.10.64"
 mqtt-topic-command: "iot/v2/command"
 mqtt-topic-command-response: "iot/v2/command-response"
-ip-pinger-web-api: "http://10.10.10.50:3300"
+ip-pinger-web-api: "http://10.10.10.50:32001"
 case-sensitive: true
 db-host: "10.10.10.64"
 db-port: 5432
@@ -128,7 +128,7 @@ db-password: "testpass"
                     "mqtt-broker-ip-address": "10.10.10.101",
                     "mqtt-topic-command": "iot/v2/command",
                     "mqtt-topic-command-response": "iot/v2/command-response",
-                    "ip-pinger-web-api": "http://10.10.10.50:3300",
+                    "ip-pinger-web-api": "http://10.10.10.50:32001",
                     "case-sensitive": true,
                     "db-host": "10.10.10.64",
                     "db-port": 5432,
@@ -163,7 +163,7 @@ db-password: "testpass"
                 "mqtt-broker-ip-address": "10.10.10.100",
                 "mqtt-topic-command": "iot/v2/new-command",
                 "mqtt-topic-command-response": "iot/v2/new-response",
-                "ip-pinger-web-api": "http://10.10.10.50:3300",
+                "ip-pinger-web-api": "http://10.10.10.50:32001",
                 "case-sensitive": false,
                 "db-host": "10.10.10.64",
                 "db-port": 5432,
@@ -206,7 +206,7 @@ db-password: "testpass"
                 "mqtt-broker-ip-address": "10.10.10.64",
                 "mqtt-topic-command": "iot/v2/command",
                 "mqtt-topic-command-response": "iot/v2/command-response",
-                "ip-pinger-web-api": "http://10.10.10.50:3300",
+                "ip-pinger-web-api": "http://10.10.10.50:32001",
                 "case-sensitive": true,
                 "db-host": "10.10.10.64",
                 "db-port": 5432,
@@ -260,7 +260,7 @@ db-password: "testpass"
                     "mqtt-broker-ip-address": "10.10.10.100",
                     "mqtt-topic-command": "iot/v2/command",
                     "mqtt-topic-command-response": "iot/v2/command-response",
-                    "ip-pinger-web-api": "http://10.10.10.50:3300",
+                    "ip-pinger-web-api": "http://10.10.10.50:32001",
                     "case-sensitive": true,
                     "db-host": "10.10.10.64",
                     "db-port": 5432,

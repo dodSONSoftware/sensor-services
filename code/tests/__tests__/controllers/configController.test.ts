@@ -28,7 +28,7 @@ const BASE_CONFIG = {
     "mqtt-broker-ip-address": "10.10.10.64",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
-    "ip-pinger-web-api": "http://10.10.10.64:3300",
+    "ip-pinger-web-api": "http://10.10.10.64:32001",
     "case-sensitive": true,
     "db-host": "localhost",
     "db-port": 5432,
@@ -210,14 +210,14 @@ describe("hot reload runtime state (no split-brain config)", () => {
         "log-level": "info",
         "mqtt-broker-ip-address": "10.0.0.11",
         "loki-url": "http://loki-a:3100",
-        "ip-pinger-web-api": "http://pinger-a:3300",
+        "ip-pinger-web-api": "http://pinger-a:32001",
     };
     const CONFIG_B = {
         ...CONFIG_A,
         "log-level": "debug",
         "mqtt-broker-ip-address": "10.0.0.22",
         "loki-url": "http://loki-b:3100",
-        "ip-pinger-web-api": "http://pinger-b:3300",
+        "ip-pinger-web-api": "http://pinger-b:32001",
     };
 
     it("should apply only log-level, keep restart-required values inactive, and keep the logger instance", async () => {
@@ -244,7 +244,7 @@ describe("hot reload runtime state (no split-brain config)", () => {
         expect(active["log-level"]).toBe("debug");
         expect(active["mqtt-broker-ip-address"]).toBe("10.0.0.11");
         expect(active["loki-url"]).toBe("http://loki-a:3100");
-        expect(active["ip-pinger-web-api"]).toBe("http://pinger-a:3300");
+        expect(active["ip-pinger-web-api"]).toBe("http://pinger-a:32001");
 
         // Logger identity: same instance, level changed in place, never closed
         expect(logger()).toBe(runningLogger);
@@ -270,7 +270,7 @@ describe("hot reload runtime state (no split-brain config)", () => {
         // values — read-config is the source document for the full-document
         // write-config; the complete config is returned (no masking).
         expect(body["mqtt-broker-ip-address"]).toBe("10.0.0.22");
-        expect(body["ip-pinger-web-api"]).toBe("http://pinger-b:3300");
+        expect(body["ip-pinger-web-api"]).toBe("http://pinger-b:32001");
         expect(body["loki-url"]).toBe("http://loki-b:3100");
         expect(body["log-level"]).toBe("debug");
     });
@@ -289,7 +289,7 @@ describe("hot reload runtime state (no split-brain config)", () => {
         // Restart-required values are reported as ACTIVE (old) values, not the
         // new file values; the complete config is returned (no masking).
         expect(body["mqtt-broker-ip-address"]).toBe("10.0.0.11");
-        expect(body["ip-pinger-web-api"]).toBe("http://pinger-a:3300");
+        expect(body["ip-pinger-web-api"]).toBe("http://pinger-a:32001");
         expect(body["loki-url"]).toBe("http://loki-a:3100");
         expect(body["log-level"]).toBe("debug");
     });
@@ -326,7 +326,7 @@ describe("hot reload runtime state (no split-brain config)", () => {
         const onDisk = yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
         expect(onDisk["mqtt-broker-ip-address"]).toBe("10.0.0.22");
         expect(onDisk["loki-url"]).toBe("http://loki-b:3100");
-        expect(onDisk["ip-pinger-web-api"]).toBe("http://pinger-b:3300");
+        expect(onDisk["ip-pinger-web-api"]).toBe("http://pinger-b:32001");
         expect(onDisk["log-level"]).toBe("warn");
     });
 });

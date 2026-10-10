@@ -12,7 +12,7 @@ describe("configSchema", () => {
     "mqtt-broker-ip-address": "127.0.0.1",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
-    "ip-pinger-web-api": "http://127.0.0.1:3300",
+    "ip-pinger-web-api": "http://127.0.0.1:32001",
     "case-sensitive": true,
     "db-host": "localhost",
     "db-port": 5432,
@@ -349,14 +349,14 @@ describe("configSchema", () => {
   it("should accept well-formed http(s) URLs for all service URL keys", () => {
     const config = {
       ...baseConfig,
-      "ip-pinger-web-api": "http://10.10.10.50:3300",
-      "sensor-telemetry-api": "http://10.10.10.50:3301",
+      "ip-pinger-web-api": "http://10.10.10.50:32001",
+      "sensor-telemetry-api": "http://10.10.10.50:32002",
       "swagger-server-url": "http://10.10.10.217:32000/",
       "loki-url": "http://10.10.10.60:3100",
     };
     const result = validateConfig(config);
-    expect(result["ip-pinger-web-api"]).toBe("http://10.10.10.50:3300");
-    expect(result["sensor-telemetry-api"]).toBe("http://10.10.10.50:3301");
+    expect(result["ip-pinger-web-api"]).toBe("http://10.10.10.50:32001");
+    expect(result["sensor-telemetry-api"]).toBe("http://10.10.10.50:32002");
     expect(result["swagger-server-url"]).toBe("http://10.10.10.217:32000/");
     expect(result["loki-url"]).toBe("http://10.10.10.60:3100");
   });
@@ -364,7 +364,7 @@ describe("configSchema", () => {
   it("should accept https URLs for the service origin keys", () => {
     const config = {
       ...baseConfig,
-      "ip-pinger-web-api": "https://pinger.example.com:3300",
+      "ip-pinger-web-api": "https://pinger.example.com:32001",
       "sensor-telemetry-api": "https://telemetry.example.com",
     };
     const result = validateConfig(config);
@@ -377,61 +377,61 @@ describe("configSchema", () => {
   });
 
   it("should reject a non-http(s) scheme for ip-pinger-web-api", () => {
-    const config = { ...baseConfig, "ip-pinger-web-api": "ftp://10.10.10.50:3300" };
+    const config = { ...baseConfig, "ip-pinger-web-api": "ftp://10.10.10.50:32001" };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api/);
   });
 
   it("should reject a mistyped scheme for ip-pinger-web-api", () => {
-    const config = { ...baseConfig, "ip-pinger-web-api": "htp://10.10.10.50:3300" };
+    const config = { ...baseConfig, "ip-pinger-web-api": "htp://10.10.10.50:32001" };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api/);
   });
 
   it("should reject a bare host without a scheme for ip-pinger-web-api", () => {
-    const config = { ...baseConfig, "ip-pinger-web-api": "10.10.10.50:3300" };
+    const config = { ...baseConfig, "ip-pinger-web-api": "10.10.10.50:32001" };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api/);
   });
 
   it("should reject a path on ip-pinger-web-api", () => {
     // A path would be concatenated at the call site into a double-slash
-    // URL (e.g. host:3300/extra/read-config) that 404s.
-    const config = { ...baseConfig, "ip-pinger-web-api": "http://10.10.10.50:3300/extra" };
+    // URL (e.g. host:32001/extra/read-config) that 404s.
+    const config = { ...baseConfig, "ip-pinger-web-api": "http://10.10.10.50:32001/extra" };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api/);
   });
 
   it("should reject a trailing slash on ip-pinger-web-api", () => {
     // URL parsing normalizes the trailing slash away, so without the raw
-    // check this would pass while producing "host:3300//health" at runtime.
-    const config = { ...baseConfig, "ip-pinger-web-api": "http://10.10.10.50:3300/" };
+    // check this would pass while producing "host:32001//health" at runtime.
+    const config = { ...baseConfig, "ip-pinger-web-api": "http://10.10.10.50:32001/" };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api/);
   });
 
   it("should reject embedded credentials in ip-pinger-web-api", () => {
-    const config = { ...baseConfig, "ip-pinger-web-api": "http://user:pass@10.10.10.50:3300" };
+    const config = { ...baseConfig, "ip-pinger-web-api": "http://user:pass@10.10.10.50:32001" };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api/);
   });
 
   it("should reject a non-string ip-pinger-web-api", () => {
-    const config = { ...baseConfig, "ip-pinger-web-api": 3300 };
+    const config = { ...baseConfig, "ip-pinger-web-api": 32001 };
     expect(() => validateConfig(config)).toThrow(/ip-pinger-web-api must be a string/);
   });
 
   it("should reject a non-http(s) scheme for sensor-telemetry-api", () => {
-    const config = { ...baseConfig, "sensor-telemetry-api": "grpc://10.10.10.50:3301" };
+    const config = { ...baseConfig, "sensor-telemetry-api": "grpc://10.10.10.50:32002" };
     expect(() => validateConfig(config)).toThrow(/sensor-telemetry-api/);
   });
 
   it("should reject a bare host without a scheme for sensor-telemetry-api", () => {
-    const config = { ...baseConfig, "sensor-telemetry-api": "10.10.10.50:3301" };
+    const config = { ...baseConfig, "sensor-telemetry-api": "10.10.10.50:32002" };
     expect(() => validateConfig(config)).toThrow(/sensor-telemetry-api/);
   });
 
   it("should reject a query string on sensor-telemetry-api", () => {
-    const config = { ...baseConfig, "sensor-telemetry-api": "http://10.10.10.50:3301?x=1" };
+    const config = { ...baseConfig, "sensor-telemetry-api": "http://10.10.10.50:32002?x=1" };
     expect(() => validateConfig(config)).toThrow(/sensor-telemetry-api/);
   });
 
   it("should reject a fragment on sensor-telemetry-api", () => {
-    const config = { ...baseConfig, "sensor-telemetry-api": "http://10.10.10.50:3301#metrics" };
+    const config = { ...baseConfig, "sensor-telemetry-api": "http://10.10.10.50:32002#metrics" };
     expect(() => validateConfig(config)).toThrow(/sensor-telemetry-api/);
   });
 
@@ -491,7 +491,7 @@ describe("resolveIppingerFetchTimeoutMs (Optional-2 key rename precedence)", () 
     "mqtt-broker-ip-address": "127.0.0.1",
     "mqtt-topic-command": "iot/v3/command",
     "mqtt-topic-command-response": "iot/v3/command-response",
-    "ip-pinger-web-api": "http://127.0.0.1:3300",
+    "ip-pinger-web-api": "http://127.0.0.1:32001",
     "case-sensitive": true,
     "db-host": "localhost",
     "db-port": 5432,

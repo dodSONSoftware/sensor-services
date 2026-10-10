@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Graphite Falcon — firmware 4.13.11
+**Release:** Graphite Falcon — firmware 4.13.12
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -274,7 +274,7 @@ Application-level authentication should be added if the service becomes Internet
 
 - **mode** — deploy it with restrictive permissions (`chmod 600`). `/api/write-config` replaces the file atomically (same-directory temp file + rename) and preserves the existing file's mode exactly, so `600` survives config writes. A first-time file *creation* uses the process's default creation mode (umask-dependent, typically `644`) — set `600` explicitly on the file you deploy.
 - **owner / group** — the service never runs `chown`. The replacement file is owned by the user (and group) of the service process that performed the write; a root- or operator-owned config is a deployment concern the application will not fix for you.
-- **container user** — the container runs as non-root `appuser` (group `appgroup`). The mounted `/mnt/sensor-services/` directory must be writable by `appuser`'s uid for `/api/write-config` to succeed, and after a write the file on the host is owned by that uid. The application does not — and cannot — change the ownership of mounted files.
+- **container user** — the container runs as the node image's unprivileged `node` user (uid 1000, gid 1000). The mounted `/mnt/sensor-services/` directory must be writable by uid 1000 for `/api/write-config` to succeed, and after a write the file on the host is owned by uid 1000. The application does not — and cannot — change the ownership of mounted files.
 - **concurrent writes** — two simultaneous full-document writes are last-writer-wins: both can succeed, and the file always holds exactly one complete document (atomic replacement prevents torn files). There is deliberately no ETag/version check (no optimistic concurrency control); this contract is pinned by the `configController` tests.
 
 No ownership or metadata tooling is provided by the service; the semantics above are what an operator may rely on.

@@ -218,7 +218,7 @@ describe("getAnalyzeIpPinger", () => {
       {} as express.Request,
       res,
       network,
-      "http://192.168.1.4:3300",
+      "http://192.168.1.4:32001",
       true,
       10_000
     );
@@ -258,7 +258,7 @@ describe("getAnalyzeIpPinger", () => {
       {} as express.Request,
       res,
       network,
-      "http://192.168.1.4:3300",
+      "http://192.168.1.4:32001",
       true,
       10_000
     );
@@ -290,7 +290,7 @@ describe("getAnalyzeIpPinger", () => {
       {} as express.Request,
       res,
       network,
-      "http://192.168.1.4:3300",
+      "http://192.168.1.4:32001",
       true,
       10_000
     );
@@ -322,7 +322,7 @@ describe("getAnalyzeIpPinger", () => {
       {} as express.Request,
       res,
       network,
-      "http://192.168.1.4:3300",
+      "http://192.168.1.4:32001",
       true,
       10_000
     );
@@ -355,7 +355,7 @@ describe("getAnalyzeIpPinger", () => {
       {} as express.Request,
       res,
       network,
-      "http://192.168.1.4:3300",
+      "http://192.168.1.4:32001",
       true,
       10_000
     );
@@ -408,7 +408,7 @@ describe("getAnalyzeIpPinger", () => {
           {} as express.Request,
           res,
           network,
-          "http://192.168.1.4:3300",
+          "http://192.168.1.4:32001",
           true,
           10_000
         );
@@ -428,7 +428,7 @@ describe("getAnalyzeIpPinger", () => {
       mockPingerResponse({
         logLevel: "info",
         alwaysLogErrors: true,
-        apiPort: 3300,
+        apiPort: 32001,
         intervalSecs: 60,
         devices: [
           { source: "sensor-1", ipAddress: "192.168.1.10", deviceType: "sensor" },
@@ -442,7 +442,7 @@ describe("getAnalyzeIpPinger", () => {
         {} as express.Request,
         res,
         network,
-        "http://192.168.1.4:3300",
+        "http://192.168.1.4:32001",
         true,
         10_000
       );
@@ -473,7 +473,7 @@ describe("getAnalyzeIpPinger", () => {
         {} as express.Request,
         res,
         network,
-        "http://192.168.1.4:3300",
+        "http://192.168.1.4:32001",
         true,
         10_000
       );
@@ -504,7 +504,7 @@ describe("getAnalyzeIpPinger", () => {
         {} as express.Request,
         res,
         network,
-        "http://192.168.1.4:3300",
+        "http://192.168.1.4:32001",
         true,
         10_000
       );

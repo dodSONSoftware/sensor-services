@@ -154,7 +154,7 @@ describe("getHealth", () => {
       "mqtt-broker-ip-address": "10.10.10.64",
       "mqtt-topic-command": "iot/v2/command",
       "mqtt-topic-command-response": "iot/v2/command-response",
-      "ip-pinger-web-api": "http://10.10.10.64:3300",
+      "ip-pinger-web-api": "http://10.10.10.64:32001",
       "case-sensitive": true,
       "db-host": "localhost",
       "db-port": 5432,

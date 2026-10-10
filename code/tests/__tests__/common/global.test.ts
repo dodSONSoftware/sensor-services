@@ -51,7 +51,7 @@ describe("createLogger", () => {
       "mqtt-broker-ip-address": "127.0.0.1",
       "mqtt-topic-command": "iot/v2/command",
       "mqtt-topic-command-response": "iot/v2/command-response",
-      "ip-pinger-web-api": "http://127.0.0.1:3300",
+      "ip-pinger-web-api": "http://127.0.0.1:32001",
       "case-sensitive": true,
     } as any;
 
@@ -72,7 +72,7 @@ describe("createLogger", () => {
       "mqtt-broker-ip-address": "127.0.0.1",
       "mqtt-topic-command": "iot/v2/command",
       "mqtt-topic-command-response": "iot/v2/command-response",
-      "ip-pinger-web-api": "http://127.0.0.1:3300",
+      "ip-pinger-web-api": "http://127.0.0.1:32001",
       "case-sensitive": true,
     } as any;
 
