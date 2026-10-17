@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.14.7] — Silicon Falcon (2026-10-17)
+
+- Documented the reverse-proxy caveat for the rate limiter in `CONFIGURATION.md`. The limiter keys each client by `req.ip` (the express-rate-limit default) and the service does not configure Express's trust-proxy setting: the current deployment exposes the container port directly, so every client has its own source address and its own `rate-limit-max` budget per window. A reverse proxy in front of the service would collapse all clients onto the proxy's source address and give the entire service a single shared budget, so trust proxy (and the limiter's client-key resolution, e.g. an `X-Forwarded-For`-based key) must be configured before one is introduced — or `rate-limit-max` raised to account for the shared addressing. Documentation-only change — no behavior change; the direct-port deployment is unaffected.
+
 ## [4.14.6] — Silicon Falcon (2026-10-17)
 
 - Fixed the rate-limiter exemption for the observability endpoints so it holds for every routing of the path, not just the bare form. `/health` and `/metrics` were exempted by an exact `req.path` match, but Express's default (non-strict) routing also serves `/health/` and `/metrics/`, and the rate limiter reads `req.path` verbatim — so a scraper hitting the trailing-slash form was ratable and, once the limit was exhausted, would be 429'd. That could take the container into "unhealthy" (health) or drop Prometheus data (metrics) under load, defeating the documented invariant that these endpoints are never rate-limited. The exemption now matches the bare path plus an optional single trailing slash (`/health`, `/health/`, `/metrics`, `/metrics/`) and nothing else, so it cannot leak to a sibling route. Regression tests cover both trailing-slash routings.

@@ -40,6 +40,8 @@ Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config
 
 Configuration uses a **strict** Zod object; unknown keys are rejected, as are missing required keys and malformed value types. The committed `src/config.yml` may override defaults (for example the rate limit and command silence timeout); do not confuse example values with schema defaults.
 
+**Reverse-proxy caveat.** The rate limiter keys each client by `req.ip` (the express-rate-limit default); the service does not configure Express's trust-proxy setting. The current deployment exposes the container port directly, so every client has its own source address and its own `rate-limit-max` budget per window. If a reverse proxy is introduced in front of the service, all clients share the proxy's source address and the entire service shares one budget — configure trust proxy (and the limiter's client-key resolution accordingly, e.g. an `X-Forwarded-For`-based key) before introducing it, or raise `rate-limit-max` to account for the shared addressing.
+
 ## Read, write, reload
 
 - `GET /api/read-config` reads the validated **on-disk** file, including pending restart-required changes. `GET /api/read-running-config` returns the active in-memory configuration.
