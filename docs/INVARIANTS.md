@@ -16,7 +16,7 @@ This document lists properties that must remain true after changes. Relevant tes
 12. **Settings updates:** unknown keys reject the entire patch (400); no partial mutation on schema error.
 13. **Pinger analysis:** validate pinger config before analysis; unreachable/invalid pinger data degrades without mutating live sensor input. Validate target addresses to prevent outbound URL manipulation.
 14. **Log access:** source, level and query limit are validated/bounded to avoid LogQL injection or excessive results.
-15. **Health and shutdown:** dependency probes are bounded and concurrent; degraded health is not automatically HTTP 503. Shutdown is re-entrant safe and bounded to 15 seconds, closes resources in order and preserves success (signals) vs fatal (nonzero) exit semantics.
+15. **Health and shutdown:** dependency probes are bounded and concurrent; degraded health is not automatically HTTP 503. Shutdown is re-entrant safe and bounded to 15 seconds, closes resources in order and preserves success (signals) vs fatal (nonzero) exit semantics. The HTTP close step is itself bounded: after a short grace (~4s) all connections — in-flight and idle keep-alive — are force-closed, so a slow in-flight request or the keep-alive idle drain can never consume the whole budget and starve the MQTT / settings / logger closes.
 16. **Container lifecycle:** mounted YAML takes precedence over compiled fallback; runtime is non-root; Docker's 20-second stop grace exceeds the app's hard shutdown timeout.
 
 Use `npm run blt` and scenario-specific tests before accepting changes to these guarantees. Some operational properties additionally require `tests/docker/verify.sh` and running services.

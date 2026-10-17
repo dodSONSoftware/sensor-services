@@ -241,7 +241,25 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
             await runGracefulShutdown(
                 {
                     closeHttpServer: () => new Promise<void>((resolve) => {
+                        // Bound the HTTP drain: server.close() only resolves when
+                        // EVERY connection is gone, and on Node 22 an in-flight
+                        // request (up to the 10s command cap) plus the ~5s
+                        // keep-alive idle drain that follows its response can
+                        // consume the whole 15s shutdown budget, leaving nothing
+                        // for the MQTT / settings / logger closes (the hard net
+                        // would then force exit 1). Force-close all connections
+                        // after a short grace so this step stays bounded and the
+                        // remaining steps get their time. In-flight requests are
+                        // torn down after the grace — acceptable at shutdown and
+                        // consistent with the bounded-shutdown invariant.
+                        // (closeAllConnections() exists since Node 18.2; the app
+                        // is pinned to Node 22.)
+                        const teardown = setTimeout(() => {
+                            server.closeAllConnections();
+                        }, 4_000);
+                        teardown.unref();
                         server.close(() => {
+                            clearTimeout(teardown);
                             appLogger.write_info("index.ts", "HTTP server closed. No new requests accepted.");
                             resolve();
                         });

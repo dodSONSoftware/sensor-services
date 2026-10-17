@@ -29,7 +29,7 @@ External dependencies: MQTT broker (V3 sensor protocol), PostgreSQL (`settingsSt
 2. Set up Winston (optionally Loki), MQTT networking and settings persistence. An unavailable database permits in-memory settings operation.
 3. Register middleware, Swagger and every route class through explicit `register()` calls. Register not-found handling last.
 4. Compare each route module's `__routes` and `__routesHelp`; verify declared HTTP routes equal live Express routes. Drift fails startup.
-5. Start the HTTP listener and install signal/fatal handlers. Shutdown closes HTTP, MQTT, settings and logger in order with a hard 15-second deadline.
+5. Start the HTTP listener and install signal/fatal handlers. Shutdown closes HTTP, MQTT, settings and logger in order with a hard 15-second deadline. The HTTP step is bounded independently: `server.close()` is paired with a ~4-second grace after which `closeAllConnections()` force-closes in-flight and idle keep-alive connections, so the step cannot consume the whole budget (an in-flight command plus the Node 22 keep-alive idle drain used to exceed 15s on its own).
 
 ## HTTP surface
 
