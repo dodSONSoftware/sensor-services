@@ -25,7 +25,7 @@ Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config
 | Key | Default / validation |
 | --- | --- |
 | `sensor-telemetry-api` | Optional HTTP(S) origin, same restriction as pinger origin |
-| `swagger-server-url` | Auto-derived URL; override permits absolute HTTP(S) URL with path, no credentials |
+| `swagger-server-url` | Auto-derived from the first non-loopback IPv4 (container-internal under Docker — set this key for container deployments); override permits absolute HTTP(S) URL with path, no credentials |
 | `loki-url` | Optional absolute HTTP(S) URL; path and embedded credentials permitted (secret) |
 | `loki-enabled` | Optional boolean |
 | `mqtt-topic-log` | `iot/v3/log` |

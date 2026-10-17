@@ -13,6 +13,7 @@ This document tracks limitations and risks verified from the supplied codebase. 
 | Deployment | Compiled fallback YAML is valid if no mounted configuration exists | Accidentally starting without a mount may connect to unintended configured services. Verify `/app/configs/config.yml` mounting and credentials before deployment. |
 | Deployment | Docker Compose hard-codes published port 32000 | If `express-port` changes, update healthcheck and Compose mapping together. |
 | Deployment | Swagger relies on source route files packaged in runtime image | Removing copied `src/routes/` breaks startup API generation; preserve Dockerfile behavior. |
+| Deployment | Swagger auto-derived server URL skips loopback only | Under Docker, `servers[0].url` is the container-internal IP, so the UI's "Try it out" fails from the host unless `swagger-server-url` is set. Cosmetic: the spec content is unaffected. |
 | Verification | Docker end-to-end script requires functioning Docker daemon | Unit tests and static Docker tests do not replace runtime container verification. |
 
 **Unconfirmed defects:** No additional concrete open bug was established by this documentation inspection. Add reproducible symptoms, impact, affected version, owner/status, workaround and regression test when new defects are confirmed.

@@ -26,7 +26,9 @@ sensor-telemetry-api: "http://10.10.10.50:32002"
 # Behavior
 case-sensitive: true
 
-# Optional: override auto-derived Swagger server URL
+# Optional: override auto-derived Swagger server URL. Under Docker the
+# auto-derived URL is the container's internal address, which host browsers
+# cannot reach — set this for container deployments so "Try it out" works.
 # swagger-server-url: "http://10.10.10.217:32000/"
 
 # Optional: sensor application log topic (default: iot/v3/log)

@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.14.4] — Silicon Falcon (2026-10-17)
+
+- Corrected the Swagger server-URL auto-derivation, whose comment claimed it was "skipping loopback and Docker-internal addresses" while the code filters only loopback (`127.*`): under Docker the first non-loopback interface is the container's internal address, so with no `swagger-server-url` override the advertised `servers[0].url` points at an address host browsers cannot reach and the Swagger UI's "Try it out" requests fail. The comment, the `swagger-server-url` schema documentation, the `config.yml` example, `CONFIGURATION.md`, and a new `KNOWN_ISSUES.md` entry now state accurately that only loopback is skipped and that `swagger-server-url` should be set for container deployments. Documentation-only change — no behavior change; the spec content and the config-override contract are unchanged.
+
 ## [4.14.3] — Silicon Falcon (2026-10-17)
 
 - Reworded the settings store's degraded-mode patch warning, which previously logged "[settingsStore] Patch attempted before init() — storing in memory only." on every settings save while PostgreSQL is down — misattributing the cause, since in the intended degraded startup path `init()` did run and simply found the database unavailable (the service continues by design with in-memory defaults). The message now states the actual condition: settings persistence is unavailable (no active pool) and the update was applied in memory only (non-durable, `X-Settings-Persisted: false`), so an operator is no longer pointed at a startup-ordering bug that doesn't exist while the real signal (database down) is buried. Logging hygiene only — no behavioral change.

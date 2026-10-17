@@ -11,7 +11,9 @@ import * as ipAddress from "ip";
 import { aboutDude } from "./common/global";
 import * as os from "os";
 
-// Resolve a routable IP address, skipping loopback and Docker-internal addresses.
+// Resolve a routable IPv4 address, skipping loopback only. Under Docker the
+// first non-loopback interface is the container's internal address, so set
+// swagger-server-url to advertise a host-reachable URL instead.
 function routableAddress(): string {
     const networks = os.networkInterfaces();
     for (const _iface of Object.values(networks)) {

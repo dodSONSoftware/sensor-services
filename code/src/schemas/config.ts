@@ -80,7 +80,9 @@ const serviceOriginSchema = (key: string) =>
  * Swagger server URL override (swagger-server-url).
  *
  * Used verbatim as the OpenAPI servers[0].url, and the auto-derived default
- * (`http://<routable-ip>:<port>/`) carries a trailing slash — so unlike a
+ * (`http://<routable-ip>:<port>/`, first non-loopback IPv4 — container-internal
+ * under Docker, so set this key for container deployments) carries a trailing
+ * slash — so unlike a
  * service origin, any absolute http(s) URL with a hostname is accepted (a
  * reverse-proxy mount path is legitimate). Credentials are rejected: they
  * have no place in a UI-facing server URL.
