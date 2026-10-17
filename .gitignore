@@ -140,3 +140,9 @@ out
 
 # Runtime data
 settings.yml
+
+# Python tooling (cross-project hygiene)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

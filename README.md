@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Graphite Falcon — firmware 4.13.12
+**Release:** Graphite Falcon — firmware 4.13.13
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -129,17 +129,6 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor |
 | POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
 | GET | `/sensors/logs/:source` | Fetch sensor logs from Loki (source is allowlist-validated; `level` filter: debug/info/warn/error, `limit` max 100) |
-
-### IP Pinger Routes (`/ippinger/*`)
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/ippinger/about` | Proxy to IP pinger service `/about` |
-| GET | `/ippinger/read-config` | Proxy to IP pinger service `/read-config` |
-| POST | `/ippinger/write-config` | POST to IP pinger service `/write-config` |
-| POST | `/ippinger/restart` | POST to IP pinger service `/restart` |
-| GET | `/ippinger/ping` | Proxy to IP pinger service `/ping` |
-| GET | `/ippinger/ping/:target` | Proxy to IP pinger service `/ping/{ip}` |
 
 ### Sensor Routes (`/sensors/*`) - Analysis
 
