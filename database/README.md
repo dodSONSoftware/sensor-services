@@ -50,7 +50,7 @@ The schema includes these default settings:
 
 ### Server Configuration
 
-The MQTT settings (`mqtt_broker_address`, `mqtt_topic_telemetry`, `mqtt_topic_command`, `mqtt_topic_command_response`) are optional and are not seeded by the schema; they are set through the settings API. The seeded row always matches the app's own self-seed (`DEFAULT_SETTINGS` in `code/src/schemas/settings.ts`), which the test suite enforces.
+The MQTT settings (`mqtt_broker_address`, `mqtt_topic_telemetry`, `mqtt_topic_command`, `mqtt_topic_command_response`) are optional (empty-string defaults) and are set through the settings API. The seeded row always matches the app's own self-seed (`DEFAULT_SETTINGS` in `code/src/schemas/settings.ts`), which the test suite enforces.
 
 ### Telemetry Configuration
 - `telemetry.air`: Array of air sensor fields to display

@@ -22,6 +22,10 @@ VALUES (1, '{
     "recent_ips_max": 10,
     "unit_system": "Imperial",
     "log_levels": ["debug", "info"],
+    "mqtt_broker_address": "",
+    "mqtt_topic_telemetry": "",
+    "mqtt_topic_command": "",
+    "mqtt_topic_command_response": "",
     "telemetry": {
         "air": [
             {"ui": "TEMPERATURE", "order": 0, "value": "temperature_c", "visible": true},

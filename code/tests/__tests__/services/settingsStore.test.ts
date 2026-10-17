@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { appSettingsSchema, DEFAULT_SETTINGS, type TelemetryItem } from "../../../src/schemas/settings";
+import { appSettingsSchema, appSettingsUpdateSchema, DEFAULT_SETTINGS, type TelemetryItem } from "../../../src/schemas/settings";
 import { getSettings, isSettingKeyValid, patchSettings, validateSettingsFromDb } from "../../../src/services/settingsStore";
 
 /**
@@ -188,6 +188,41 @@ describe("settings persistence round-trip", () => {
 
         expect(reloaded.telemetry.air).toEqual(customized);
         expect("telemetry.air" in reloaded).toBe(false);
+        expect(appSettingsSchema.safeParse(reloaded).success).toBe(true);
+    });
+});
+
+/**
+ * Regression (mqtt_* keys silently dropped): the PATCH boundary
+ * (appSettingsUpdateSchema) used to accept mqtt_broker_address /
+ * mqtt_topic_telemetry / mqtt_topic_command / mqtt_topic_command_response
+ * while the store's known-key predicate (isSettingKeyValid, which checks
+ * DEFAULT_SETTINGS membership) did not know them — doPatchSettings skipped
+ * them without error, so the API reported 200 + X-Settings-Persisted: true
+ * while persisting nothing. The two layers must agree: every key the
+ * boundary accepts must be one the store can apply.
+ */
+describe("settings key agreement between PATCH boundary and store", () => {
+    it("accepts every key the update schema accepts (no boundary/store divergence)", () => {
+        for (const key of Object.keys(appSettingsUpdateSchema.shape)) {
+            expect(isSettingKeyValid(key)).toBe(true);
+        }
+    });
+
+    it("applies an mqtt_* patch and keeps it in the settings cache", async () => {
+        const patched = await patchSettings({ mqtt_broker_address: "10.0.0.5" });
+
+        expect(patched.mqtt_broker_address).toBe("10.0.0.5");
+        expect(getSettings().mqtt_broker_address).toBe("10.0.0.5");
+    });
+
+    it("survives a persistence round-trip (patch → JSON → validateSettingsFromDb)", async () => {
+        const patched = await patchSettings({ mqtt_topic_command: "sensors/cmd" });
+
+        // Simulate a restart: reload the exact JSON the store would persist.
+        const reloaded = validateSettingsFromDb(JSON.stringify(patched));
+
+        expect(reloaded.mqtt_topic_command).toBe("sensors/cmd");
         expect(appSettingsSchema.safeParse(reloaded).success).toBe(true);
     });
 });

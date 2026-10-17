@@ -16,16 +16,28 @@ const baseMockCache = {
     decimal_places: 2,
 };
 
-jest.mock("../../../src/services/settingsStore", () => ({
-    init: jest.fn().mockResolvedValue(undefined),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    getSettings: jest.fn(() => structuredClone(currentMockCache)),
-    patchSettings: jest.fn(async (updates: Record<string, unknown>) => {
-        Object.assign(currentMockCache, updates);
-        return structuredClone(currentMockCache);
-    }),
-    isPersistenceAvailable: jest.fn(() => mockPersisted),
-}));
+// The mocked patchSettings filters keys through the REAL isSettingKeyValid so
+// it mirrors the store's known-key behavior (regression: an unfiltered
+// Object.assign mock once masked four mqtt_* keys that the real store
+// silently dropped — this controller test passed while the store lost the
+// update and still reported X-Settings-Persisted: true).
+jest.mock("../../../src/services/settingsStore", () => {
+    const { isSettingKeyValid } = jest.requireActual("../../../src/services/settingsStore");
+    return {
+        init: jest.fn().mockResolvedValue(undefined),
+        shutdown: jest.fn().mockResolvedValue(undefined),
+        getSettings: jest.fn(() => structuredClone(currentMockCache)),
+        patchSettings: jest.fn(async (updates: Record<string, unknown>) => {
+            for (const [key, value] of Object.entries(updates)) {
+                if (isSettingKeyValid(key)) {
+                    (currentMockCache as Record<string, unknown>)[key] = value;
+                }
+            }
+            return structuredClone(currentMockCache);
+        }),
+        isPersistenceAvailable: jest.fn(() => mockPersisted),
+    };
+});
 
 import * as settingsStore from "../../../src/services/settingsStore";
 

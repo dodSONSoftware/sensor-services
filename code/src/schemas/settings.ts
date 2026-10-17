@@ -123,6 +123,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
     recent_ips_max: 10,
     unit_system: "Imperial",
     log_levels: ["debug", "info"],
+    // Present with empty-string defaults (matching the `default: ""` the
+    // schema endpoint advertises) so they are first-class known keys: the
+    // store's key predicate (isSettingKeyValid) checks DEFAULT_SETTINGS
+    // membership, so a key the PATCH boundary accepts must be present here
+    // or doPatchSettings silently drops it.
+    mqtt_broker_address: "",
+    mqtt_topic_telemetry: "",
+    mqtt_topic_command: "",
+    mqtt_topic_command_response: "",
     telemetry: {
         air: [
             { ui: "TEMPERATURE", order: 0, value: "temperature_c", visible: true },
