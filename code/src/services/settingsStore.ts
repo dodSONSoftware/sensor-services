@@ -484,7 +484,7 @@ async function doPatchSettings(updates: Record<string, unknown>): Promise<AppSet
         // No pool available - store in memory only
         cache = newCache as AppSettings;
         // eslint-disable-next-line no-console
-        console.warn("[settingsStore] Patch attempted before init() — storing in memory only.");
+        console.warn("[settingsStore] Settings persistence unavailable (no active pool) — update applied in memory only (non-durable, X-Settings-Persisted: false).");
         return structuredClone(newCache as AppSettings);
     }
 
