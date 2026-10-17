@@ -4,6 +4,7 @@
  */
 
 import { create_mqtt_command_message, getDetails, isBroadcastTarget } from "../../../src/controllers/sensorController";
+import { logger, setLogger } from "../../../src/common/global";
 import type { MqttNetworking } from "../../../src/dodsonlabs/MqttNetworking";
 import { MqttCommandControl } from "../../../src/dodsonlabs/MqttCommandControl";
 import type { IMqttCommandControl } from "../../../src/dodsonlabs/Interfaces";
@@ -1049,5 +1050,141 @@ describe("sensor controller integration (error paths, already-running)", () => {
       expect(res.send).toHaveBeenCalledWith([{ source: "test", payload: {} }]);
       expect(mockCommandControl.deinitialize).toHaveBeenCalled();
     }, 15000);
+
+    describe("hard-cap log severity", () => {
+      // The ACTIVE command's hard-cap hit is a real fault (error level); a
+      // queue WAITER's hard-cap hit is routine on a busy net (debug level) —
+      // the waiter simply loops and retries the slot claim.
+      function makeMockLogger() {
+        return {
+          global_log_level: jest.fn().mockReturnValue(3),
+          global_log_level_string: jest.fn().mockReturnValue("debug"),
+          write_info: jest.fn(),
+          write_warn: jest.fn(),
+          write_error: jest.fn(),
+          write_debug: jest.fn(),
+        };
+      }
+
+      function makeNetwork(commandControl: IMqttCommandControl): MqttNetworking {
+        return {
+          mqtt_topic_command: "iot/v3/command",
+          mqtt_topic_command_response: "iot/v3/command-response",
+          is_connected: jest.fn().mockReturnValue(true),
+          prometheus_server_ready: jest.fn().mockReturnValue(true),
+          publish_mqtt_message: jest.fn(),
+          close: jest.fn(),
+          get_cr_dude: jest.fn().mockReturnValue(commandControl),
+        } as unknown as MqttNetworking;
+      }
+
+      const resMock = () => ({
+        status: jest.fn().mockReturnThis(),
+        contentType: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      });
+
+      it("logs the active command's hard-cap timeout at error level", async () => {
+        const savedLogger = logger();
+        const mockLogger = makeMockLogger();
+        setLogger(mockLogger as any);
+        try {
+          const mockCommandControl: IMqttCommandControl = {
+            is_running: false,
+            is_timed_out: true,
+            timeout: null,
+            results: [{ source: "test", payload: {} }],
+            claim: jest.fn().mockReturnValue(true),
+            initialize: jest.fn(),
+            deinitialize: jest.fn(),
+            clear_results: jest.fn(),
+            restart_clock: jest.fn(),
+            cancel_clock: jest.fn(),
+            waitForCompletion: jest.fn().mockImplementation(() => new Promise<void>(() => { /* never resolves */ })),
+          };
+          const network = makeNetwork(mockCommandControl);
+          const res = resMock();
+
+          const idPromise = getDetails({} as any, res, network);
+
+          // Drain microtasks so the handler reaches the wait and arms the 10s
+          // hard-cap timer before we advance the fake clock
+          for (let i = 0; i < 10; i++) {
+            await Promise.resolve();
+          }
+
+          jest.advanceTimersByTime(10_001);
+          await idPromise;
+
+          expect(res.status).toHaveBeenCalledWith(200);
+          // The active command's cap hit is a real fault — error level,
+          // with the existing message unchanged.
+          expect(mockLogger.write_error).toHaveBeenCalledTimes(1);
+          expect(mockLogger.write_error).toHaveBeenCalledWith(
+            "sensorController.ts/mqtt_command_wait_for_command_completion",
+            "Command timed out after 10000ms hard cap"
+          );
+        } finally {
+          setLogger(savedLogger);
+        }
+      }, 15000);
+
+      it("logs a queue waiter's hard-cap wait at debug level, never at error", async () => {
+        const savedLogger = logger();
+        const mockLogger = makeMockLogger();
+        setLogger(mockLogger as any);
+        try {
+          const mockCommandControl: IMqttCommandControl = {
+            is_running: false,
+            is_timed_out: true,
+            timeout: null,
+            results: [{ source: "test", payload: {} }],
+            // First claim fails (a same-type command is in flight), so the
+            // handler goes through the queue-waiter path; the retry after the
+            // cap succeeds.
+            claim: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+            initialize: jest.fn(),
+            deinitialize: jest.fn(),
+            clear_results: jest.fn(),
+            restart_clock: jest.fn(),
+            cancel_clock: jest.fn(),
+            // First wait (queue waiter) never resolves — the in-flight
+            // command is stuck past the cap. Second wait (our own command,
+            // started after the retry claims the slot) resolves immediately
+            // so the request completes.
+            waitForCompletion: jest
+              .fn()
+              .mockImplementationOnce(() => new Promise<void>(() => { /* never resolves */ }))
+              .mockImplementation(() => Promise.resolve()),
+          };
+          const network = makeNetwork(mockCommandControl);
+          const res = resMock();
+
+          const idPromise = getDetails({} as any, res, network);
+
+          // Drain microtasks so the handler reaches the wait and arms the 10s
+          // hard-cap timer before we advance the fake clock
+          for (let i = 0; i < 10; i++) {
+            await Promise.resolve();
+          }
+
+          jest.advanceTimersByTime(10_001);
+          await idPromise;
+
+          expect(res.status).toHaveBeenCalledWith(200);
+          expect(mockCommandControl.deinitialize).toHaveBeenCalled();
+          // A routine queue wait that reached the cap must not raise an
+          // error-level alert.
+          expect(mockLogger.write_error).not.toHaveBeenCalled();
+          // The waiter's cap hit is visible at debug level, naming the command.
+          expect(mockLogger.write_debug).toHaveBeenCalledWith(
+            "sensorController.ts/mqtt_command_wait_for_command_completion",
+            "get-details: queue wait reached the 10000ms hard cap, retrying slot acquisition"
+          );
+        } finally {
+          setLogger(savedLogger);
+        }
+      }, 15000);
+    });
   });
 });

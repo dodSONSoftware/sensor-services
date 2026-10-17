@@ -165,7 +165,19 @@ export function enrichResultsWithMetadata(
     }));
 }
 
-async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl) {
+/**
+ * Wait for the in-flight command to complete — or, as a last resort, for the
+ * hard safety cap to trip (see __max_wait_ms).
+ *
+ * `queue_waiter_command` names the command whose slot acquisition is being
+ * waited on; pass it only from mqtt_command_acquire_slot (a queue waiter).
+ * A waiter hitting the cap is routine on a busy network — it simply loops and
+ * retries the claim — so it is logged at debug level to avoid spurious
+ * error-level alerts. The ACTIVE command's own wait (mqtt_command_start_and_wait)
+ * omits it: its command genuinely did not complete within the cap, and that
+ * stays at error level.
+ */
+async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl, queue_waiter_command?: string) {
     // Event-based wait: resolves when no more responses arrive within the timeout
     // window, or when deinitialize() is called. Eliminates the 1-second polling loop.
     //
@@ -185,10 +197,21 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     const controller = new AbortController();
     const hard_timeout = new Promise<void>((resolve) => {
         const tid = setTimeout(() => {
-            _log().write_error(
-                "sensorController.ts/mqtt_command_wait_for_command_completion",
-                `Command timed out after ${__max_wait_ms}ms hard cap`
-            );
+            if (queue_waiter_command === undefined) {
+                // Active command: a real fault — its command did not complete
+                // within the cap.
+                _log().write_error(
+                    "sensorController.ts/mqtt_command_wait_for_command_completion",
+                    `Command timed out after ${__max_wait_ms}ms hard cap`
+                );
+            } else {
+                // Queue waiter: expected on a busy network — the acquire loop
+                // simply retries the claim.
+                _log().write_debug(
+                    "sensorController.ts/mqtt_command_wait_for_command_completion",
+                    `${queue_waiter_command}: queue wait reached the ${__max_wait_ms}ms hard cap, retrying slot acquisition`
+                );
+            }
             resolve();
         }, __max_wait_ms);
         controller.signal.addEventListener("abort", () => clearTimeout(tid), { once: true });
@@ -252,7 +275,10 @@ async function mqtt_command_acquire_slot(dude: IMqttCommandControl, command: str
         }
 
         _log().write_debug("sensorController.ts/mqtt_command_acquire_slot", `${command}: Request made while previous request still running, waiting for it to complete...`);
-        await mqtt_command_wait_for_command_completion(dude);
+        // Passing `command` marks this as a queue waiter: a hard-cap hit here
+        // is routine (we just retry the claim), so it logs at debug rather than
+        // error — the active command's own wait keeps error severity.
+        await mqtt_command_wait_for_command_completion(dude, command);
     }
 }
 

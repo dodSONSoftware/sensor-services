@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.14.5] — Silicon Falcon (2026-10-17)
+
+- Stopped queue-waiter hard-cap timeouts from logging at error level. `mqtt_command_wait_for_command_completion` — used both by the active command and by queued waiters — logged "Command timed out after 10000ms hard cap" at error severity whenever the 10s hard cap tripped. A queued waiter (a second request of the same command type waiting for the in-flight one) hitting the cap is routine on a busy net: it simply loops and retries the slot claim, yet each retry window emitted a false error-level alert. The cap is now logged per caller: the active command's own wait (its command genuinely did not complete within the cap) still logs at error with the same message, while queue waiters log at debug, naming the command. Logging severity only — no change to command, slot, or response behavior.
+
 ## [4.14.4] — Silicon Falcon (2026-10-17)
 
 - Corrected the Swagger server-URL auto-derivation, whose comment claimed it was "skipping loopback and Docker-internal addresses" while the code filters only loopback (`127.*`): under Docker the first non-loopback interface is the container's internal address, so with no `swagger-server-url` override the advertised `servers[0].url` points at an address host browsers cannot reach and the Swagger UI's "Try it out" requests fail. The comment, the `swagger-server-url` schema documentation, the `config.yml` example, `CONFIGURATION.md`, and a new `KNOWN_ISSUES.md` entry now state accurately that only loopback is skipped and that `swagger-server-url` should be set for container deployments. Documentation-only change — no behavior change; the spec content and the config-override contract are unchanged.
