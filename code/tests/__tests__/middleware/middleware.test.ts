@@ -271,6 +271,33 @@ describe("CreateMiddleware — rate-limit exemption for /health and /metrics (P2
         expect(metrics.status).toBe(200);
         expect(metrics.text).toContain("http_requests_total");
     });
+
+    // Express's default non-strict routing also serves /health/ and /metrics/,
+    // and the rate limiter keys on req.path verbatim — so the exemption must
+    // cover the trailing-slash routings too, not just the bare path. Without
+    // that, a scraper hitting /health/ (or /metrics/) would be ratable and
+    // could 429 the container into "unhealthy".
+    it("/health/ (trailing-slash routing) is also exempt: still 200 after the limit is exhausted", async () => {
+        const app = buildLimitedApp();
+        await request(app).get("/about");
+        await request(app).get("/about");
+        const about429 = await request(app).get("/about"); // 3rd -> 429
+        expect(about429.status).toBe(429);
+        const health = await request(app).get("/health/"); // exempt -> 200
+        expect(health.status).toBe(200);
+        expect(health.body).toHaveProperty("status");
+    });
+
+    it("/metrics/ (trailing-slash routing) is also exempt: still 200 after the limit is exhausted", async () => {
+        const app = buildLimitedApp();
+        await request(app).get("/about");
+        await request(app).get("/about");
+        const about429 = await request(app).get("/about"); // 3rd -> 429
+        expect(about429.status).toBe(429);
+        const metrics = await request(app).get("/metrics/"); // exempt -> 200
+        expect(metrics.status).toBe(200);
+        expect(metrics.text).toContain("http_requests_total");
+    });
 });
 
 describe("CreateMiddleware — middleware ordering (P3-2)", () => {

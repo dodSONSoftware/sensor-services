@@ -93,7 +93,15 @@ export class CreateMiddleware extends RoutesCreatorBase {
             // healthcheck and Prometheus. Exempt them so normal scrape load can
             // never 429 the container into "unhealthy" or drop metrics —
             // observability endpoints must stay available.
-            skip: (req: express.Request) => req.path === "/health" || req.path === "/metrics",
+            //
+            // The match must cover every routing of each path, not just the bare
+            // form: Express's default (non-strict) routing also serves /health/
+            // and /metrics/, and the rate limiter sees req.path verbatim (trailing
+            // slash intact), so an exact `=== "/health"` match left those routings
+            // ratable. The `/?` anchor matches the path with an optional single
+            // trailing slash and nothing else (not /healthx, /healthcheck, or
+            // /health/…), keeping the exemption from leaking to other routes.
+            skip: (req: express.Request) => /^\/(health|metrics)\/?$/.test(req.path),
         }));
 
         // 5. add JSON (configurable body limit, default 1mb) — after rate

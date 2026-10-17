@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.14.6] — Silicon Falcon (2026-10-17)
+
+- Fixed the rate-limiter exemption for the observability endpoints so it holds for every routing of the path, not just the bare form. `/health` and `/metrics` were exempted by an exact `req.path` match, but Express's default (non-strict) routing also serves `/health/` and `/metrics/`, and the rate limiter reads `req.path` verbatim — so a scraper hitting the trailing-slash form was ratable and, once the limit was exhausted, would be 429'd. That could take the container into "unhealthy" (health) or drop Prometheus data (metrics) under load, defeating the documented invariant that these endpoints are never rate-limited. The exemption now matches the bare path plus an optional single trailing slash (`/health`, `/health/`, `/metrics`, `/metrics/`) and nothing else, so it cannot leak to a sibling route. Regression tests cover both trailing-slash routings.
+
 ## [4.14.5] — Silicon Falcon (2026-10-17)
 
 - Stopped queue-waiter hard-cap timeouts from logging at error level. `mqtt_command_wait_for_command_completion` — used both by the active command and by queued waiters — logged "Command timed out after 10000ms hard cap" at error severity whenever the 10s hard cap tripped. A queued waiter (a second request of the same command type waiting for the in-flight one) hitting the cap is routine on a busy net: it simply loops and retries the slot claim, yet each retry window emitted a false error-level alert. The cap is now logged per caller: the active command's own wait (its command genuinely did not complete within the cap) still logs at error with the same message, while queue waiters log at debug, naming the command. Logging severity only — no change to command, slot, or response behavior.
