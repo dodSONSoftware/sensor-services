@@ -49,7 +49,7 @@ External dependencies: MQTT broker (V3 sensor protocol), PostgreSQL (`settingsSt
 
 HTTP sensor command → sensor controller → `MqttCommandControl.claim()` → awaited QoS-0 publish on configured V3 command topic → matching `command_id` reply on command-response topic → bounded result collection → HTTP response. Disconnected publish paths return 503 and release the slot; calls of the same command type are serialized. Protocol V3 messages have `message_schema_version: 3` and a `payload` envelope.
 
-`GET /sensors/ippinger-analyze` combines live MQTT `get-details` with the pinger's validated HTTP `/read-config` response. It categorizes OK, IP Address Mismatch, Name Mismatch, Offline and New entries. Invalid or unavailable pinger data produces a warning/degraded analysis based on live sensors, rather than feeding unchecked input into the analyzer.
+`GET /sensors/ippinger-analyze` combines live MQTT `get-details` with the pinger's validated HTTP `/read-config` response. The `/read-config` fetch carries the `x-config-token` header when `ip-pinger-config-token` is configured (restart-only); it is omitted otherwise. It categorizes OK, IP Address Mismatch, Name Mismatch, Offline and New entries. Invalid or unavailable pinger data produces a warning/degraded analysis based on live sensors, rather than feeding unchecked input into the analyzer; a token rejection (401) and a disabled pinger config API (503) degrade with distinct warnings naming the cause.
 
 ## Middleware and observability
 

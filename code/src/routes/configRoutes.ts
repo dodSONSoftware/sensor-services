@@ -242,7 +242,8 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *       takes effect immediately; every other changed key takes effect after a
          *       process restart and is reported in restart_keys with restart_required set
          *       to true. The entire configuration must be provided (not partial updates),
-         *       including the database fields and credentials (db-password, loki-url).
+         *       including the database fields and credentials (db-password, loki-url,
+         *       ip-pinger-config-token).
          *     requestBody:
          *       required: true
          *       content:
@@ -290,6 +291,9 @@ export class CreateConfigRoutes extends RoutesCreatorBase {
          *                 type: string
          *               sensor-telemetry-api:
          *                 type: string
+         *               ip-pinger-config-token:
+         *                 type: string
+         *                 description: Optional shared secret for the ip-pinger config API (sent as the x-config-token header on GET /read-config); 32+ alphanumeric characters
          *               swagger-server-url:
          *                 type: string
          *               loki-url:

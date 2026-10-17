@@ -4,7 +4,7 @@ This document describes settings, defaults, validation and operational semantics
 
 ## File resolution and secrets
 
-Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config.yml` relative to the process working directory. `npm run build` copies `src/config.yml` into `dist/`. All settings, including database credentials, are stored in one YAML document. Protect its filesystem access and API access: this trusted-LAN service has no application-level authentication. Never commit real credentials to a public repository; rotate any exposed values. `redactConfig()` masks `db-password` and `loki-url` in the startup configuration dump, and the shared `Logger` applies a central two-tier redaction (this service's own secret values, plus recognized sensitive key/value pairs) to every log line; neither masks configuration API responses. Treat `/api/read-config` and `/api/read-running-config` as sensitive endpoints.
+Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config.yml` relative to the process working directory. `npm run build` copies `src/config.yml` into `dist/`. All settings, including database credentials, are stored in one YAML document. Protect its filesystem access and API access: this trusted-LAN service has no application-level authentication. Never commit real credentials to a public repository; rotate any exposed values. `redactConfig()` masks `db-password`, `loki-url`, and `ip-pinger-config-token` in the startup configuration dump, and the shared `Logger` applies a central two-tier redaction (this service's own secret values, plus recognized sensitive key/value pairs) to every log line; neither masks configuration API responses. Treat `/api/read-config` and `/api/read-running-config` as sensitive endpoints.
 
 ## Required keys
 
@@ -25,6 +25,7 @@ Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config
 | Key | Default / validation |
 | --- | --- |
 | `sensor-telemetry-api` | Optional HTTP(S) origin, same restriction as pinger origin |
+| `ip-pinger-config-token` | Optional; 32+ alphanumeric characters (the ip-pinger config API's acceptance rule, enforced here as fail-fast). Sent as the `x-config-token` header on the pinger `GET /read-config` call behind `/sensors/ippinger-analyze`; leave unset when the pinger's config API is disabled. Restart-only (secret) |
 | `swagger-server-url` | Auto-derived from the first non-loopback IPv4 (container-internal under Docker — set this key for container deployments); override permits absolute HTTP(S) URL with path, no credentials |
 | `loki-url` | Optional absolute HTTP(S) URL; path and embedded credentials permitted (secret) |
 | `loki-enabled` | Optional boolean |

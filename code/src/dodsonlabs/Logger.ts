@@ -106,9 +106,14 @@ export class Logger implements ILogger {
         this.global_log_level_name = config["log-level"];
 
         // Value-tier secrets for central redaction: db-password (required by
-        // the schema) and loki-url (optional, may embed credentials). Length
-        // filtering is applied inside redactLogMessage.
-        this.secretValues = [config["db-password"], config["loki-url"]].filter(
+        // the schema), loki-url (optional, may embed credentials), and
+        // ip-pinger-config-token (optional shared secret for the pinger's
+        // config API). Length filtering is applied inside redactLogMessage.
+        this.secretValues = [
+            config["db-password"],
+            config["loki-url"],
+            config["ip-pinger-config-token"],
+        ].filter(
             (v): v is string => typeof v === "string"
         );
 
@@ -175,8 +180,9 @@ export class Logger implements ILogger {
     // This service's own secret values, captured at construction and passed
     // to redactLogMessage on every emitted line (value tier). Static for the
     // instance's lifetime: only log-level hot-reloads (setLevel); loki-url /
-    // db-password changes require a restart, which constructs a fresh Logger.
-    // A future hot-reload of either secret must refresh this field.
+    // db-password / ip-pinger-config-token changes require a restart, which
+    // constructs a fresh Logger. A future hot-reload of any of these secrets
+    // must refresh this field.
     private readonly secretValues: string[] = [];
 
     /**

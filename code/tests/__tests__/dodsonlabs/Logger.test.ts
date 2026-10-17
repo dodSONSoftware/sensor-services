@@ -162,10 +162,12 @@ describe("closeLokiTransportBounded (P1-1)", () => {
 });
 
 describe("Logger — central two-tier redaction", () => {
-    // Distinctive secrets for the redaction config: both clear the value-tier
-    // minimum length, and the loki-url embeds credentials in the URL itself.
+    // Distinctive secrets for the redaction config: all clear the value-tier
+    // minimum length, the loki-url embeds credentials in the URL itself, and
+    // the pinger token is a 32-char alphanumeric string (its schema minimum).
     const R_DB = "Sup3rDbSecretValue";
     const R_LOKI = "http://loki-user:LokiSecret99@loki.test:3100";
+    const R_PINGER = "P1ngerConfigSecretTokenValue2026";
 
     function redactionConfig(): z.infer<typeof configSchema> {
         return {
@@ -174,6 +176,7 @@ describe("Logger — central two-tier redaction", () => {
             "log-level": "debug",
             "db-password": R_DB,
             "loki-url": R_LOKI,
+            "ip-pinger-config-token": R_PINGER,
         } as unknown as z.infer<typeof configSchema>;
     }
 
@@ -218,6 +221,20 @@ describe("Logger — central two-tier redaction", () => {
         for (const line of [...consoleLines, ...lokiLines]) {
             expect(line).toContain(SECRET_MASK);
             expect(line).not.toContain(R_DB);
+        }
+    });
+
+    it("masks the ip-pinger-config-token value in every emitted line (value tier)", () => {
+        const lg = new Logger(redactionConfig());
+        const { consoleLines, lokiLines } = captureTransports(lg);
+
+        lg.write_info("t", `pinger read-config with ${R_PINGER}`);
+
+        expect(consoleLines).toHaveLength(1);
+        expect(lokiLines).toHaveLength(1);
+        for (const line of [...consoleLines, ...lokiLines]) {
+            expect(line).toContain(SECRET_MASK);
+            expect(line).not.toContain(R_PINGER);
         }
     });
 

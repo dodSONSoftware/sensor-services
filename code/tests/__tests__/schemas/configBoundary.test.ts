@@ -29,6 +29,7 @@ import { resolveIppingerFetchTimeoutMs, validateConfig } from "../../../src/sche
  *   command-silence-timeout-ms   -> MqttCommandControl's silence timer
  *   ip-pinger-web-api /
  *   sensor-telemetry-api         -> template-literal URL building at the call sites
+ *   ip-pinger-config-token       -> x-config-token header on the /read-config fetch (pingerController)
  *   swagger-server-url           -> OpenAPI servers[].url (used verbatim, swagger.ts)
  *   loki-url                     -> winston-loki host option (dodsonlabs/Logger)
  *
@@ -225,6 +226,25 @@ describe("config boundary: Zod-accepted values are consumable by their downstrea
           expect(url.pathname).toBe(path);
         }
       }
+    });
+  });
+
+  // ---- ip-pinger-config-token -> x-config-token fetch header (pingerController)
+
+  describe("ip-pinger-config-token -> x-config-token header on the /read-config fetch (pingerController)", () => {
+    it.each([
+      "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6",                    // 32 chars, mixed case (schema minimum)
+      "0123456789abcdef0123456789ABCDEF0123456789",          // 40-char hex (openssl rand -hex 20 style)
+    ])("a Zod-validated token travels verbatim as the x-config-token fetch header: %s", (token) => {
+      const config = withConfig({ "ip-pinger-config-token": token });
+      // The exact downstream consumption (pingerController): the value goes
+      // verbatim into the RequestInit headers the /read-config fetch builds.
+      // Constructing the Request is synchronous and network-free, matching
+      // this group's no-I/O style.
+      const request = new Request(`${config["ip-pinger-web-api"]}/read-config`, {
+        headers: { "x-config-token": config["ip-pinger-config-token"]! },
+      });
+      expect(request.headers.get("x-config-token")).toBe(token);
     });
   });
 

@@ -10,6 +10,7 @@ import { createMockMqttNetworking } from "../../mocks/mqtt";
 
 const MOCK_PINGER_API = "http://192.168.1.4:32001";
 const MOCK_FETCH_TIMEOUT_MS = 10_000;
+const MOCK_PINGER_TOKEN = "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6";
 
 // Mock fetch for all pinger route tests (they proxy to an external service)
 const originalFetch = global.fetch;
@@ -22,7 +23,7 @@ function createMockFetch(response: unknown, status: number = 200) {
   });
 }
 
-function createTestApp(fetchMock?: jest.Mock): express.Application {
+function createTestApp(fetchMock?: jest.Mock, configToken?: string): express.Application {
   const app = express();
   app.use(express.json());
   const networking = createMockMqttNetworking();
@@ -31,7 +32,8 @@ function createTestApp(fetchMock?: jest.Mock): express.Application {
     networking,
     MOCK_PINGER_API,
     true,
-    MOCK_FETCH_TIMEOUT_MS
+    MOCK_FETCH_TIMEOUT_MS,
+    configToken
   );
   pingerRoutes.register();
   if (fetchMock) {
@@ -72,6 +74,31 @@ describe("Pinger Routes", () => {
       expect(res.status).toBe(200);
       expect(typeof res.body).toBe('object');
       expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it("should send the configured ip-pinger-config-token as the x-config-token header", async () => {
+      const mockConfig = { devices: [{ source: "dev1", "ip-address": "192.168.1.10" }] };
+      const fetchMock = createMockFetch(mockConfig);
+      const app = createTestApp(fetchMock, MOCK_PINGER_TOKEN);
+
+      const res = await request(app).get("/sensors/ippinger-analyze");
+
+      expect(res.status).toBe(200);
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe(`${MOCK_PINGER_API}/read-config`);
+      expect((init?.headers as Record<string, string>)["x-config-token"]).toBe(MOCK_PINGER_TOKEN);
+    });
+
+    it("should omit the x-config-token header when no token is configured", async () => {
+      const mockConfig = { devices: [{ source: "dev1", "ip-address": "192.168.1.10" }] };
+      const fetchMock = createMockFetch(mockConfig);
+      const app = createTestApp(fetchMock);
+
+      const res = await request(app).get("/sensors/ippinger-analyze");
+
+      expect(res.status).toBe(200);
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
+      expect((init?.headers ?? {}) as Record<string, string>).not.toHaveProperty("x-config-token");
     });
   });
 });

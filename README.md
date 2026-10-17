@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Ceramic Falcon — firmware 4.15.1
+**Release:** Quartz Falcon — firmware 4.16.0
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -63,6 +63,11 @@ mqtt-topic-command-response: "iot/v3/command-response"
 
 # External services
 ip-pinger-web-api: "http://<ip-pinger-host>:<port>"
+
+# Optional: shared secret for the ip-pinger config API (sent as the x-config-token
+# header on GET /read-config). 32+ alphanumeric characters; leave unset when the
+# pinger's config API is disabled.
+# ip-pinger-config-token: "<32+ alphanumeric characters>"
 
 # Behavior
 case-sensitive: true

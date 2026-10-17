@@ -365,6 +365,155 @@ describe("getAnalyzeIpPinger", () => {
     expect(network.publish_mqtt_message).not.toHaveBeenCalled();
   });
 
+  describe("x-config-token support (ip-pinger config API)", () => {
+    const TOKEN = "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6";
+    const validPingerBody = { devices: [{ source: "sensor-1", "ip-address": "192.168.1.10" }] };
+    const liveSensors = [
+      { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },
+    ];
+
+    function mockPingerHttpStatus(status: number) {
+      (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: false, status });
+    }
+
+    function createRes() {
+      return {
+        status: jest.fn().mockReturnThis(),
+        contentType: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      };
+    }
+
+    it("sends the configured token as the x-config-token header on the /read-config fetch", async () => {
+      const mockFetch = globalThis.fetch as jest.Mock;
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(validPingerBody),
+      });
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = createRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:32001",
+        true,
+        10_000,
+        TOKEN
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      // The fetch must carry the shared secret header and hit /read-config
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("http://192.168.1.4:32001/read-config");
+      expect((init?.headers as Record<string, string>)["x-config-token"]).toBe(TOKEN);
+      // Full analysis — no degradation
+      const sendArg = (res.send as jest.Mock).mock.calls[0][0];
+      expect(sendArg).not.toHaveProperty("warning");
+    });
+
+    it("omits the x-config-token header when no token is configured", async () => {
+      const mockFetch = globalThis.fetch as jest.Mock;
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(validPingerBody),
+      });
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = createRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:32001",
+        true,
+        10_000
+      );
+
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+      expect((init?.headers ?? {}) as Record<string, string>).not.toHaveProperty("x-config-token");
+    });
+
+    it("degrades with a token-rejected warning when the pinger returns 401", async () => {
+      mockPingerHttpStatus(401);
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = createRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:32001",
+        true,
+        10_000,
+        TOKEN
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          warning: "ip-pinger config API rejected the token — analysis incomplete",
+          live_sensors: liveSensors,
+        })
+      );
+    });
+
+    it("degrades with a config-API-disabled warning when the pinger returns 503", async () => {
+      mockPingerHttpStatus(503);
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = createRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:32001",
+        true,
+        10_000,
+        TOKEN
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          warning: "ip-pinger config API disabled — analysis incomplete",
+          live_sensors: liveSensors,
+        })
+      );
+    });
+
+    it("degrades with the generic unavailable warning for any other non-OK status", async () => {
+      mockPingerHttpStatus(500);
+
+      const network = createMockNetwork(liveSensors);
+      const res: any = createRes();
+
+      await getAnalyzeIpPinger(
+        {} as express.Request,
+        res,
+        network,
+        "http://192.168.1.4:32001",
+        true,
+        10_000,
+        TOKEN
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          warning: "ip-pinger service unavailable — analysis incomplete",
+          live_sensors: liveSensors,
+        })
+      );
+    });
+  });
+
   describe("malformed upstream response", () => {
     const liveSensors = [
       { source: "sensor-1", payload: { data: { network: { ip_address: "192.168.1.10" } } } },

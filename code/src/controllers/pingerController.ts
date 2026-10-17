@@ -60,8 +60,8 @@ const ippingerConfigSchema = z.object({
 
 /**
  * Wrapper around native fetch() with an AbortSignal timeout.
- * Throws an AbortError when the timeout fires, which callers
- * catch and translate to HTTP 502.
+ * Throws an AbortError when the timeout fires; callers catch it and
+ * degrade to a warning rather than failing the request.
  */
 async function fetchWithTimeout(
     url: string,
@@ -72,23 +72,36 @@ async function fetchWithTimeout(
     return fetch(url, { ...init, signal });
 }
 
-async function fetchItOnly(originator: string, url: string, timeoutMs: number): Promise<unknown | null> {
+/**
+ * Outcome of a bounded pinger fetch: a parsed 2xx body, the non-OK HTTP
+ * status, or a network/timeout/parse failure. The caller maps these to
+ * distinct user-visible warnings, so an authentication failure (401 — the
+ * pinger's config API rejected or never received the x-config-token header)
+ * and a disabled config API (503) are distinguishable from plain
+ * unavailability.
+ */
+type PingerFetchOutcome =
+    | { kind: "ok"; data: unknown }
+    | { kind: "http"; status: number }
+    | { kind: "error" };
+
+async function fetchItOnly(originator: string, url: string, timeoutMs: number, init?: RequestInit): Promise<PingerFetchOutcome> {
     const origin = `${originator}/fetchItOnly`;
 
     try {
-        const response = await fetchWithTimeout(url, timeoutMs);
+        const response = await fetchWithTimeout(url, timeoutMs, init);
         if (!response.ok) {
             logger()?.write_warn(origin, `Url=${url}, Status=${response.status}`);
-            return null;
+            return { kind: "http", status: response.status };
         }
 
         const data = await response.json();
         logger()?.write_debug(origin, `Url=${url}, Data=${JSON.stringify(data)}`);
-        return data;
+        return { kind: "ok", data };
 
     } catch (error) {
         logger()?.write_error(origin, `Url=${url}, Error=${error}`);
-        return null;
+        return { kind: "error" };
     }
 }
 
@@ -208,10 +221,32 @@ async function fetch_live_sensors(network: MqttNetworking, res: express.Response
     }
 }
 
-export async function getAnalyzeIpPinger(_req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean, timeoutMs: number) {
+export async function getAnalyzeIpPinger(_req: express.Request, res: express.Response, network: MqttNetworking, ip_pinger_web_api: string, case_sensitive: boolean, timeoutMs: number, configToken?: string) {
     // read configuration from ip-pinger first — fast path, fails quickly on error
     const url = `${ip_pinger_web_api}/read-config`;
-    const ippingerConfig = await fetchItOnly("getAnalyzeIpPinger", url, timeoutMs);
+    // When ip-pinger-config-token is configured, the pinger's config API
+    // requires the shared secret in the x-config-token header. Unset key ->
+    // header omitted; if the pinger's API is enabled without a valid token
+    // that degrades to the 401 warning below instead of a bare 503.
+    const init: RequestInit | undefined = configToken
+        ? { headers: { "x-config-token": configToken } }
+        : undefined;
+    const outcome = await fetchItOnly("getAnalyzeIpPinger", url, timeoutMs, init);
+
+    // Map non-ok outcomes to the operator-facing warning so the response
+    // names the actual problem: 401 = the pinger's config API is enabled and
+    // rejected (or never received) the token; 503 = the config API is
+    // disabled in the pinger's deployment; anything else (other status,
+    // network, timeout) is plain unavailability.
+    let fetch_failure_reason = "IP pinger service unavailable";
+    let unavailable_warning = "ip-pinger service unavailable — analysis incomplete";
+    if (outcome.kind === "http" && outcome.status === 401) {
+        fetch_failure_reason = "IP pinger config API rejected the token";
+        unavailable_warning = "ip-pinger config API rejected the token — analysis incomplete";
+    } else if (outcome.kind === "http" && outcome.status === 503) {
+        fetch_failure_reason = "IP pinger config API disabled";
+        unavailable_warning = "ip-pinger config API disabled — analysis incomplete";
+    }
 
     // Validate the upstream response at the boundary instead of casting it.
     // An unchecked `as { devices: IppingerDevice[] }` let `undefined`/`null`
@@ -220,8 +255,8 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
     // handler would then initiate shutdown.
     let ippinger_devices: IppingerDevice[] | null = null;
     let invalid_config = false;
-    if (ippingerConfig !== null) {
-        const parsed = ippingerConfigSchema.safeParse(ippingerConfig);
+    if (outcome.kind === "ok") {
+        const parsed = ippingerConfigSchema.safeParse(outcome.data);
         if (parsed.success) {
             // Normalize to the internal kebab-case key (current ip-pinger
             // builds send camelCase `ipAddress`, older builds `ip-address`).
@@ -248,14 +283,14 @@ export async function getAnalyzeIpPinger(_req: express.Request, res: express.Res
             "pingerController.ts/getAnalyzeIpPinger",
             invalid_config
                 ? "IP pinger returned an invalid configuration — returning partial result with live sensors only"
-                : "IP pinger service unavailable — returning partial result with live sensors only"
+                : `${fetch_failure_reason} — returning partial result with live sensors only`
         );
         res.status(OK);
         res.contentType(Json);
         res.send({
             warning: invalid_config
                 ? "ip-pinger returned an invalid configuration — analysis incomplete"
-                : "ip-pinger service unavailable — analysis incomplete",
+                : unavailable_warning,
             live_sensors: sensors,
         });
         return;

@@ -150,6 +150,9 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         // create routes
         const ip_pinger_web_api = config["ip-pinger-web-api"];
         const case_sensitive = config["case-sensitive"];
+        // Optional shared secret for the pinger's config API; sent as the
+        // x-config-token header on GET /read-config (pingerController).
+        const ip_pinger_config_token = config["ip-pinger-config-token"];
 
         const general = new generalRoutes.CreateGeneralRoutes(app, networking);
         general.register();
@@ -157,7 +160,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         sensors.register();
         // ippinger-fetch-timeout-ms (Optional-2) with the deprecated
         // fetch-timeout-ms alias and the 10-second default.
-        const pinger = new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, resolveIppingerFetchTimeoutMs(config));
+        const pinger = new pingerRoutes.CreatePingerRoutes(app, networking, ip_pinger_web_api, case_sensitive, resolveIppingerFetchTimeoutMs(config), ip_pinger_config_token);
         pinger.register();
 
         const settings = new settingsRoutes.CreateSettingsRoutes(app);

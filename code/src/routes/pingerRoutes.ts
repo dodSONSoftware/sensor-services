@@ -35,7 +35,8 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
         protected network: MqttNetworking,
         private ip_pinger_web_api: string,
         private case_sensitive: boolean,
-        private fetch_timeout_ms: number
+        private fetch_timeout_ms: number,
+        private ip_pinger_config_token?: string
     ) {
         super(app);
     }
@@ -44,7 +45,8 @@ export class CreatePingerRoutes extends RoutesCreatorBase {
         // Register analyze endpoint under /sensors namespace
         this.app.route("/sensors/ippinger-analyze").get((req: express.Request, res: express.Response) =>
             pinger_controller.getAnalyzeIpPinger(
-                req, res, this.network, this.ip_pinger_web_api, this.case_sensitive, this.fetch_timeout_ms
+                req, res, this.network, this.ip_pinger_web_api, this.case_sensitive, this.fetch_timeout_ms,
+                this.ip_pinger_config_token
             )
         );
     }

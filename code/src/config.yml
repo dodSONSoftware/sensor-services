@@ -23,6 +23,12 @@ mqtt-topic-command-response: "iot/v3/command-response"
 ip-pinger-web-api: "http://10.10.10.50:32001"
 sensor-telemetry-api: "http://10.10.10.50:32002"
 
+# Optional: shared secret for the ip-pinger configuration API (sent as the
+# x-config-token header on GET /read-config). Must be 32+ alphanumeric
+# characters; leave unset when the pinger's config API is disabled. Changes
+# require a restart.
+# ip-pinger-config-token: "REPLACE_WITH_32_PLUS_ALPHANUMERIC_CHARS"
+
 # Behavior
 case-sensitive: true
 

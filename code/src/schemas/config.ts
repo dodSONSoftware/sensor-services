@@ -115,6 +115,28 @@ const lokiUrlSchema = z.string({ error: "loki-url must be a string" }).refine((v
 }, "loki-url must be an absolute http(s) URL with a hostname (e.g. http://10.10.10.60:3100)");
 
 /**
+ * Shared secret for the ip-pinger configuration API (ip-pinger-config-token).
+ *
+ * Sent verbatim as the `x-config-token` request header on the single outbound
+ * call to the pinger's config endpoint (GET /read-config, pingerController).
+ * The pinger's two-state rule: its token unset/empty (or not matching
+ * /^[A-Za-z0-9]{32,}$/) -> its config API is disabled and every request gets
+ * 503; otherwise the header must match or the request gets 401. This
+ * validation deliberately duplicates the pinger's acceptance rule as fail-fast
+ * (like the inlined command-silence cap above): a token the pinger could
+ * never accept would otherwise surface only as a 401 and a misleading
+ * "service unavailable" degradation on every /sensors/ippinger-analyze call.
+ * Leave the key unset when the pinger's config API is disabled in the
+ * deployment. Changes require a restart (not hot-reloadable).
+ */
+const ipPingerConfigTokenSchema = z.string({
+    error: "ip-pinger-config-token must be a string",
+}).refine(
+    (value) => /^[A-Za-z0-9]{32,}$/.test(value),
+    "ip-pinger-config-token must be 32 or more alphanumeric characters (the ip-pinger config API's acceptance rule)"
+);
+
+/**
  * Zod schema for config.yml.
  * All required keys must match their expected types.
  * Strict: unknown keys are rejected rather than silently stripped, so a typo
@@ -141,6 +163,7 @@ export const configSchema = z.strictObject({
     }).min(1, "mqtt-topic-command-response must not be empty"),
     "ip-pinger-web-api": serviceOriginSchema("ip-pinger-web-api"),
     "sensor-telemetry-api": serviceOriginSchema("sensor-telemetry-api").optional(),
+    "ip-pinger-config-token": ipPingerConfigTokenSchema.optional(),
     "case-sensitive": z.boolean({
         error: "case-sensitive must be a boolean",
     }),
@@ -245,8 +268,8 @@ export function resolveIppingerFetchTimeoutMs(config: z.infer<typeof configSchem
 
 // Config keys whose values are secrets — never log these verbatim. Their
 // values are also masked centrally by the shared Logger (redactLogMessage
-// value tier), which captures exactly these two fields at construction.
-const SENSITIVE_CONFIG_KEYS = ["db-password", "loki-url"] as const;
+// value tier), which captures exactly these three fields at construction.
+const SENSITIVE_CONFIG_KEYS = ["db-password", "loki-url", "ip-pinger-config-token"] as const;
 
 /**
  * Return a shallow copy of the config with secret values masked.

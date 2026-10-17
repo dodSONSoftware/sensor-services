@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { resolveIppingerFetchTimeoutMs, validateConfig } from "../../../src/schemas/config";
+import { redactConfig, resolveIppingerFetchTimeoutMs, validateConfig } from "../../../src/schemas/config";
+import { SECRET_MASK } from "../../../src/dodsonlabs/SystemFunctions";
 
 describe("configSchema", () => {
   const baseConfig = {
@@ -435,6 +436,49 @@ describe("configSchema", () => {
     expect(() => validateConfig(config)).toThrow(/sensor-telemetry-api/);
   });
 
+  // ---- ip-pinger-config-token (x-config-token for the pinger's config API)
+
+  it("should accept a 32-character alphanumeric ip-pinger-config-token", () => {
+    const token = "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6";
+    const config = { ...baseConfig, "ip-pinger-config-token": token };
+    const result = validateConfig(config);
+    expect(result["ip-pinger-config-token"]).toBe(token);
+  });
+
+  it("should accept a longer hex-style ip-pinger-config-token", () => {
+    const token = "0123456789abcdef0123456789ABCDEF0123456789";
+    const config = { ...baseConfig, "ip-pinger-config-token": token };
+    expect(validateConfig(config)["ip-pinger-config-token"]).toBe(token);
+  });
+
+  it("should accept config without ip-pinger-config-token (optional)", () => {
+    const result = validateConfig(baseConfig);
+    expect(result["ip-pinger-config-token"]).toBeUndefined();
+  });
+
+  it("should reject a 31-character ip-pinger-config-token (below the pinger's minimum)", () => {
+    const config = { ...baseConfig, "ip-pinger-config-token": "a".repeat(31) };
+    expect(() => validateConfig(config)).toThrow(/ip-pinger-config-token/);
+  });
+
+  it("should reject an empty ip-pinger-config-token (optional keys reject empty strings, not just absence)", () => {
+    const config = { ...baseConfig, "ip-pinger-config-token": "" };
+    expect(() => validateConfig(config)).toThrow(/ip-pinger-config-token/);
+  });
+
+  it("should reject an ip-pinger-config-token with a non-alphanumeric character", () => {
+    // The pinger's own acceptance rule is /^[A-Za-z0-9]{32,}$/ — a hyphenated
+    // (or base64) token could never be accepted there, so the schema rejects
+    // it at startup instead of degrading every analyze call with a 401.
+    const config = { ...baseConfig, "ip-pinger-config-token": "a1b2c3d4-e5f6g7h8i9j0k1l2m3n4o5p6" };
+    expect(() => validateConfig(config)).toThrow(/ip-pinger-config-token/);
+  });
+
+  it("should reject a non-string ip-pinger-config-token", () => {
+    const config = { ...baseConfig, "ip-pinger-config-token": 32001 };
+    expect(() => validateConfig(config)).toThrow(/ip-pinger-config-token must be a string/);
+  });
+
   it("should accept a swagger-server-url with a mount path", () => {
     const config = { ...baseConfig, "swagger-server-url": "https://sensors.example.com/api/" };
     const result = validateConfig(config);
@@ -481,6 +525,34 @@ describe("configSchema", () => {
   it("should reject an empty loki-url (optional keys reject empty strings, not just absence)", () => {
     const config = { ...baseConfig, "loki-url": "" };
     expect(() => validateConfig(config)).toThrow(/loki-url/);
+  });
+});
+
+describe("redactConfig", () => {
+  it("masks every sensitive key present in the config without mutating the input", () => {
+    const input = {
+      "db-password": "db-secret-value",
+      "loki-url": "http://loki-secret@10.10.10.60:3100",
+      "ip-pinger-config-token": "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6",
+      "log-level": "info",
+    };
+    const redacted = redactConfig(input as unknown as Record<string, unknown>);
+
+    expect(redacted["db-password"]).toBe(SECRET_MASK);
+    expect(redacted["loki-url"]).toBe(SECRET_MASK);
+    expect(redacted["ip-pinger-config-token"]).toBe(SECRET_MASK);
+    expect(redacted["log-level"]).toBe("info");
+    // The original object is untouched (shallow copy semantics)
+    expect(input["db-password"]).toBe("db-secret-value");
+    expect(input["loki-url"]).toBe("http://loki-secret@10.10.10.60:3100");
+    expect(input["ip-pinger-config-token"]).toBe("a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6");
+  });
+
+  it("leaves absent sensitive keys absent", () => {
+    const redacted = redactConfig({ "log-level": "info" } as unknown as Record<string, unknown>);
+    expect("db-password" in redacted).toBe(false);
+    expect("loki-url" in redacted).toBe(false);
+    expect("ip-pinger-config-token" in redacted).toBe(false);
   });
 });
 
