@@ -28,7 +28,7 @@ bash tests/docker/verify.sh
 | Middleware | `tests/__tests__/middleware/` | Request ID, order, CORS, rate limits, body handling, metrics |
 | Configuration | `tests/__tests__/schemas/config.test.ts`, `configBoundary.test.ts` | Strict Zod schema, downstream integration of accepted key values |
 | Settings | `tests/__tests__/services/`, `controllers/settingsController.test.ts` | DB availability, serialization, fallback, strict updates, persistence reporting |
-| MQTT, logging and utilities | `tests/__tests__/dodsonlabs/` | Broker disconnect/command correlation, timeout, secret sanitation and transport lifetime |
+| MQTT, logging and utilities | `tests/__tests__/dodsonlabs/` | Broker disconnect/command correlation, timeout, secret sanitation (shared `redactSecrets` and central `Logger` redaction) and transport lifetime |
 | Lifecycle and metrics | `tests/__tests__/common/`, `exitCodes.test.ts` | Prometheus counters, health/shutdown, process exits (compiled build required) |
 | Swagger and drift | `tests/__tests__/swagger.test.ts`, `routes/routeDrift.test.ts` | Declared routes vs registered routes and generated API spec |
 | Packaging | `tests/__tests__/docker/docker.test.ts`, `tests/docker/verify.sh` | Static Docker contract and runtime mount/fallback behavior |

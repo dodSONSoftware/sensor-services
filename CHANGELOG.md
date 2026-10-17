@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.14.0] — Silicon Falcon (2026-10-16)
+
+- Added a central two-tier log redaction pass in the shared `Logger`: every log line now goes through a single auditable redaction before reaching any transport (console and Loki). The service's own secret values (`db-password`, `loki-url`) are masked by exact value, and recognized sensitive key/value pairs (`wifi-password`, `password`, `db-password`, `loki-url` in JSON-like form) are masked by key pattern — which also covers the previously unredacted untrusted forwarded-sensor-log path. Redaction used to be caller-driven at each log call site, so the INVARIANTS §2 credential-hygiene guarantee now holds structurally instead of resting on per-call-site discipline; existing caller-side redaction (`redactConfig`, `redactSecrets`, write-config metadata projection) is retained as defense in depth. Covered by 25 new tests, including a key-set drift guard and transport-capture integration tests.
+
 ## [4.13.16] — Graphite Falcon (2026-10-16)
 
 - Hardened the settings store's key validation (defense in depth): `patchSettings` validated setting keys with prototype-chain membership (`in`), which accepts `__proto__`, `constructor`, and `prototype` as valid keys — writing one would rewrite the in-memory cache's prototype chain instead of a setting. Key validation now uses own-property membership (`Object.hasOwn`) and explicitly rejects the reserved keys in any dot-notation segment. The HTTP settings-update path was already safe end-to-end (global middleware strips these keys and the strict schema rejects unknown ones), so there is no externally visible behavior change — the guarantee now holds structurally in the settings layer instead of resting on middleware ordering alone. Regression tests pin the reserved-key rejection, including a prototype-pollution guard through `patchSettings` that fails against the old logic.

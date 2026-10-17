@@ -53,7 +53,7 @@ HTTP sensor command → sensor controller → `MqttCommandControl.claim()` → a
 
 ## Middleware and observability
 
-The order is intentional: request ID → HTTP metrics → CORS → rate limit → JSON parser → request logger → body validation. `X-Request-ID` is correlated via AsyncLocalStorage. Rate-limit-exempt `/health` and `/metrics` remain scrapeable; unmatched paths use a bounded `unmatched` route label. API metrics are `http_requests_total`, `http_request_duration_seconds`, `http_errors_total` in a separate Prometheus registry. The `/health` handler uses concurrent 2.5-second dependency probes and returns 200 for degraded health, 503 for unhealthy status.
+The order is intentional: request ID → HTTP metrics → CORS → rate limit → JSON parser → request logger → body validation. `X-Request-ID` is correlated via AsyncLocalStorage. Rate-limit-exempt `/health` and `/metrics` remain scrapeable; unmatched paths use a bounded `unmatched` route label. API metrics are `http_requests_total`, `http_request_duration_seconds`, `http_errors_total` in a separate Prometheus registry. The `/health` handler uses concurrent 2.5-second dependency probes and returns 200 for degraded health, 503 for unhealthy status. All application log output passes through a central two-tier secret redaction in the shared `Logger` (the `write_*` seam) before reaching the console or Loki transports; caller-side sanitization remains as defense in depth.
 
 ## Container deployment
 

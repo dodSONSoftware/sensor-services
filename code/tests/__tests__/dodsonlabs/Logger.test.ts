@@ -39,6 +39,7 @@ jest.mock("winston-loki", () => {
 
 // Import after the mock is registered
 import { Logger, closeLokiTransportBounded, LOKI_CLOSE_TIMEOUT_MS } from "../../../src/dodsonlabs/Logger";
+import { SECRET_MASK } from "../../../src/dodsonlabs/SystemFunctions";
 import type { configSchema } from "../../../src/schemas/config";
 import type { z } from "zod";
 
@@ -157,5 +158,142 @@ describe("closeLokiTransportBounded (P1-1)", () => {
         // Sanity: the documented default is a small, finite bound
         expect(LOKI_CLOSE_TIMEOUT_MS).toBeGreaterThan(0);
         expect(LOKI_CLOSE_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
+    });
+});
+
+describe("Logger — central two-tier redaction", () => {
+    // Distinctive secrets for the redaction config: both clear the value-tier
+    // minimum length, and the loki-url embeds credentials in the URL itself.
+    const R_DB = "Sup3rDbSecretValue";
+    const R_LOKI = "http://loki-user:LokiSecret99@loki.test:3100";
+
+    function redactionConfig(): z.infer<typeof configSchema> {
+        return {
+            ...lokiConfig(),
+            // debug so all four write_* methods pass the winston level gate
+            "log-level": "debug",
+            "db-password": R_DB,
+            "loki-url": R_LOKI,
+        } as unknown as z.infer<typeof configSchema>;
+    }
+
+    /**
+     * Capture what each transport receives. Winston applies a transport's
+     * format inside the transport itself, so spying transport.log yields the
+     * exact info object (redacted message) handed to each backend. Spying the
+     * console transport also suppresses real stdout during the tests.
+     * (Do NOT spy console.log — winston binds it at transport construction.)
+     */
+    function captureTransports(lg: Logger) {
+        const consoleLines: string[] = [];
+        const lokiLines: string[] = [];
+        const wins = (lg as any).winston;
+        const consoleTransport = wins.transports.find((t: any) => t.name === "console");
+        jest.spyOn(consoleTransport, "log").mockImplementation((info: any, cb: () => void) => {
+            consoleLines.push(info.message);
+            cb();
+        });
+        const loki = mockLokiInstances[mockLokiInstances.length - 1];
+        if (loki) {
+            loki.log = (info: any, cb: () => void) => {
+                lokiLines.push(info.message);
+                cb();
+            };
+        }
+        return { consoleLines, lokiLines };
+    }
+
+    beforeEach(() => {
+        mockLokiInstances.length = 0;
+    });
+
+    it("masks the db-password value in every emitted line (value tier)", () => {
+        const lg = new Logger(redactionConfig());
+        const { consoleLines, lokiLines } = captureTransports(lg);
+
+        lg.write_info("t", `connected with ${R_DB} at 12:00`);
+
+        expect(consoleLines).toHaveLength(1);
+        expect(lokiLines).toHaveLength(1);
+        for (const line of [...consoleLines, ...lokiLines]) {
+            expect(line).toContain(SECRET_MASK);
+            expect(line).not.toContain(R_DB);
+        }
+    });
+
+    it("masks the loki-url value including embedded credentials (value tier)", () => {
+        const lg = new Logger(redactionConfig());
+        const { consoleLines, lokiLines } = captureTransports(lg);
+
+        lg.write_info("t", `Loki push to ${R_LOKI}`);
+
+        for (const line of [...consoleLines, ...lokiLines]) {
+            expect(line).toContain(SECRET_MASK);
+            expect(line).not.toContain("LokiSecret99");
+            expect(line).not.toContain("loki-user");
+            expect(line).not.toContain(R_LOKI);
+        }
+    });
+
+    it("masks unknown-value secrets in key-value form (key tier) — the forwarded-sensor-log gap", () => {
+        const lg = new Logger(redactionConfig());
+        const { consoleLines, lokiLines } = captureTransports(lg);
+
+        lg.write_error(
+            "MqttNetworking::log",
+            "[Air-1] " + JSON.stringify({ "wifi-password": "SensorWifiPw1", rssi: -42 })
+        );
+
+        for (const line of [...consoleLines, ...lokiLines]) {
+            expect(line).not.toContain("SensorWifiPw1");
+            expect(line).toContain('"wifi-password":********');
+            expect(line).toContain('"rssi":-42');
+        }
+    });
+
+    it("applies redaction in all four write_* methods", () => {
+        const lg = new Logger(redactionConfig());
+        const { consoleLines } = captureTransports(lg);
+
+        for (const method of ["write_debug", "write_info", "write_warn", "write_error"] as const) {
+            lg[method]("t", `attempting with ${R_DB}`);
+        }
+
+        expect(consoleLines).toHaveLength(4);
+        for (const line of consoleLines) {
+            expect(line).toContain(SECRET_MASK);
+            expect(line).not.toContain(R_DB);
+        }
+    });
+
+    it("leaves non-secret messages untouched", () => {
+        const lg = new Logger(redactionConfig());
+        const { consoleLines } = captureTransports(lg);
+
+        lg.write_info("t", "hello world");
+
+        expect(consoleLines).toEqual(["hello world"]);
+    });
+
+    it("short secrets skip the value tier but are still key-masked", () => {
+        const lg = new Logger({
+            ...redactionConfig(),
+            "db-password": "x",
+            "loki-url": undefined,
+            "loki-enabled": undefined,
+        } as unknown as z.infer<typeof configSchema>);
+        const { consoleLines } = captureTransports(lg);
+
+        lg.write_info("t", "note: x");
+        lg.write_info("t", '{"db-password": "x"}');
+
+        expect(consoleLines[0]).toBe("note: x");
+        expect(consoleLines[1]).toBe('{"db-password": ********}');
+    });
+
+    it("does not alter Loki transport options", () => {
+        new Logger(redactionConfig());
+        const loki = mockLokiInstances[mockLokiInstances.length - 1];
+        expect(loki.__opts).toEqual(expect.objectContaining({ gracefulShutdown: false }));
     });
 });

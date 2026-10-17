@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import { SECRET_MASK } from "../dodsonlabs/SystemFunctions";
 
 /**
  * A single allowed CORS origin: an absolute http(s) URL of the form
@@ -240,7 +241,9 @@ export function resolveIppingerFetchTimeoutMs(config: z.infer<typeof configSchem
     return config["ippinger-fetch-timeout-ms"] ?? config["fetch-timeout-ms"] ?? 10_000;
 }
 
-// Config keys whose values are secrets — never log these verbatim.
+// Config keys whose values are secrets — never log these verbatim. Their
+// values are also masked centrally by the shared Logger (redactLogMessage
+// value tier), which captures exactly these two fields at construction.
 const SENSITIVE_CONFIG_KEYS = ["db-password", "loki-url"] as const;
 
 /**
@@ -252,7 +255,7 @@ export function redactConfig<T extends Record<string, unknown>>(config: T): T {
     const redacted: Record<string, unknown> = { ...config };
     for (const key of SENSITIVE_CONFIG_KEYS) {
         if (key in redacted) {
-            redacted[key] = "********";
+            redacted[key] = SECRET_MASK;
         }
     }
     return redacted as T;

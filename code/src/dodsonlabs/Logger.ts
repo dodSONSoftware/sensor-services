@@ -7,7 +7,7 @@ import winston from "winston";
 import type Transport from "winston-transport";
 import LokiTransport from "winston-loki";
 import { LogLevel } from "./Interfaces";
-import { formatElapsedTime } from "./SystemFunctions";
+import { formatElapsedTime, redactLogMessage } from "./SystemFunctions";
 import { reqId } from "../common/global";
 import type { configSchema } from "../schemas/config";
 import type { z } from "zod";
@@ -105,6 +105,13 @@ export class Logger implements ILogger {
         this.global_log_level_value = logLevelFromString(config["log-level"]);
         this.global_log_level_name = config["log-level"];
 
+        // Value-tier secrets for central redaction: db-password (required by
+        // the schema) and loki-url (optional, may embed credentials). Length
+        // filtering is applied inside redactLogMessage.
+        this.secretValues = [config["db-password"], config["loki-url"]].filter(
+            (v): v is string => typeof v === "string"
+        );
+
         // Build Winston logger with configured transports
         const transports: Transport[] = [
       // Console transport — human-readable, mirrors previous format
@@ -165,6 +172,22 @@ export class Logger implements ILogger {
     private lokiTransport: LokiTransportLike | null = null;
     // Idempotency guard: close() must run its transport cleanup exactly once.
     private closeStarted = false;
+    // This service's own secret values, captured at construction and passed
+    // to redactLogMessage on every emitted line (value tier). Static for the
+    // instance's lifetime: only log-level hot-reloads (setLevel); loki-url /
+    // db-password changes require a restart, which constructs a fresh Logger.
+    // A future hot-reload of either secret must refresh this field.
+    private readonly secretValues: string[] = [];
+
+    /**
+     * Central redaction seam: every message passes through the two-tier
+     * redaction (sensitive key values + this service's own secret values)
+     * before reaching ANY winston transport, so console, Loki, and any
+     * future transport can never see an unredacted secret.
+     */
+    private redact(message: string): string {
+        return redactLogMessage(message, this.secretValues);
+    }
 
     /**
      * Change the log level on the EXISTING instance (hot reload of log-level).
@@ -235,7 +258,7 @@ export class Logger implements ILogger {
     ): void {
         this.winston.log({
             level: "debug",
-            message,
+            message: this.redact(message),
             originator,
             elapsed: formatElapsedTime(Date.now() - elapsed_time_start_date.getTime()),
             reqId: requestId,
@@ -250,7 +273,7 @@ export class Logger implements ILogger {
     ): void {
         this.winston.log({
             level: "info",
-            message,
+            message: this.redact(message),
             originator,
             elapsed: formatElapsedTime(Date.now() - elapsed_time_start_date.getTime()),
             reqId: requestId,
@@ -265,7 +288,7 @@ export class Logger implements ILogger {
     ): void {
         this.winston.log({
             level: "warn",
-            message,
+            message: this.redact(message),
             originator,
             elapsed: formatElapsedTime(Date.now() - elapsed_time_start_date.getTime()),
             reqId: requestId,
@@ -280,7 +303,7 @@ export class Logger implements ILogger {
     ): void {
         this.winston.log({
             level: "error",
-            message,
+            message: this.redact(message),
             originator,
             elapsed: formatElapsedTime(Date.now() - elapsed_time_start_date.getTime()),
             reqId: requestId,

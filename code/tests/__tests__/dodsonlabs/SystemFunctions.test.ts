@@ -12,7 +12,10 @@ import {
   convert_from_log_level_string_to_enum,
   write_file_atomic,
   redactSecrets,
+  redactLogMessage,
   SENSITIVE_SECRET_KEYS,
+  SECRET_MASK,
+  MIN_SECRET_VALUE_LENGTH,
 } from "../../../src/dodsonlabs/SystemFunctions";
 import { LogLevel } from "../../../src/dodsonlabs/Interfaces";
 
@@ -102,6 +105,115 @@ describe("redactSecrets (P1-3 shared redaction)", () => {
     expect(SENSITIVE_SECRET_KEYS.has("wifi-password")).toBe(true);
     expect(SENSITIVE_SECRET_KEYS.has("password")).toBe(true);
     expect(SENSITIVE_SECRET_KEYS.has("db-password")).toBe(true);
+  });
+});
+
+describe("redactLogMessage (central two-tier log redaction)", () => {
+  it("masks double-quoted JSON key values and preserves the rest", () => {
+    const input = '{"wifi-password": "sup3rsecretpw", "rssi": -42}';
+    expect(redactLogMessage(input)).toBe('{"wifi-password": ********, "rssi": -42}');
+  });
+
+  it("masks single-quoted key values", () => {
+    expect(redactLogMessage("{'db-password': 'hunter2x9'}")).toBe("{'db-password': ********}");
+  });
+
+  it("masks bare key: value and key=value forms", () => {
+    expect(redactLogMessage("db-password: hunter2x9")).toBe("db-password: ********");
+    // Bare values span URL characters up to the terminators (whitespace, , ; | } and quotes)
+    expect(redactLogMessage("loki-url=http://loki.test:3100")).toBe("loki-url=********");
+  });
+
+  it("masks YAML block style across the newline", () => {
+    expect(redactLogMessage("db-password:\n  topsecret99")).toBe("db-password:\n  ********");
+  });
+
+  it("matches key names case-insensitively", () => {
+    expect(redactLogMessage('{"WiFi-Password": "v1234567"}')).toBe('{"WiFi-Password": ********}');
+    expect(redactLogMessage("DB-PASSWORD=v1234567")).toBe("DB-PASSWORD=********");
+  });
+
+  it("masks a quoted value containing escaped quotes", () => {
+    const input = '{"password": "quoted with \\"escaped\\" inside"}';
+    expect(redactLogMessage(input)).toBe('{"password": ********}');
+  });
+
+  it("masks every SENSITIVE_SECRET_KEYS entry plus loki-url (drift guard)", () => {
+    for (const key of [...SENSITIVE_SECRET_KEYS, "loki-url"]) {
+      const out = redactLogMessage(`"${key}": "v1234567"`);
+      expect(out).toContain(SECRET_MASK);
+      expect(out).not.toContain("v1234567");
+    }
+  });
+
+  it("masks the full hyphenated key, not a partial match", () => {
+    const out = redactLogMessage('{"wifi-password": "abc12345"}');
+    expect(out).toBe('{"wifi-password": ********}');
+    expect(out).toContain("wifi-password");
+    expect(out).not.toContain("wifi-********");
+  });
+
+  it("does not mask longer keys that end in a sensitive name", () => {
+    expect(redactLogMessage("xpassword: abc12345")).toBe("xpassword: abc12345");
+    expect(redactLogMessage("passwords: abc12345")).toBe("passwords: abc12345");
+  });
+
+  it("leaves key mentions without a value untouched", () => {
+    expect(redactLogMessage('config key "password" missing')).toBe('config key "password" missing');
+    expect(redactLogMessage("db-password is set")).toBe("db-password is set");
+  });
+
+  it("masks sensitive key values nested inside string values", () => {
+    // Documented over-masking of embedded patterns — safer than not
+    expect(redactLogMessage('{"note": "password: xyz12345"}')).toBe('{"note": "password": ********}');
+  });
+
+  it("value tier masks known secret values outside key-value form", () => {
+    const out = redactLogMessage("connected with Sup3rDbSecretValue at 12:00", ["Sup3rDbSecretValue"]);
+    expect(out).toBe("connected with ******** at 12:00");
+  });
+
+  it("value tier is literal — regex metacharacters in values are safe", () => {
+    const value = "p@ss.123+*?@h";
+    const out = redactLogMessage(`push to ${value} ok`, [value]);
+    expect(out).toBe("push to ******** ok");
+  });
+
+  it("value tier applies longest-first so nested secrets do not mangle each other", () => {
+    const out = redactLogMessage(
+      "see http://user:pw@h:3100 end",
+      ["http://user:pw@h:3100", "user:pw@h"]
+    );
+    expect(out).toBe("see ******** end");
+  });
+
+  it("skips empty and short values per the length guard", () => {
+    expect(redactLogMessage("note: x", ["x"])).toBe("note: x");
+    expect(redactLogMessage("hello", [""])).toBe("hello");
+    expect(redactLogMessage("hello", [])).toBe("hello");
+    // Boundary: MIN_SECRET_VALUE_LENGTH - 1 is skipped, MIN_SECRET_VALUE_LENGTH is masked
+    const short = "a".repeat(MIN_SECRET_VALUE_LENGTH - 1);
+    const exact = "b".repeat(MIN_SECRET_VALUE_LENGTH);
+    expect(redactLogMessage(`v ${short} v`, [short])).toBe(`v ${short} v`);
+    expect(redactLogMessage(`v ${exact} v`, [exact])).toBe("v ******** v");
+  });
+
+  it("is pure and idempotent", () => {
+    const input = '{"db-password": "hunter2x9"} and Sup3rDbSecretValue';
+    redactLogMessage(input, ["Sup3rDbSecretValue"]);
+    expect(input).toBe('{"db-password": "hunter2x9"} and Sup3rDbSecretValue');
+    const once = redactLogMessage(input, ["Sup3rDbSecretValue"]);
+    expect(redactLogMessage(once, ["Sup3rDbSecretValue"])).toBe(once);
+  });
+
+  it("returns an empty message unchanged", () => {
+    expect(redactLogMessage("")).toBe("");
+  });
+
+  it("uses the same mask as redactSecrets", () => {
+    expect(SECRET_MASK).toBe("********");
+    expect(redactLogMessage('{"password": "a1b2c3d4"}')).toBe('{"password": ********}');
+    expect(redactSecrets({ password: "a1b2c3d4" }).password).toBe(SECRET_MASK);
   });
 });
 

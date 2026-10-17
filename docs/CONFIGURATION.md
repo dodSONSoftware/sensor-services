@@ -4,7 +4,7 @@ This document describes settings, defaults, validation and operational semantics
 
 ## File resolution and secrets
 
-Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config.yml` relative to the process working directory. `npm run build` copies `src/config.yml` into `dist/`. All settings, including database credentials, are stored in one YAML document. Protect its filesystem access and API access: this trusted-LAN service has no application-level authentication. Never commit real credentials to a public repository; rotate any exposed values. `redactConfig()` masks `db-password` and `loki-url` in logs, **not** in configuration API responses. Treat `/api/read-config` and `/api/read-running-config` as sensitive endpoints.
+Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config.yml` relative to the process working directory. `npm run build` copies `src/config.yml` into `dist/`. All settings, including database credentials, are stored in one YAML document. Protect its filesystem access and API access: this trusted-LAN service has no application-level authentication. Never commit real credentials to a public repository; rotate any exposed values. `redactConfig()` masks `db-password` and `loki-url` in the startup configuration dump, and the shared `Logger` applies a central two-tier redaction (this service's own secret values, plus recognized sensitive key/value pairs) to every log line; neither masks configuration API responses. Treat `/api/read-config` and `/api/read-running-config` as sensitive endpoints.
 
 ## Required keys
 

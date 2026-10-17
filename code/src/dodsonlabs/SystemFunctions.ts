@@ -38,9 +38,10 @@ export const SENSITIVE_SECRET_KEYS: ReadonlySet<string> = new Set([
     "db-password",
 ]);
 
-// Value substituted for any redacted secret. Kept in sync with redactConfig()
-// in schemas/config.ts so masking looks consistent across the app.
-const SECRET_MASK = "********";
+// Single mask literal for all secret redaction in this service. redactConfig()
+// in schemas/config.ts and redactLogMessage() below both use it, so every
+// masking surface renders the same value.
+export const SECRET_MASK = "********";
 
 /**
  * Deep-clone a value, replacing the value of any sensitive key (at any depth,
@@ -70,6 +71,79 @@ function redactSecretsInternal(value: unknown, sensitiveKeys: ReadonlySet<string
         }
     }
     return result;
+}
+
+// Minimum length for a secret value to be masked by the value tier of
+// redactLogMessage. A shorter value would mask common substrings of
+// unrelated content; values that short are still masked by the key tier
+// whenever they appear in key-value form, which is the shape secrets take
+// in this service's logs.
+export const MIN_SECRET_VALUE_LENGTH = 8;
+
+/**
+ * KEY tier of central log redaction — the pattern itself is a fixed source
+ * constant; no untrusted data ever enters a pattern.
+ *
+ * Masks the VALUE of a sensitive key (never the key itself) in JSON-like
+ * serialized text. Recognized keys: wifi-password, db-password, loki-url,
+ * password (longest alternatives first; the lookbehind prevents the bare
+ * "password" alternative from matching inside the hyphenated keys and from
+ * matching longer keys such as "xpassword").
+ *
+ * Value shapes handled: JSON double-quoted ("..."), single-quoted ('...'),
+ * and bare `key: value` / `key=value` (bare values terminate at whitespace,
+ * comma, semicolon, pipe, `}`, or a quote). Keys may be quoted or bare and
+ * match case-insensitively; whitespace around the separator is preserved.
+ *
+ * Linear-time by construction — safe to run over untrusted forwarded sensor
+ * log content on every line: fixed-length one-character lookbehind, no
+ * nested quantifiers, the value alternatives are mutually exclusive on their
+ * first character, and no alternative can match the empty string (key,
+ * separator, and value are each at least one character).
+ *
+ * MUST stay in sync with SENSITIVE_SECRET_KEYS plus "loki-url"; the unit
+ * test "masks every SENSITIVE_SECRET_KEYS entry plus loki-url" fails on drift.
+ */
+const SENSITIVE_KEY_VALUE_RE =
+    /(?<![\w-])(["']?)(wifi-password|db-password|loki-url|password)\1?(\s*)([:=])(\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s,;|}&]+)/gi;
+
+/**
+ * Central two-tier redaction for message strings passed to Logger.write_*.
+ *
+ * 1. KEY tier: one linear pass masking recognized sensitive key values
+ *    (catches secrets whose values this service does not know — e.g. sensor
+ *    payloads). Preserves the key, its quoting, and surrounding whitespace;
+ *    replaces only the value with SECRET_MASK. Prose that mentions a key
+ *    without a `:`/`=` value (e.g. `config key "password" missing`) is
+ *    untouched.
+ * 2. VALUE tier: literal (split/join, never RegExp — values may contain
+ *    regex metacharacters) masking of known secret values, applied
+ *    longest-first so a secret that is a substring of a longer secret
+ *    (a credential embedded in a URL) cannot partially mangle the longer
+ *    one. Values shorter than MIN_SECRET_VALUE_LENGTH are skipped.
+ *
+ * Pure: returns a new string, never mutates its input; idempotent.
+ */
+export function redactLogMessage(message: string, secretValues: readonly string[] = []): string {
+    if (!message) {
+        return message;
+    }
+
+    // 1. KEY tier — groups: 1=quote 2=key 3=ws 4=separator 5=ws 6=value
+    let redacted = message.replace(SENSITIVE_KEY_VALUE_RE,
+        (_m, quote: string, key: string, ws1: string, sep: string, ws2: string) =>
+            `${quote}${key}${quote}${ws1}${sep}${ws2}${SECRET_MASK}`);
+
+    // 2. VALUE tier — literal substring masking of known secret values.
+    const sorted = [...secretValues]
+        .filter((v): v is string => typeof v === "string" && v.length >= MIN_SECRET_VALUE_LENGTH)
+        .sort((a, b) => b.length - a.length);
+    for (const value of sorted) {
+        if (redacted.includes(value)) {
+            redacted = redacted.split(value).join(SECRET_MASK);
+        }
+    }
+    return redacted;
 }
 
 // **** file functions

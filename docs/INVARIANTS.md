@@ -3,7 +3,7 @@
 This document lists properties that must remain true after changes. Relevant tests and implementation modules are the enforcement points.
 
 1. **Startup validation:** strict `configSchema` rejects unknown, missing or invalid settings before listener startup; values accepted by Zod must also be accepted by their downstream consumers (`schemas/configBoundary.test.ts`).
-2. **Credential hygiene:** configuration/log payloads must be sanitized before logging; `db-password`, `loki-url` and recursively recognized secret keys must not leak through logs. Raw configuration API reads are sensitive and must remain within trusted access controls.
+2. **Credential hygiene:** configuration/log payloads must be sanitized before logging; `db-password`, `loki-url` and recursively recognized secret keys must not leak through logs. Every log line passes a central two-tier redaction in the shared `Logger` (this service's own secret values by exact value; recognized sensitive keys by key/value pattern) before reaching any transport, with caller-side sanitization (`redactConfig`, `redactSecrets`, write-config metadata projection) retained as defense in depth. Raw configuration API reads are sensitive and must remain within trusted access controls.
 3. **Middleware order:** request correlation and metrics execute before CORS/rate limiting; rate limiting precedes JSON body processing; `/health` and `/metrics` cannot be rate-limited.
 4. **Request correlation:** `X-Request-ID` exists on handled requests and propagates to async request log context.
 5. **Routes:** every route creator requires explicit `register()`; each live route must match module `__routes` and `__routesHelp` metadata on startup. Unmatched paths remain 404 and are logged at warn severity.
