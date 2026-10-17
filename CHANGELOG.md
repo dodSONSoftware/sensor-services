@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.15.1] — Ceramic Falcon (2026-10-17)
+
+- Validated the client-supplied `X-Request-ID` before reusing it. The request-ID middleware previously accepted whatever value arrived and used it verbatim — echoed in the response header and interpolated into every log-line tag for the request's lifetime — so a single unbounded header (up to Node's ~16 KB header limit) of client-controlled text was duplicated into the logs on every request, and the type-level multi-valued (array) case was carried unvalidated into the AsyncLocalStorage store that every downstream consumer types as `string`. The ID is now reused only when it is a single non-empty string of at most 128 characters; absent, multi-valued, empty, or oversize values are replaced with a generated UUID, so the ID is always a bounded single string. The reuse contract for well-behaved clients is unchanged (invariant 4 documents the tightened condition). Covered by new middleware regression tests: reuse, duplicate-header handling, the 128/129 length boundary, the empty-string case, and a direct unit test for the array case, which cannot be reached through the real HTTP stack because Node's parser joins duplicate request headers into one string before any handler runs.
+
 ## [4.15.0] — Ceramic Falcon (2026-10-17)
 
 - Added a `release` field to the `/about` response, reporting the release codename alongside the version. The codename was already computed by the service (`APP_NAME` in `version.ts`) and held in the static about info, but `/about` never exposed it — there was no runtime way to see which release a deployment runs other than inferring it from the version number. The field now appears in the `about` object immediately after `version` (e.g. `"release": "Ceramic Falcon"`), is documented in the `/about` Swagger schema, and is covered by a regression test that asserts the field equals the codename constant in `version.ts`, so the assertion tracks the codename through future version bumps.

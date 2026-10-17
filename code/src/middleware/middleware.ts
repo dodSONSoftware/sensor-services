@@ -154,16 +154,27 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
     /**
      * Ensures every request has a unique X-Request-ID.
-     * If the client sent one, reuse it; otherwise generate a UUID.
+     * Reuses a client-supplied ID only when it is a single, non-empty string
+     * of bounded length (<= 128 chars); otherwise (absent, multi-valued, or
+     * oversized) generates a fresh UUID.
      * Stores the ID in AsyncLocalStorage so any code path can access it.
+     *
+     * Node/Express types this header as string | string[] | undefined — a
+     * client can send the header twice, which arrives as an array. The ID is
+     * echoed verbatim in the response header and interpolated into every log
+     * line's tag, so it must stay a single bounded string: the invariant
+     * every downstream consumer is typed against.
      */
     private _requestIdMiddleware(
         request: AppRequest,
         response: express.Response,
         next: express.NextFunction,
     ) {
-        const id = request.headers["x-request-id"] as string | undefined;
-        const requestId = id ?? randomUUID();
+        const supplied = request.headers["x-request-id"];
+        const requestId =
+            typeof supplied === "string" && supplied.length > 0 && supplied.length <= 128
+                ? supplied
+                : randomUUID();
 
         // Attach to request and response for downstream access
         request.id = requestId;

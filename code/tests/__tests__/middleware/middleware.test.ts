@@ -11,6 +11,7 @@ import type { z } from "zod";
 import { CreateMiddleware } from "../../../src/middleware/middleware";
 import { CreateGeneralRoutes } from "../../../src/routes/generalRoutes";
 import { validateConfig, type configSchema } from "../../../src/schemas/config";
+import type { AppRequest } from "../../../src/common/app-request";
 import { apiMetricsRegistry, createApiMetricsMiddleware } from "../../../src/common/metrics";
 import { setupSwagger } from "../../../src/swagger";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
@@ -404,6 +405,106 @@ describe("CreateMiddleware — middleware ordering (P3-2)", () => {
 
         const r2 = await request(app).post("/big").send({ a: "x".repeat(100) });
         expect(r2.status).toBe(429);
+    });
+});
+
+describe("CreateMiddleware — X-Request-ID handling", () => {
+    // v4 UUID shape — the fallback the middleware generates when a
+    // client-supplied ID is absent, multi-valued, or out of bounds.
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    let app: express.Application;
+
+    beforeEach(() => {
+        app = buildApp();
+    });
+
+    it("reuses a valid client-supplied ID (correlation contract)", async () => {
+        const res = await request(app).get("/health").set("X-Request-ID", "my-correlation-id-1");
+        expect(res.status).toBe(200);
+        expect(res.headers["x-request-id"]).toBe("my-correlation-id-1");
+    });
+
+    it("a client sending the header twice still gets one well-formed string back", async () => {
+        // superagent sends the array value as two header lines. Node's HTTP
+        // parser joins duplicate non-set-cookie request headers into a single
+        // comma-joined string BEFORE any handler runs, so the middleware sees
+        // the short string "a, b" (in bounds) and echoes ONE well-formed
+        // header line — no array can reach the store or the response.
+        // (The type-level array case, unreachable through the real socket, is
+        // pinned in the direct test below.)
+        const res = await request(app).get("/health").set("X-Request-ID", ["a", "b"]);
+        expect(res.status).toBe(200);
+        const id = res.headers["x-request-id"];
+        expect(typeof id).toBe("string");
+        expect(id).toBe("a, b");
+    });
+
+    it("an oversize (200-char) ID is replaced by a UUID", async () => {
+        const longId = "x".repeat(200);
+        const res = await request(app).get("/health").set("X-Request-ID", longId);
+        expect(res.status).toBe(200);
+        const id = res.headers["x-request-id"];
+        expect(id).not.toBe(longId);
+        expect(id).toMatch(UUID);
+    });
+
+    it("accepts an ID at exactly the 128-char bound and replaces one at 129", async () => {
+        const atBound = "y".repeat(128);
+        const ok = await request(app).get("/health").set("X-Request-ID", atBound);
+        expect(ok.headers["x-request-id"]).toBe(atBound);
+
+        const overBound = "z".repeat(129);
+        const over = await request(app).get("/health").set("X-Request-ID", overBound);
+        expect(over.headers["x-request-id"]).not.toBe(overBound);
+        expect(over.headers["x-request-id"]).toMatch(UUID);
+    });
+
+    it("an empty-string ID is replaced by a UUID", async () => {
+        const res = await request(app).get("/health").set("X-Request-ID", "");
+        const id = res.headers["x-request-id"];
+        expect(typeof id).toBe("string");
+        expect(id).toMatch(UUID);
+    });
+
+    // The type-level multi-valued case (headers arriving as a string[]) cannot
+    // be produced through the real HTTP stack — Node's parser joins duplicates
+    // before the handler runs — so the class's method is driven directly, the
+    // same way _validateBodyMiddleware is exercised above. The throwaway app
+    // is discarded; only the bound method is exercised.
+    describe("_requestIdMiddleware — direct (array header unreachable via the socket)", () => {
+        function requestIdMiddlewareUnderTest(): {
+            _requestIdMiddleware: (
+                req: AppRequest,
+                res: express.Response,
+                next: express.NextFunction
+            ) => void;
+        } {
+            return new CreateMiddleware(express(), config) as unknown as {
+                _requestIdMiddleware: (
+                    req: AppRequest,
+                    res: express.Response,
+                    next: express.NextFunction
+                ) => void;
+            };
+        }
+
+        it("a multi-valued (array) header yields a single generated UUID, never an array", () => {
+            const { res, headerCalls } = createMockRes();
+            const req = createMockReq({ headers: { "x-request-id": ["a", "b"] } }) as AppRequest;
+            let nextCalled = false;
+
+            requestIdMiddlewareUnderTest()._requestIdMiddleware(req, res as express.Response, () => { nextCalled = true; });
+
+            // The array must not leak into the response header or the request
+            // ID: both must be one generated UUID string (same value, so the
+            // log context and the header stay correlated).
+            expect(nextCalled).toBe(true);
+            expect(Array.isArray(headerCalls["X-Request-ID"])).toBe(false);
+            expect(typeof headerCalls["X-Request-ID"]).toBe("string");
+            expect(headerCalls["X-Request-ID"]).toMatch(UUID);
+            expect(req.id).toBe(headerCalls["X-Request-ID"]);
+        });
     });
 });
 
