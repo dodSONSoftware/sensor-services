@@ -33,6 +33,7 @@ describe("setupSwagger", () => {
         // example value contained ": " (YAMLSemanticError in swagger-jsdoc).
         expect(res.text).toContain('"/api/reload-config"');
         expect(res.text).toContain('"/api/write-config"');
+        expect(res.text).toContain('"/restart-service"');
         // This one was silently dropped (with a YAMLSyntaxError) when the
         // X-Settings-Persisted header description started with a quoted
         // scalar — pin it so a malformed JSDoc value in settingsRoutes.ts is

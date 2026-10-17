@@ -12,6 +12,7 @@ import { __routesHelp as pingerRoutesHelp } from "../routes/pingerRoutes";
 import { __routesHelp as settingsRoutesHelp } from "../routes/settingsRoutes";
 import { __routesHelp as configRoutesHelp } from "../routes/configRoutes";
 import { __routesHelp as logRoutesHelp } from "../routes/logRoutes";
+import { __routesHelp as restartRoutesHelp } from "../routes/restartRoutes";
 import { isPersistenceAvailable } from "../services/settingsStore";
 
 // **** public functions
@@ -112,6 +113,7 @@ export async function getAbout(req: express.Request, res: express.Response) {
     cmds.push({ "name": "Settings", "help": settingsRoutesHelp });
     cmds.push({ "name": "Configuration", "help": configRoutesHelp });
     cmds.push({ "name": "Logs", "help": logRoutesHelp });
+    cmds.push({ "name": "Restart", "help": restartRoutesHelp });
 
     const about = {
         about: {
@@ -235,6 +237,14 @@ export function getEndpoints(_req: express.Request, res: express.Response) {
             requestBody: "None",
             responseBody: "{ status: \"healthy|degraded|unhealthy\", mqtt: \"connected|disconnected\", ipPinger: \"healthy|unreachable\", sensorTelemetry: \"healthy|unreachable\", settingsPersistence: \"healthy|unavailable\", timestamp: \"ISO-date-string\", uptime_seconds: number }",
             description: "Health check endpoint for container orchestration. HTTP 200 for healthy/degraded, HTTP 503 for unhealthy. Status is 'degraded' if a non-critical component is down or settings persistence is unavailable, and 'unhealthy' if MQTT is disconnected."
+        },
+        {
+            name: "Restart Service",
+            route: "/restart-service",
+            verb: "POST",
+            requestBody: "Ignored — the request body is never consumed",
+            responseBody: "{ success: true, status: \"restart_scheduled\", message: string } on acceptance (202); { success: false, message: string } for 401/405/409/503",
+            description: "Schedules a graceful self-restart (the 202 is delivered before shutdown starts; the container restart policy starts the service again with its persisted configuration). Optional and fail-closed: requires Authorization: Bearer <RESTART_SERVICE_TOKEN> (environment variable, 32+ alphanumeric characters). 405 for non-POST, 401 for a missing/invalid Authorization header, 409 when a restart is already pending, 503 when the token is unset, empty, or invalid."
         },
         {
             "name": "Date Local (legacy)",

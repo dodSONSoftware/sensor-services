@@ -106,8 +106,19 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
         // 5. add JSON (configurable body limit, default 1mb) — after rate
         //    limiting, so a 429'd request's body is never parsed.
+        //    /restart-service is skipped: its contract is that the request
+        //    stream is NEVER consumed (the body is irrelevant), so a malformed
+        //    or truncated body must not 400 in the parser before the token
+        //    gate, and a mid-body client disconnect must not emit on an
+        //    unread stream. The middleware ordering above is unchanged.
         const bodyLimit = this.config["express-body-limit"] ?? "1mb";
-        this.app.use(express.json({ limit: bodyLimit }));
+        // The runtime body-parser (1.20) supports skip(), but the pinned
+        // transitive @types/body-parser (1.19) does not declare it — hence the
+        // cast. The declared options (limit) are unchanged.
+        this.app.use(express.json({
+            limit: bodyLimit,
+            skip: (req: express.Request) => req.path === "/restart-service",
+        } as unknown as Parameters<typeof express.json>[0]));
 
         // 6. add request logger (request ID is already in AsyncLocalStorage)
         this.app.use(this._loggerMiddleware.bind(this));

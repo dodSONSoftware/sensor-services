@@ -10,6 +10,7 @@ import * as pingerRoutes from "../../../src/routes/pingerRoutes";
 import * as settingsRoutes from "../../../src/routes/settingsRoutes";
 import * as configRoutes from "../../../src/routes/configRoutes";
 import * as logRoutes from "../../../src/routes/logRoutes";
+import * as restartRoutes from "../../../src/routes/restartRoutes";
 import { CreateRouteNotFound } from "../../../src/routes/routeNotFound";
 import { registeredRoutePaths, assertRoutesMatchDeclared } from "../../../src/routes/routeDrift";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
@@ -31,6 +32,7 @@ const ALL_DECLARED: Record<string, string[]> = {
     settingsRoutes: settingsRoutes.__routes,
     configRoutes: configRoutes.__routes,
     logRoutes: logRoutes.__routes,
+    restartRoutes: restartRoutes.__routes,
 };
 
 // The full route surface, exactly as index.ts registers it (minus middleware
@@ -51,6 +53,8 @@ function buildFullApp(): express.Application {
     config.register();
     const log = new logRoutes.CreateLogRoutes(app);
     log.register();
+    const restart = new restartRoutes.CreateRestartRoutes(app, undefined, undefined);
+    restart.register();
     const notFound = new CreateRouteNotFound(app);
     notFound.register();
     return app;
@@ -83,6 +87,7 @@ describe("route metadata ownership (P3-4)", () => {
             { name: "settingsRoutes", __routes: settingsRoutes.__routes, __routesHelp: settingsRoutes.__routesHelp },
             { name: "configRoutes", __routes: configRoutes.__routes, __routesHelp: configRoutes.__routesHelp },
             { name: "logRoutes", __routes: logRoutes.__routes, __routesHelp: logRoutes.__routesHelp },
+            { name: "restartRoutes", __routes: restartRoutes.__routes, __routesHelp: restartRoutes.__routesHelp },
         ];
         for (const mod of modules) {
             const help = ((mod.__routesHelp.commands as { route: string }[]) ?? []).map((c) => c.route);

@@ -402,4 +402,31 @@ describe("getEndpoints", () => {
     const readRunningConfig = getEndpoint("/api/read-running-config");
     expect(String(readRunningConfig["description"])).toMatch(/in-memory/);
   });
+
+  it("describes /restart-service as POST, token-gated, and body-ignored", () => {
+    const entry = getEndpoint("/restart-service");
+    expect(String(entry["verb"])).toBe("POST");
+    expect(String(entry["requestBody"])).toMatch(/never consumed/i);
+    expect(String(entry["description"])).toMatch(/RESTART_SERVICE_TOKEN/);
+    expect(String(entry["description"])).toMatch(/fail-closed/i);
+    // The full status ladder is advertised so clients can script against it
+    expect(String(entry["description"])).toMatch(/401/);
+    expect(String(entry["description"])).toMatch(/409/);
+    expect(String(entry["description"])).toMatch(/503/);
+  });
+});
+
+describe("getAbout route advertisement", () => {
+  it("lists the Restart command module (stays advertised while the endpoint is disabled)", async () => {
+    const { res, sendCalls } = createMockRes();
+    const req = createMockReq() as Request;
+
+    await getAbout(req, res as Response);
+
+    const body = sendCalls[0] as { routes: { name: string; help: Record<string, unknown> }[] };
+    const restart = body.routes.find((r) => r.name === "Restart");
+    expect(restart).toBeDefined();
+    const commands = restart!.help["commands"] as { route: string }[];
+    expect(commands.map((c) => c.route)).toEqual(["/restart-service"]);
+  });
 });

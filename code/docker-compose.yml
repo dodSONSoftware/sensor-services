@@ -6,6 +6,12 @@ services:
       - "32000:32000"
     volumes:
       - /mnt/sensor-services/:/app/configs/
+    # Gates POST /restart-service (token-gated graceful self-restart). An unset
+    # host variable arrives in the container as an EMPTY value — the real
+    # deployed "disabled" state (the endpoint answers 503; the service runs
+    # normally). See .env.example for generation (openssl rand -hex 32).
+    environment:
+      - RESTART_SERVICE_TOKEN=${RESTART_SERVICE_TOKEN:-}
     restart: unless-stopped
     # Must exceed the application's hard shutdown timeout (HARD_SHUTDOWN_TIMEOUT_MS,
     # src/common/shutdown.ts) or Docker's SIGKILL lands mid-shutdown. Pinned by

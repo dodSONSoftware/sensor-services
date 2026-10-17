@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Quartz Falcon — firmware 4.16.0
+**Release:** Onyx Falcon — firmware 4.17.0
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -120,6 +120,12 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/endpoints` | Detailed information about each API endpoint |
 | GET | `/health` | Health status with MQTT, memory, CPU, uptime — HTTP 200 for healthy/degraded, HTTP 503 for unhealthy |
 | GET | `/metrics` | Prometheus scrape endpoint for API metrics |
+
+### Lifecycle
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/restart-service` | Schedule a graceful self-restart — optional and fail-closed. Requires `Authorization: Bearer <RESTART_SERVICE_TOKEN>` (environment variable, 32+ alphanumeric characters; see `code/.env.example`). `202` when scheduled (the restart happens after the response is delivered and the container restart policy restarts the service), `401` missing/invalid header, `405` non-POST, `409` restart already pending, `503` endpoint disabled (token unset, empty, or invalid) |
 
 ### Sensor Routes (`/sensors/*`)
 

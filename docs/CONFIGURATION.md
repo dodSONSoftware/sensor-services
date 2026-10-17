@@ -6,6 +6,15 @@ This document describes settings, defaults, validation and operational semantics
 
 Startup loads `/app/configs/config.yml` when available, otherwise `./dist/config.yml` relative to the process working directory. `npm run build` copies `src/config.yml` into `dist/`. All settings, including database credentials, are stored in one YAML document. Protect its filesystem access and API access: this trusted-LAN service has no application-level authentication. Never commit real credentials to a public repository; rotate any exposed values. `redactConfig()` masks `db-password`, `loki-url`, and `ip-pinger-config-token` in the startup configuration dump, and the shared `Logger` applies a central two-tier redaction (this service's own secret values, plus recognized sensitive key/value pairs) to every log line; neither masks configuration API responses. Treat `/api/read-config` and `/api/read-running-config` as sensitive endpoints.
 
+### Environment variables
+
+`RESTART_SERVICE_TOKEN` is the only environment variable the application reads, and it is deliberately **not** a `config.yml` key: `/api/read-config` and `/api/read-running-config` return the configuration unredacted, so a config key would expose the token over HTTP. The token gates `POST /restart-service` (graceful self-restart) and is captured once at startup:
+
+- **Validity:** 32+ alphanumeric characters (`openssl rand -hex 32` produces a valid token) — the same rule `ip-pinger-config-token` obeys, but a **distinct** secret: the config token is never accepted by `/restart-service`, and the restart token is never a valid `x-config-token`.
+- **Fail-closed, no enable flag:** unset, empty, or set-but-invalid values all disable the endpoint — every request answers the byte-identical `503` and the service runs and boots normally. A bad token can only ever move the endpoint *off*, never crash startup.
+- **Secrets never logged:** the token value never reaches any log line in any state; the value is also not part of the `Logger`'s redaction set, so the discipline is "never log it" (pinned by tests).
+- **Deployment:** provided to the container via the host environment / a git-ignored `code/.env` (template: `code/.env.example`); compose injects `RESTART_SERVICE_TOKEN=${RESTART_SERVICE_TOKEN:-}`, so an unset host variable arrives empty (disabled). It takes effect only at process start — changing it requires a restart, which is itself a token-gated operation.
+
 ## Required keys
 
 | Key | Type / constraint | Purpose |

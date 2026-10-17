@@ -15,6 +15,7 @@ import { CreateRouteNotFound } from "./routes/routeNotFound";
 import * as settingsRoutes from "./routes/settingsRoutes";
 import * as configRoutes from "./routes/configRoutes";
 import * as logRoutes from "./routes/logRoutes";
+import * as restartRoutes from "./routes/restartRoutes";
 import { assertRoutesMatchDeclared } from "./routes/routeDrift";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
@@ -169,6 +170,27 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         configRoutesInstance.register();
         const logRoutesInstance = new logRoutes.CreateLogRoutes(app);
         logRoutesInstance.register();
+
+        // Lifecycle hook for the token-gated POST /restart-service: the HTTP
+        // layer may only REQUEST a restart; index.ts owns the process and
+        // answers by self-signaling SIGTERM — the same graceful path an
+        // operator `docker stop` takes (MQTT disconnect, HTTP drain, logger
+        // flush, exit-code ownership). A SIGTERM that lands while a shutdown
+        // is already in flight is absorbed by the shutting_down guard below,
+        // so a restart request racing an operator stop cannot double-exit or
+        // mask a fatal exit code.
+        const requestRestart = (): void => {
+            process.kill(process.pid, "SIGTERM");
+        };
+
+        // Optional, fail-closed: RESTART_SERVICE_TOKEN is an environment
+        // variable ONLY — deliberately never a config.yml key, because
+        // /api/read-config returns the configuration unredacted. Unset,
+        // empty, or invalid values disable the endpoint (they never refuse
+        // startup); the value is never logged.
+        const restart = new restartRoutes.CreateRestartRoutes(app, process.env["RESTART_SERVICE_TOKEN"], requestRestart);
+        restart.register();
+
         const routeNotFound = new CreateRouteNotFound(app);
         routeNotFound.register();
 
@@ -180,6 +202,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         validateRoutesHelp("settingsRoutes", settingsRoutes.__routes, settingsRoutes.__routesHelp);
         validateRoutesHelp("configRoutes", configRoutes.__routes, configRoutes.__routesHelp);
         validateRoutesHelp("logRoutes", logRoutes.__routes, logRoutes.__routesHelp);
+        validateRoutesHelp("restartRoutes", restartRoutes.__routes, restartRoutes.__routesHelp);
 
         // Validate the DECLARED metadata against the LIVE Express app (P3-4):
         // the union of every module's __routes must be exactly the set of
@@ -193,6 +216,7 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
             settingsRoutes: settingsRoutes.__routes,
             configRoutes: configRoutes.__routes,
             logRoutes: logRoutes.__routes,
+            restartRoutes: restartRoutes.__routes,
         });
     } catch (err: unknown) {
         // log error

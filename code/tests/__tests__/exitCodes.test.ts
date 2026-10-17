@@ -54,13 +54,13 @@ function invalidConfig(): Record<string, unknown> {
 }
 
 /** Spawn the compiled app with `config` written to <cwd>/dist/config.yml. */
-function spawnApp(config: Record<string, unknown>, cwd: string): cp.ChildProcess {
+function spawnApp(config: Record<string, unknown>, cwd: string, extraEnv: Record<string, string> = {}): cp.ChildProcess {
     const distDir = path.join(cwd, "dist");
     fs.mkdirSync(distDir, { recursive: true });
     fs.writeFileSync(path.join(distDir, "config.yml"), yaml.dump(config));
     const child = cp.spawn(process.execPath, [APP], {
         cwd,
-        env: { ...process.env, NODE_ENV: "test" },
+        env: { ...process.env, NODE_ENV: "test", ...extraEnv },
         stdio: ["ignore", "pipe", "pipe"],
     });
     // Consume stdout/stderr so the child never blocks on a full pipe buffer
@@ -241,6 +241,33 @@ describeForBuild("process exit-code contract (P2-2, integration)", () => {
         // test needs a window past that to reach the assertion; the fixed shutdown
         // exits ~4-5s into it.
     }, 25_000);
+
+    it("exits 0 after a token-gated POST /restart-service (self-SIGTERM graceful path)", async () => {
+        // End-to-end: the token-gated endpoint answers 202, then the process
+        // self-signals SIGTERM and runs the SAME graceful shutdown an operator
+        // `docker stop` triggers (bounded HTTP drain, MQTT close, settings
+        // store, logger) — clean exit 0, which is what `restart: unless-stopped`
+        // then acts on.
+        const RESTART_TOKEN = "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6";
+        const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ss-exit-"));
+        const port = await getFreePort();
+        const child = spawnApp(validConfig(port), cwd, { RESTART_SERVICE_TOKEN: RESTART_TOKEN });
+        track(child, cwd);
+        try {
+            await waitForPort(port, 15_000);
+            // Assert the STATUS only — the 202 is best-effort (the process may
+            // exit before the client finishes reading the body).
+            const response = await fetch(`http://127.0.0.1:${port}/restart-service`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${RESTART_TOKEN}` },
+            });
+            expect(response.status).toBe(202);
+            const { code } = await waitForExit(child, 20_000);
+            expect(code).toBe(0);
+        } finally {
+            kill(child);
+        }
+    }, 40_000);
 
     it("exits 1 when the HTTP port is already in use (EADDRINUSE)", async () => {
         const cwd1 = fs.mkdtempSync(path.join(os.tmpdir(), "ss-exit-"));
