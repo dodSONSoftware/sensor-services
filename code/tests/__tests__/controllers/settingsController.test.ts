@@ -4,7 +4,7 @@
  */
 
 import type { Request, Response } from "express";
-import { getAllSettings, getSettingsDefaults, getSettingsSchema, updateSettings } from "../../../src/controllers/settingsController";
+import { getAllSettings, getSettingsSchema, updateSettings } from "../../../src/controllers/settingsController";
 import { createMockRes, createMockReq } from "../../mocks/express";
 
 // Mock settingsStore so tests don't require a real DB connection.
@@ -33,117 +33,6 @@ let currentMockCache = { ...baseMockCache };
 // P3-6: controllable so tests can exercise both the persisted (true) and
 // degraded in-memory (false) branches of the X-Settings-Persisted header.
 let mockPersisted = true;
-
-describe("getSettingsDefaults", () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-        currentMockCache = { ...baseMockCache };
-    });
-
-    it("should return 200 with OK status and JSON content type", async () => {
-        const { res, statusCalls, contentTypeCalls, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        expect(statusCalls).toContain(200);
-        expect(contentTypeCalls).toContain("application/json");
-        expect(sendCalls).toHaveLength(1);
-    });
-
-    it("should return both settings and schema objects", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        expect(body).toHaveProperty("settings");
-        expect(body).toHaveProperty("schema");
-    });
-
-    it("should return settings with all expected keys", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        expect(body.settings).toHaveProperty("theme");
-        expect(body.settings).toHaveProperty("dashboard_layout");
-        expect(body.settings).toHaveProperty("notification_level");
-        expect(body.settings).toHaveProperty("time_range_hours");
-        expect(body.settings).toHaveProperty("decimal_places");
-    });
-
-    it("should return schema with metadata for every setting", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        const schema = body.schema as Record<string, unknown>;
-        expect(schema).toHaveProperty("theme");
-        expect(schema).toHaveProperty("dashboard_layout");
-        expect(schema).toHaveProperty("notification_level");
-        expect(schema).toHaveProperty("time_range_hours");
-        expect(schema).toHaveProperty("decimal_places");
-        expect(schema).toHaveProperty("mqtt_broker_address");
-        expect(schema).toHaveProperty("mqtt_topic_telemetry");
-        expect(schema).toHaveProperty("mqtt_topic_command");
-        expect(schema).toHaveProperty("mqtt_topic_command_response");
-    });
-
-    it("should include label, description, type, and default in each schema entry", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        const themeSchema = (body.schema as Record<string, unknown>)["theme"] as Record<string, unknown>;
-        expect(themeSchema).toHaveProperty("label");
-        expect(themeSchema).toHaveProperty("description");
-        expect(themeSchema).toHaveProperty("type");
-        expect(themeSchema).toHaveProperty("default");
-    });
-
-    it("should include enum values for settings that have them", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        const schema = body.schema as Record<string, unknown>;
-        expect((schema["dashboard_layout"] as Record<string, unknown>).options).toEqual(["cards", "list"]);
-        expect((schema["notification_level"] as Record<string, unknown>).options).toEqual(["none", "warn", "critical"]);
-    });
-
-    it("should include min/max for numeric settings that have ranges", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        const schema = body.schema as Record<string, unknown>;
-        expect((schema["ping_delay_ms"] as Record<string, unknown>).min).toBe(0);
-        expect((schema["ping_delay_ms"] as Record<string, unknown>).max).toBe(1000);
-    });
-
-    it("should mark optional settings correctly", async () => {
-        const { res, sendCalls } = createMockRes();
-        const req = createMockReq() as Request;
-
-        await getSettingsDefaults(req, res as Response);
-
-        const body = sendCalls[0] as Record<string, unknown>;
-        const schema = body.schema as Record<string, unknown>;
-        expect((schema["mqtt_broker_address"] as Record<string, unknown>).optional).toBe(true);
-    });
-});
 
 describe("getAllSettings", () => {
     beforeEach(() => {

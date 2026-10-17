@@ -28,20 +28,6 @@ export async function getAllSettings(_req: express.Request, res: express.Respons
 }
 
 /**
- * GET /settings/defaults — Return current settings plus schema metadata for discovery.
- * The frontend uses this to build forms dynamically: field labels, types, valid ranges/enums, and defaults.
- */
-export async function getSettingsDefaults(_req: express.Request, res: express.Response) {
-    const settings = getSettings();
-
-    logger()?.write_debug("settingsController.ts/getSettingsDefaults", JSON.stringify({ settings, schema: SETTINGS_SCHEMA }));
-
-    res.status(OK);
-    res.contentType(Json);
-    res.send({ settings, schema: SETTINGS_SCHEMA });
-}
-
-/**
  * GET /ui/settings-schema — Return setting definitions with name, type, default, range, and description.
  * Each setting contains:
  * - name: The setting key
