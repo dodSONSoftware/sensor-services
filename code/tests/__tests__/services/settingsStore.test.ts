@@ -4,7 +4,7 @@
  */
 
 import { appSettingsSchema, DEFAULT_SETTINGS, type TelemetryItem } from "../../../src/schemas/settings";
-import { patchSettings, validateSettingsFromDb } from "../../../src/services/settingsStore";
+import { getSettings, isSettingKeyValid, patchSettings, validateSettingsFromDb } from "../../../src/services/settingsStore";
 
 /**
  * Build a customized air telemetry array that contains every default value
@@ -102,6 +102,70 @@ describe("validateSettingsFromDb", () => {
         validateSettingsFromDb({ telemetry: { air: customAir() } });
 
         expect(DEFAULT_SETTINGS).toEqual(before);
+    });
+});
+
+describe("isSettingKeyValid", () => {
+    it("should accept flat keys present in DEFAULT_SETTINGS", () => {
+        expect(isSettingKeyValid("theme")).toBe(true);
+        expect(isSettingKeyValid("time_range_hours")).toBe(true);
+        expect(isSettingKeyValid("unit_system")).toBe(true);
+    });
+
+    it("should accept nested dot-notation keys under the telemetry parent", () => {
+        expect(isSettingKeyValid("telemetry.air")).toBe(true);
+        expect(isSettingKeyValid("telemetry.water")).toBe(true);
+        expect(isSettingKeyValid("telemetry.light")).toBe(true);
+    });
+
+    it("should reject unknown flat and nested keys", () => {
+        expect(isSettingKeyValid("nope")).toBe(false);
+        expect(isSettingKeyValid("telemetry.nope")).toBe(false);
+        expect(isSettingKeyValid("telemetry.air.extra")).toBe(false);
+    });
+
+    it("should reject reserved prototype-chain keys in every segment", () => {
+        // These are present on every object via `in`, but are not own
+        // settings — assigning any of them would touch the prototype chain.
+        for (const reserved of ["__proto__", "constructor", "prototype"]) {
+            expect(isSettingKeyValid(reserved)).toBe(false);
+            expect(isSettingKeyValid(`telemetry.${reserved}`)).toBe(false);
+            expect(isSettingKeyValid(`${reserved}.air`)).toBe(false);
+            expect(isSettingKeyValid(`telemetry.${reserved}.x`)).toBe(false);
+        }
+    });
+
+    it("should reject keys that only exist on the prototype chain", () => {
+        // `in` would report these on any object; own-property checks must not.
+        expect(isSettingKeyValid("toString")).toBe(false);
+        expect(isSettingKeyValid("hasOwnProperty")).toBe(false);
+        expect(isSettingKeyValid("valueOf")).toBe(false);
+    });
+});
+
+describe("patchSettings reserved-key guard", () => {
+    it("should drop reserved keys without rewriting any prototype", async () => {
+        const poisoned = { marker: "pwned" };
+        const before = getSettings();
+
+        const after = await patchSettings({
+            __proto__: poisoned,
+            constructor: poisoned,
+            prototype: poisoned,
+            "telemetry.__proto__": poisoned,
+        });
+
+        // Reserved keys are dropped like any unknown key: settings unchanged.
+        expect(after).toEqual(structuredClone(before));
+        // Neither the cache nor the nested telemetry object had its prototype
+        // rewritten by a `["__proto__"] = value` assignment (prototype-chain
+        // members like `constructor` and `marker` are untouched).
+        for (const obj of [after, after.telemetry]) {
+            const proto = Object.getPrototypeOf(obj) as Record<PropertyKey, unknown>;
+            expect(proto).not.toBe(poisoned);
+            expect("marker" in proto).toBe(false);
+            expect(proto["constructor"]).not.toBe(poisoned);
+        }
     });
 });
 

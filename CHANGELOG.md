@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.13.16] — Graphite Falcon (2026-10-16)
+
+- Hardened the settings store's key validation (defense in depth): `patchSettings` validated setting keys with prototype-chain membership (`in`), which accepts `__proto__`, `constructor`, and `prototype` as valid keys — writing one would rewrite the in-memory cache's prototype chain instead of a setting. Key validation now uses own-property membership (`Object.hasOwn`) and explicitly rejects the reserved keys in any dot-notation segment. The HTTP settings-update path was already safe end-to-end (global middleware strips these keys and the strict schema rejects unknown ones), so there is no externally visible behavior change — the guarantee now holds structurally in the settings layer instead of resting on middleware ordering alone. Regression tests pin the reserved-key rejection, including a prototype-pollution guard through `patchSettings` that fails against the old logic.
+
 ## [4.13.15] — Graphite Falcon (2026-10-16)
 
 - Aligned the reference database schema (`database/schema.sql`) with the app's own settings defaults: its seeded telemetry display-mapping keys were stale kebab-case (`temperature-c`) while the app's defaults and the live sensor telemetry use snake_case (`temperature_c`), so an operator who ran the reference schema before first app start would have gotten display keys that never matched live sensor data. The seed row now matches `DEFAULT_SETTINGS` exactly, and a new regression test parses the SQL seed and fails CI on any future drift.

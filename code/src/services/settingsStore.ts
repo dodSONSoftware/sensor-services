@@ -93,6 +93,48 @@ function setSettingValue(result: Record<string, unknown>, key: string, value: un
 }
 
 /**
+ * Keys whose bracket-assignment semantics are controlled by the prototype
+ * chain: `obj["__proto__"] = value` rewrites the prototype, while
+ * `constructor`/`prototype` resolve through `Object.prototype`. A plain
+ * `in` membership check treats them as present (they are inherited, not own
+ * properties), so they are rejected explicitly here. The settings-update
+ * middleware already strips these keys, but the store-level guarantee must
+ * hold structurally and must not rest on middleware ordering alone.
+ */
+const RESERVED_SETTING_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Whether `key` names a known setting: a flat key present in
+ * DEFAULT_SETTINGS (e.g. "theme") or a dot-notation nested key whose parent
+ * is a settings object containing the child (e.g. "telemetry.air").
+ * Membership uses own-property checks only, so prototype-chain keys can
+ * never pass, and any segment that is a reserved key is rejected.
+ * Exported for testing.
+ */
+export function isSettingKeyValid(key: string): boolean {
+    if (key.split(".").some(part => RESERVED_SETTING_KEYS.has(part))) {
+        return false;
+    }
+    // Direct match for flat keys
+    if (Object.hasOwn(DEFAULT_SETTINGS, key)) {
+        return true;
+    }
+    // Handle dot-notation nested keys like "telemetry.air"
+    const dotIndex = key.indexOf(".");
+    if (dotIndex > 0) {
+        const parentKey = key.substring(0, dotIndex);
+        const childKey = key.substring(dotIndex + 1);
+        const parentValue = (DEFAULT_SETTINGS as Record<string, unknown>)[parentKey];
+        // Check if parent is an object and the child key is an own property
+        // of it (inherited members like "constructor" can never match)
+        if (parentValue != null && typeof parentValue === "object" && !Array.isArray(parentValue)) {
+            return Object.hasOwn(parentValue, childKey);
+        }
+    }
+    return false;
+}
+
+/**
  * Validate settings data loaded from database against the schema.
  * Returns validated settings or throws if data is invalid.
  * Exported for testing.
@@ -436,26 +478,6 @@ async function doPatchSettings(updates: Record<string, unknown>): Promise<AppSet
                 newCache[key] = value;
             }
         }
-    }
-
-    // Helper function to check if a key is valid in DEFAULT_SETTINGS
-    function isSettingKeyValid(key: string): boolean {
-        // Direct match for flat keys
-        if (key in DEFAULT_SETTINGS) {
-            return true;
-        }
-        // Handle dot-notation nested keys like "telemetry.air"
-        const dotIndex = key.indexOf(".");
-        if (dotIndex > 0) {
-            const parentKey = key.substring(0, dotIndex);
-            const childKey = key.substring(dotIndex + 1);
-            const parentValue = (DEFAULT_SETTINGS as Record<string, unknown>)[parentKey];
-            // Check if parent is an object and child key exists within it
-            if (parentValue != null && typeof parentValue === "object" && !Array.isArray(parentValue)) {
-                return childKey in parentValue;
-            }
-        }
-        return false;
     }
 
     if (!pool) {

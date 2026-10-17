@@ -3,7 +3,7 @@
     "target": "ES2016",
     "module": "NodeNext",
     "lib": [
-      "ES2016"
+      "ES2022"
     ],
     "allowJs": true,
     "outDir": "dist",
