@@ -117,6 +117,7 @@ export async function getAbout(req: express.Request, res: express.Response) {
         about: {
             name: dude.about.name,
             version: dude.about.version,
+            release: dude.about.codename,
             author: dude.about.author,
             description: dude.about.description,
             copyright: dude.about.copyright,

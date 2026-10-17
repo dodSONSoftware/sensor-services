@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.15.0] — Ceramic Falcon (2026-10-17)
+
+- Added a `release` field to the `/about` response, reporting the release codename alongside the version. The codename was already computed by the service (`APP_NAME` in `version.ts`) and held in the static about info, but `/about` never exposed it — there was no runtime way to see which release a deployment runs other than inferring it from the version number. The field now appears in the `about` object immediately after `version` (e.g. `"release": "Ceramic Falcon"`), is documented in the `/about` Swagger schema, and is covered by a regression test that asserts the field equals the codename constant in `version.ts`, so the assertion tracks the codename through future version bumps.
+
 ## [4.14.7] — Silicon Falcon (2026-10-17)
 
 - Documented the reverse-proxy caveat for the rate limiter in `CONFIGURATION.md`. The limiter keys each client by `req.ip` (the express-rate-limit default) and the service does not configure Express's trust-proxy setting: the current deployment exposes the container port directly, so every client has its own source address and its own `rate-limit-max` budget per window. A reverse proxy in front of the service would collapse all clients onto the proxy's source address and give the entire service a single shared budget, so trust proxy (and the limiter's client-key resolution, e.g. an `X-Forwarded-For`-based key) must be configured before one is introduced — or `rate-limit-max` raised to account for the shared addressing. Documentation-only change — no behavior change; the direct-port deployment is unaffected.

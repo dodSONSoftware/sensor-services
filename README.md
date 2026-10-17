@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Silicon Falcon — firmware 4.14.7
+**Release:** Ceramic Falcon — firmware 4.15.0
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -109,7 +109,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/about` | API metadata (name, version, codename, author), available commands list, and system info (platform, arch, hostname, uptime, memory) |
+| GET | `/about` | API metadata (name, version, release, author), available commands list, and system info (platform, arch, hostname, uptime, memory) |
 | GET | `/date_local`, `/date-local` | Current local date/time |
 | GET | `/date_utc`, `/date-utc` | Current UTC date/time |
 | GET | `/endpoints` | Detailed information about each API endpoint |

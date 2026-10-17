@@ -96,6 +96,8 @@ export class CreateGeneralRoutes extends RoutesCreatorBase {
          *                       type: string
          *                     version:
          *                       type: string
+         *                     release:
+         *                       type: string
          *                     author:
          *                       type: string
          *                     description:

@@ -7,6 +7,7 @@ import type { Request, Response } from "express";
 import { getAbout, getDateCurrent, getDateUTC, getEndpoints, getHealth } from "../../../src/controllers/generalController";
 import { createMockRes, createMockReq } from "../../mocks/express";
 import { setConfig } from "../../../src/common/global";
+import { APP_NAME } from "../../../src/version";
 
 // Mock settingsStore so tests don't require a real DB connection. Only
 // isPersistenceAvailable is exercised here (the /health probe); the other
@@ -66,6 +67,7 @@ describe("getAbout", () => {
     expect(body).toHaveProperty("about");
     expect(body.about).toHaveProperty("name");
     expect(body.about).toHaveProperty("version");
+    expect((body.about as Record<string, unknown>).release).toBe(APP_NAME);
     expect(body.system).toHaveProperty("status");
     expect(body.system).toHaveProperty("mqtt");
     expect(body.system).toHaveProperty("ipPinger");
