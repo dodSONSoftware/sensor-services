@@ -37,7 +37,7 @@ export const serverConfigSchema = z.object({
 const telemetryItemSchema = z.object({
     ui: z.string(),           // Label to show in the UI (e.g., "Temperature")
     order: z.number().int().min(0).default(0),  // Order position for sorting (lower numbers appear first)
-    value: z.string(),        // The raw key from sensor data (e.g., "temperature-c")
+    value: z.string(),        // The raw key from sensor data (e.g., "temperature_c")
     visible: z.boolean(),     // Whether to display this value
 });
 
