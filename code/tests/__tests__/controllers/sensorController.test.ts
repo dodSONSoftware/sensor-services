@@ -368,6 +368,8 @@ describe("sensor controller integration (error paths, already-running)", () => {
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
       expect(network.publish_mqtt_message).toHaveBeenCalledTimes(1);
+      // A command that completed within the cap reports a complete result set.
+      expect(res.headers["x-command-truncated"]).toBe("false");
     });
   });
 
@@ -1030,6 +1032,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
       const res = {
         status: jest.fn().mockReturnThis(),
         contentType: jest.fn().mockReturnThis(),
+        setHeader: jest.fn().mockReturnThis(),
         send: jest.fn(),
       };
 
@@ -1048,6 +1051,9 @@ describe("sensor controller integration (error paths, already-running)", () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.send).toHaveBeenCalledWith([{ source: "test", payload: {} }]);
+      // A cap-hit response must be distinguishable from a complete one: the
+      // partial result set is flagged in the X-Command-Truncated header.
+      expect(res.setHeader).toHaveBeenCalledWith("X-Command-Truncated", "true");
       expect(mockCommandControl.deinitialize).toHaveBeenCalled();
     }, 15000);
 
@@ -1081,6 +1087,7 @@ describe("sensor controller integration (error paths, already-running)", () => {
       const resMock = () => ({
         status: jest.fn().mockReturnThis(),
         contentType: jest.fn().mockReturnThis(),
+        setHeader: jest.fn().mockReturnThis(),
         send: jest.fn(),
       });
 
@@ -1124,6 +1131,8 @@ describe("sensor controller integration (error paths, already-running)", () => {
             "sensorController.ts/mqtt_command_wait_for_command_completion",
             "Command timed out after 10000ms hard cap"
           );
+          // And the caller can see it: the capped result set is flagged.
+          expect(res.setHeader).toHaveBeenCalledWith("X-Command-Truncated", "true");
         } finally {
           setLogger(savedLogger);
         }
@@ -1176,6 +1185,10 @@ describe("sensor controller integration (error paths, already-running)", () => {
           // A routine queue wait that reached the cap must not raise an
           // error-level alert.
           expect(mockLogger.write_error).not.toHaveBeenCalled();
+          // ...and must not flag THIS response: the waiter's cap hit only
+          // delays the claim; its own command completed within the cap, so
+          // its result set is complete.
+          expect(res.setHeader).toHaveBeenCalledWith("X-Command-Truncated", "false");
           // The waiter's cap hit is visible at debug level, naming the command.
           expect(mockLogger.write_debug).toHaveBeenCalledWith(
             "sensorController.ts/mqtt_command_wait_for_command_completion",

@@ -172,6 +172,12 @@ export function enrichResultsWithMetadata(
  * Wait for the in-flight command to complete — or, as a last resort, for the
  * hard safety cap to trip (see __max_wait_ms).
  *
+ * Returns whether the hard cap won the race: `true` means the command never
+ * went quiet within the cap, so the results collected up to that point may be
+ * incomplete (the HTTP caller surfaces that via the X-Command-Truncated
+ * response header); `false` means the command completed (or was deinitialized)
+ * in time.
+ *
  * `queue_waiter_command` names the command whose slot acquisition is being
  * waited on; pass it only from mqtt_command_acquire_slot (a queue waiter).
  * A waiter hitting the cap is routine on a busy network — it simply loops and
@@ -180,7 +186,7 @@ export function enrichResultsWithMetadata(
  * omits it: its command genuinely did not complete within the cap, and that
  * stays at error level.
  */
-async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl, queue_waiter_command?: string) {
+async function mqtt_command_wait_for_command_completion(dude: IMqttCommandControl, queue_waiter_command?: string): Promise<boolean> {
     // Event-based wait: resolves when no more responses arrive within the timeout
     // window, or when deinitialize() is called. Eliminates the 1-second polling loop.
     //
@@ -198,8 +204,13 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
     // Uses AbortController so the setTimeout is cancelled when the race resolves.
     // (The caller releases the slot after the wait resolves — see the note above.)
     const controller = new AbortController();
+    // Set only by the cap's timer callback, before the race resolves: if the
+    // callback ran, the cap genuinely won the race (a completion that settled
+    // first would have cleared the timer via abort() and never run it).
+    let hit_hard_cap = false;
     const hard_timeout = new Promise<void>((resolve) => {
         const tid = setTimeout(() => {
+            hit_hard_cap = true;
             if (queue_waiter_command === undefined) {
                 // Active command: a real fault — its command did not complete
                 // within the cap.
@@ -222,6 +233,7 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
 
     await Promise.race([completion, hard_timeout]);
     controller.abort();
+    return hit_hard_cap;
 }
 
 /**
@@ -229,16 +241,17 @@ async function mqtt_command_wait_for_command_completion(dude: IMqttCommandContro
  * Caller must hold the slot (see mqtt_command_acquire_slot); this function
  * releases it via deinitialize() once the wait resolves.
  *
- * Returns a snapshot of the results: once the slot is released, a waiting
- * caller can immediately start its own command, whose initialize() REASSIGNS
- * dude.results — the array captured here stays intact.
+ * Returns a snapshot of the results plus whether this command's own wait was
+ * cut short by the hard cap: once the slot is released, a waiting caller can
+ * immediately start its own command, whose initialize() REASSIGNS dude.results
+ * — the array captured here stays intact.
  */
 async function mqtt_command_start_and_wait(
     dude: IMqttCommandControl,
     mqtt_request: Record<string, unknown>,
     network: MqttNetworking,
     command: string
-): Promise<MqttCommandResult[]> {
+): Promise<{ results: MqttCommandResult[]; hit_hard_cap: boolean }> {
     // start-it (initialize() clears last_sent_at — set it afterwards)
     await mqtt_command_start(dude, mqtt_request, network);
 
@@ -248,8 +261,11 @@ async function mqtt_command_start_and_wait(
     // log-it
     _log().write_debug("sensorController.ts/mqtt_command_start_and_wait", `${command}: Started...`);
 
-    // wait-for-it
-    await mqtt_command_wait_for_command_completion(dude);
+    // wait-for-it — the flag records whether THIS command's own wait hit the
+    // hard cap (its results may then be incomplete). Queue-waiter cap hits
+    // never flow in here: the acquire loop retries them and they belong to a
+    // wait that never published a command.
+    const hit_hard_cap = await mqtt_command_wait_for_command_completion(dude);
 
     // Release the slot. Only the ACTIVE command releases it — a waiting caller
     // (mqtt_command_acquire_slot) must never deinitialize, because it would
@@ -258,7 +274,7 @@ async function mqtt_command_start_and_wait(
     // synchronously right after the release, before any waiter can claim the
     // now-free slot and reassign dude.results via initialize().
     dude.deinitialize();
-    return dude.results;
+    return { results: dude.results, hit_hard_cap };
 }
 
 /**
@@ -288,11 +304,13 @@ async function mqtt_command_acquire_slot(dude: IMqttCommandControl, command: str
 /**
  * Outcome of a command round-trip: the control that ran it plus a snapshot
  * of its results (safe to read after the slot is released — see
- * mqtt_command_start_and_wait).
+ * mqtt_command_start_and_wait). `hit_hard_cap` is true when the command's own
+ * wait was cut short by the hard cap, so `results` may be incomplete.
  */
 export interface MqttCommandOutcome {
     dude: IMqttCommandControl;
     results: MqttCommandResult[];
+    hit_hard_cap: boolean;
 }
 
 export async function mqtt_command_get_messages(network: MqttNetworking, target: string, command: string, commandId?: string): Promise<MqttCommandOutcome> {
@@ -330,24 +348,31 @@ export async function mqtt_command_get_messages(network: MqttNetworking, target:
 
     // create mqtt request and run our own command
     const mqtt_request = create_mqtt_command_message(target, command, null, cmdId);
-    const results = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
+    const { results, hit_hard_cap } = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
 
     // log-it
     _log().write_debug("sensorController.ts/mqtt_command_get_messages", `${command}...Completed`, start_date);
 
     // ----
-    return { dude, results };
+    return { dude, results, hit_hard_cap };
 }
 
 async function get_it(_req: express.Request, res: express.Response, network: MqttNetworking, target: string, command: string, commandId?: string) {
     try {
         // mqtt_command_get_messages throws on unknown command types — it never
         // returns null, so there is nothing extra to handle here.
-        const { dude, results } = await mqtt_command_get_messages(network, target, command, commandId);
+        const { dude, results, hit_hard_cap } = await mqtt_command_get_messages(network, target, command, commandId);
 
         // send response
         res.status(OK);
         res.contentType(Json);
+
+        // Tell the caller whether the result set is complete. When the active
+        // command's wait hit the 10s hard cap, `results` is only what arrived
+        // in time — the response looks identical to a complete one otherwise,
+        // so the header carries the distinction (INVARIANTS #8 covers only the
+        // log severity, not the response).
+        res.setHeader("X-Command-Truncated", String(hit_hard_cap));
 
         // Enrich results with metadata if commandId is provided
         if (commandId && command === "reboot") {
@@ -406,11 +431,13 @@ async function post_it(_req: express.Request, res: express.Response, network: Mq
 
         // create mqtt request
         const mqtt_request = create_mqtt_command_message(target, command, payload, commandId);
-        const results = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
+        const { results, hit_hard_cap } = await mqtt_command_start_and_wait(dude, mqtt_request, network, command);
 
-        // send response
+        // send response — X-Command-Truncated carries the same cap-hit
+        // distinction as in get_it (see the comment there)
         res.status(OK);
         res.contentType(Json);
+        res.setHeader("X-Command-Truncated", String(hit_hard_cap));
         res.send(results);
         dude.clear_results();
 

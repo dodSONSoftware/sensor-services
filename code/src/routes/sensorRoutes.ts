@@ -23,7 +23,7 @@ export const __routes: string[] = [
 ];
 
 export const __routesHelp: Record<string, unknown> = {
-    "description": "Apis that gather information about and control over the sensors in the sensor net.",
+    "description": "Apis that gather information about and control over the sensors in the sensor net. Every 200 command response carries an X-Command-Truncated header: true when the 10-second hard cap cut the wait short (the result array may be partial), false when the command completed in time.",
     "commands": [
         {
             "route": "/sensors/get-details",
@@ -82,6 +82,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: All information for all of the sensors
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
@@ -122,6 +128,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Detailed information for the specified sensor
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
@@ -158,6 +170,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Reboot command results for all sensors
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
@@ -208,6 +226,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Reboot command result for the specified sensor
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
@@ -252,6 +276,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Configuration data from all sensors
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
@@ -293,6 +323,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Configuration data from the specified sensor
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
@@ -341,6 +377,12 @@ export class CreateSensorRoutes extends RoutesCreatorBase {
          *     responses:
          *       200:
          *         description: Configuration write result
+         *         headers:
+         *           X-Command-Truncated:
+         *             description: Whether the command's wait was cut short by the 10-second hard cap before all sensor responses arrived. "true" — the result array may be partial (only what arrived within the cap); "false" — the command completed in time.
+         *             schema:
+         *               type: string
+         *               enum: [ "true", "false" ]
          *         content:
          *           application/json:
          *             schema:
