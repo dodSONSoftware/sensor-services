@@ -286,6 +286,30 @@ describe("patchSettings() serialization", () => {
         expect(persisted["time_range_hours"]).toBe(72);
     });
 
+    it("logs the persistence failure through the logger, not console", async () => {
+        const store = freshStore();
+        await store.init(config);
+
+        // freshStore() calls jest.resetModules(), so the fresh store module
+        // binds to a FRESH common/global instance — the fake logger must be
+        // injected through that instance, not the test file's own import.
+        const writeWarn = jest.fn();
+        const consoleWarn = jest.spyOn(console, "warn").mockImplementation(() => { });
+        require("../../../src/common/global").setLogger({ write_warn: writeWarn } as any);
+        try {
+            mockInsertError = new Error("db connection lost");
+            await expect(store.patchSettings({ theme: "dark" })).rejects.toThrow("db connection lost");
+
+            expect(writeWarn).toHaveBeenCalledWith(
+                "settingsStore.ts/doPatchSettings",
+                expect.stringContaining("Failed to persist settings")
+            );
+            expect(consoleWarn).not.toHaveBeenCalled();
+        } finally {
+            jest.restoreAllMocks();
+        }
+    });
+
     it("should let a following patch proceed after a persistence failure (regression)", async () => {
         const store = freshStore();
         await store.init(config);

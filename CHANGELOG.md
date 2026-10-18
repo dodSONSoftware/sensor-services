@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.17.6] — Onyx Falcon (2026-10-18)
+
+- Fixed the settings-patch warnings on the request path (`PATCH /ui/settings-update` → `settingsStore.doPatchSettings`) to route through the central logger instead of raw `console.warn`. The two warnings — update applied in memory only (no active pool) and persistence failure (changes discarded) — bypassed all three logging guarantees: they never reached the Loki transport, never passed the central two-tier secret redaction seam (a raw `pg` driver error can embed connection-string details in its message), and carried no request ID. They now emit through `logger()?.write_warn` with the same null-safe convention as every other request-path call site — deliberately no console fallback, which would recreate the bypass. The six startup-path `console.*` sites in `init()` are untouched (bootstrap context, explicitly tolerated). Response behavior is unchanged (500 body, `X-Settings-Persisted` header). Tests pin both paths: the warning goes to the logger and never to `console.warn`, including the no-logger-configured case.
+
 ## [4.17.5] — Onyx Falcon (2026-10-18)
 
 - Added regression coverage pinning the hand-maintained `GET /endpoints` discovery list to the union of all seven modules' declared `__routes` arrays — set equality in both drift directions (a new route missing from the list, and a stale list entry with no backing route) plus a duplicate-entry check. The other two route-metadata surfaces (`__routes` ↔ `__routesHelp` per module, and registered-vs-declared on the live router) were already covered by the P3-4 drift tests and the startup `assertRoutesMatchDeclared` assertion; `/endpoints` was the one surface where adding a route would silently serve stale endpoint documentation. Test-only change: no production code touched.

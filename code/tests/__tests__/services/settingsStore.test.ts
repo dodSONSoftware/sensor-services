@@ -4,6 +4,7 @@
  */
 
 import { appSettingsSchema, appSettingsUpdateSchema, DEFAULT_SETTINGS, type TelemetryItem } from "../../../src/schemas/settings";
+import { logger, setLogger } from "../../../src/common/global";
 import { getSettings, isSettingKeyValid, patchSettings, validateSettingsFromDb } from "../../../src/services/settingsStore";
 
 /**
@@ -224,5 +225,44 @@ describe("settings key agreement between PATCH boundary and store", () => {
 
         expect(reloaded.mqtt_topic_command).toBe("sensors/cmd");
         expect(appSettingsSchema.safeParse(reloaded).success).toBe(true);
+    });
+});
+
+/**
+ * Request-path logging: doPatchSettings runs on the PATCH /ui/settings-update
+ * request path (logger fully initialized by then), so its warnings must go
+ * through the logger — never raw console.warn — to reach the Loki transport,
+ * the central redaction seam, and the [reqId] tag.
+ */
+describe("doPatchSettings request-path logging", () => {
+    const writeWarn = jest.fn();
+    const savedLogger = logger();
+
+    beforeEach(() => {
+        jest.spyOn(console, "warn").mockImplementation(() => { });
+        setLogger({ write_warn: writeWarn } as any);
+    });
+
+    afterEach(() => {
+        setLogger(savedLogger);
+        writeWarn.mockReset();
+        jest.restoreAllMocks();
+    });
+
+    it("warns through the logger, never via console, when no pool is available", async () => {
+        await patchSettings({ mqtt_broker_address: "10.0.0.5" });
+
+        expect(writeWarn).toHaveBeenCalledWith(
+            "settingsStore.ts/doPatchSettings",
+            expect.stringContaining("persistence unavailable")
+        );
+        expect(console.warn).not.toHaveBeenCalled();
+    });
+
+    it("does not fall back to console when no logger is configured", async () => {
+        setLogger(undefined as any);
+
+        await expect(patchSettings({ mqtt_broker_address: "10.0.0.5" })).resolves.toBeDefined();
+        expect(console.warn).not.toHaveBeenCalled();
     });
 });

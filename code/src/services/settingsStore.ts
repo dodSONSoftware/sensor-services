@@ -5,6 +5,7 @@
 
 import { Pool, type PoolClient } from "pg";
 import type { z } from "zod";
+import { logger } from "../common/global";
 import type { configSchema } from "../schemas/config";
 import { appSettingsSchema, DEFAULT_SETTINGS, SETTINGS_SCHEMA, type AppSettings } from "../schemas/settings";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
@@ -483,8 +484,10 @@ async function doPatchSettings(updates: Record<string, unknown>): Promise<AppSet
     if (!pool) {
         // No pool available - store in memory only
         cache = newCache as AppSettings;
-        // eslint-disable-next-line no-console
-        console.warn("[settingsStore] Settings persistence unavailable (no active pool) — update applied in memory only (non-durable, X-Settings-Persisted: false).");
+        logger()?.write_warn(
+            "settingsStore.ts/doPatchSettings",
+            "Settings persistence unavailable (no active pool) — update applied in memory only (non-durable, X-Settings-Persisted: false)."
+        );
         return structuredClone(newCache as AppSettings);
     }
 
@@ -503,8 +506,13 @@ async function doPatchSettings(updates: Record<string, unknown>): Promise<AppSet
         cache = newCache as AppSettings;
     } catch (err: unknown) {
         // Persistence failed — log warning but keep original cache unchanged.
-        // eslint-disable-next-line no-console
-        console.warn(`[settingsStore] Failed to persist settings: ${(ensureError(err)).message}. Changes discarded.`);
+        // Routed through the logger (not console) so the raw pg error passes
+        // the central redaction seam: connection failures can embed
+        // connection-string details in the driver message.
+        logger()?.write_warn(
+            "settingsStore.ts/doPatchSettings",
+            `Failed to persist settings: ${(ensureError(err)).message}. Changes discarded.`
+        );
         throw err;
     } finally {
         if (client) {
