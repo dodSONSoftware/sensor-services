@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.17.5] — Onyx Falcon (2026-10-18)
+
+- Added regression coverage pinning the hand-maintained `GET /endpoints` discovery list to the union of all seven modules' declared `__routes` arrays — set equality in both drift directions (a new route missing from the list, and a stale list entry with no backing route) plus a duplicate-entry check. The other two route-metadata surfaces (`__routes` ↔ `__routesHelp` per module, and registered-vs-declared on the live router) were already covered by the P3-4 drift tests and the startup `assertRoutesMatchDeclared` assertion; `/endpoints` was the one surface where adding a route would silently serve stale endpoint documentation. Test-only change: no production code touched.
+
 ## [4.17.4] — Onyx Falcon (2026-10-18)
 
 - Extracted the 10-second HTTP command hard cap into a single shared constant (`HTTP_COMMAND_HARD_CAP_MS` in `code/src/common/constants.ts`), now referenced by both the `command-silence-timeout-ms` config bound (Zod `.max`) and the sensor command wait (`__max_wait_ms` in `sensorController.ts`). The two inlined `10_000` literals that had to be kept in sync by comment can no longer drift. Pure refactor: behavior and the startup validation message are byte-identical, and the schema boundary tests now pin to the constant instead of a third copy of the number.

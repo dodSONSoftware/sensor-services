@@ -4,6 +4,8 @@
  */
 
 import express from "express";
+import type { Request, Response } from "express";
+import { getEndpoints } from "../../../src/controllers/generalController";
 import * as generalRoutes from "../../../src/routes/generalRoutes";
 import * as sensorRoutes from "../../../src/routes/sensorRoutes";
 import * as pingerRoutes from "../../../src/routes/pingerRoutes";
@@ -14,6 +16,7 @@ import * as restartRoutes from "../../../src/routes/restartRoutes";
 import { CreateRouteNotFound } from "../../../src/routes/routeNotFound";
 import { registeredRoutePaths, assertRoutesMatchDeclared } from "../../../src/routes/routeDrift";
 import { createMockMqttNetworking } from "../../mocks/mqtt";
+import { createMockReq, createMockRes } from "../../mocks/express";
 
 /**
  * P3-4 regression coverage.
@@ -112,6 +115,25 @@ describe("registered routes match declared metadata (P3-4)", () => {
     it("registered routes include /sensors/ippinger-analyze (served by pingerRoutes)", () => {
         const app = buildFullApp();
         expect(registeredRoutePaths(app)).toContain("/sensors/ippinger-analyze");
+    });
+});
+
+describe("getEndpoints metadata matches declared routes (P3-4)", () => {
+    it("the routes listed by getEndpoints equal the union of all declared __routes", () => {
+        const { res, sendCalls } = createMockRes();
+        getEndpoints(createMockReq() as Request, res as Response);
+        const listed = (sendCalls[0] as { endpoints: { route: string }[] }).endpoints.map((e) => e.route);
+
+        // The hand-maintained list must not contain a duplicate route (a dupe
+        // would survive a naive sorted comparison).
+        expect(new Set(listed).size).toBe(listed.length);
+
+        // Set equality — covers BOTH drift directions: an endpoint added to a
+        // module's __routes but missing from getEndpoints(), and a stale
+        // entry in getEndpoints() with no backing route. Only route paths are
+        // compared (verbs live only in the endpoint metadata) and sorted
+        // (the two sources order their entries differently).
+        expect([...listed].sort()).toEqual([...declaredUnion()].sort());
     });
 });
 
