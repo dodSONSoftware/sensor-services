@@ -58,6 +58,15 @@ export class MqttNetworking implements IMqttNetworking {
     private static readonly MQTT_TOPIC_INFO_RESPONSE_V3 = "iot/v3/info-response";
     private static readonly MQTT_TOPIC_LOG_V3 = "iot/v3/log";
 
+    // Maximum inbound PUBLISH payload size (bytes). mqtt.js 5.x imposes no
+    // client-side limit on RECEIVED payloads (the v4 `maxPayload` option is
+    // outbound-only and is silently ignored by v5), and the broker is
+    // unauthenticated — so a forged oversized iot/v3/log payload would
+    // otherwise pass JSON.parse and be stringified (2x memory) straight into
+    // the logger. 64 KiB is ~16x the largest legitimate document (the ~4 KB
+    // captured command responses).
+    private static readonly MAX_INBOUND_PAYLOAD_BYTES: number = 64 * 1024;
+
     // ********
     // ******** CTOR
 
@@ -370,6 +379,24 @@ export class MqttNetworking implements IMqttNetworking {
         payload: Buffer,
         _packet: mqtt.IPublishPacket
     ): void {
+        // Drop oversized payloads before ANY processing (topic check,
+        // JSON.parse, handler dispatch): the broker is unauthenticated, so
+        // oversized blobs can arrive on any topic, and one integer compare
+        // bounds the parse + log-stringify cost of a forged payload. No ack
+        // is needed: subscriptions are QoS 0 (the broker never redelivers),
+        // and in mqtt.js 5.x a QoS 1 PUBACK is emitted after this
+        // synchronous handler regardless — dropping cannot cause a
+        // redelivery loop. Do NOT log the payload content here:
+        // stringifying the very blob being defended against would recreate
+        // the amplification.
+        if (payload.length > MqttNetworking.MAX_INBOUND_PAYLOAD_BYTES) {
+            this.logger.write_warn(
+                this.originator,
+                `<on_message> => Dropping oversized payload on topic '${topic}' (${payload.length} bytes > ${MqttNetworking.MAX_INBOUND_PAYLOAD_BYTES} byte limit)`
+            );
+            return;
+        }
+
         // drop messages on topics this client never subscribed to
         if (!this.tracked_topics().includes(topic)) {
             this.logger.write_warn(

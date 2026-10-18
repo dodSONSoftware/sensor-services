@@ -613,6 +613,101 @@ describe("MqttNetworking", () => {
         });
     });
 
+    // ---- on_message inbound payload size guard (mqtt.js 5.x has no
+    // client-side limit on received payloads, and the broker is
+    // unauthenticated — the guard bounds parse + log-stringify cost)
+
+    describe("on_message inbound payload size guard", () => {
+        const limit = (MqttNetworking as any).MAX_INBOUND_PAYLOAD_BYTES;
+
+        it("drops an oversized payload on a tracked topic without parsing it", async () => {
+            const anyNetworking = networking as any;
+            const handleSpy = jest.spyOn(anyNetworking, "handle_mqtt_message");
+
+            await anyNetworking.on_message(
+                "iot/v3/log",
+                Buffer.alloc(limit + 1, 0x20),
+                {}
+            );
+
+            expect(handleSpy).not.toHaveBeenCalled();
+            expect(logger.write_warn).toHaveBeenCalledWith(
+                "networking",
+                expect.stringContaining("oversized")
+            );
+            // No "Parse ERROR" — proves JSON.parse never ran on the blob
+            expect(logger.write_error).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining("Parse ERROR")
+            );
+            handleSpy.mockRestore();
+        });
+
+        it("drops an oversized payload on an untracked topic (guard precedes the topic check)", async () => {
+            const anyNetworking = networking as any;
+            const handleSpy = jest.spyOn(anyNetworking, "handle_mqtt_message");
+
+            await anyNetworking.on_message(
+                "iot/v3/spoof",
+                Buffer.alloc(limit + 1, 0x20),
+                {}
+            );
+
+            expect(handleSpy).not.toHaveBeenCalled();
+            expect(logger.write_warn).toHaveBeenCalledWith(
+                "networking",
+                expect.stringContaining("oversized")
+            );
+            handleSpy.mockRestore();
+        });
+
+        it("still routes a valid small payload on the subscribed command-response topic", async () => {
+            const anyNetworking = networking as any;
+            const handleSpy = jest.spyOn(anyNetworking, "handle_mqtt_message");
+            const dude = networking.get_cr_dude("get-details")!;
+            dude.initialize(CAPTURED_GET_DETAILS_RESPONSE["payload"]["command_id"]);
+
+            await anyNetworking.on_message(
+                "iot/v3/command-response",
+                Buffer.from(JSON.stringify(CAPTURED_GET_DETAILS_RESPONSE)),
+                {}
+            );
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(handleSpy).toHaveBeenCalled();
+            expect(logger.write_warn).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining("oversized")
+            );
+            expect(dude.results).toHaveLength(1);
+            dude.deinitialize();
+            handleSpy.mockRestore();
+        });
+
+        it("passes a payload of exactly the limit", async () => {
+            const anyNetworking = networking as any;
+            const handleSpy = jest.spyOn(anyNetworking, "handle_mqtt_message");
+            // Valid JSON padded to exactly the limit so the guard's
+            // "> limit" comparison lets it through
+            const padded = JSON.stringify({ pad: "x".repeat(limit - 10) });
+            expect(padded.length).toBeLessThanOrEqual(limit);
+
+            await anyNetworking.on_message(
+                "iot/v3/command-response",
+                Buffer.from(padded),
+                {}
+            );
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(handleSpy).toHaveBeenCalled();
+            expect(logger.write_warn).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining("oversized")
+            );
+            handleSpy.mockRestore();
+        });
+    });
+
     // ---- V3 command-response handling (fixtures from the live capture)
 
     describe("V3 command_response handling", () => {
