@@ -24,6 +24,10 @@ import * as os from "os";
 import * as path from "path";
 import * as yaml from "js-yaml";
 
+/** Source of src/index.ts, for the escalation wiring pins (loaded at module
+ * scope — this is source text, not an import of the app). */
+const INDEX_SRC = fs.readFileSync(path.join(__dirname, "..", "..", "src", "index.ts"), "utf8");
+
 const APP = path.join(__dirname, "..", "..", "dist", "index.js");
 const built = fs.existsSync(APP);
 
@@ -123,6 +127,39 @@ function waitForExit(
         });
     });
 }
+
+// Source pins for the exit-code escalation wiring (INVARIANTS #15).
+//
+// The re-entrancy guard absorbs a second shutdown() call, so the code the
+// process finally exits with must be STATE that later callers can escalate —
+// never the first caller's parameter. A fatal fault landing while a clean
+// stop is in flight (the guard absorbs its shutdown(..., 1) call) must still
+// exit 1, which only works if the handlers' codes flow through
+// escalateExitCode() into the tracked final_exit_code, and the finally block
+// exits THAT rather than the caller's exitCode.
+describe("exit-code escalation wiring (source pin)", () => {
+    it("fatal handlers request code 1 through shutdown(), not a direct process.exit", () => {
+        expect(INDEX_SRC).toContain('shutdown("uncaughtException", 1)');
+        expect(INDEX_SRC).toContain('shutdown("unhandledRejection", 1)');
+    });
+
+    it("shutdown() escalates the tracked code before the re-entrancy guard", () => {
+        // The escalation statement must exist...
+        expect(INDEX_SRC).toContain("final_exit_code = escalateExitCode(final_exit_code, exitCode);");
+        // ...and sit BEFORE the guard inside shutdown(): the first guard
+        // return after the function signature must come after the escalation.
+        const fn = /async function shutdown\(signal: string, exitCode: number = 0\): Promise<void> \{([\s\S]*?)\n    \}/.exec(INDEX_SRC);
+        expect(fn).not.toBeNull();
+        const body = fn![1];
+        expect(body.indexOf("escalateExitCode(")).toBeLessThan(body.indexOf("if (shutting_down)"));
+    });
+
+    it("the shutdown finally block exits the tracked code, never the caller's parameter", () => {
+        expect(INDEX_SRC).toContain("process.exit(final_exit_code)");
+        // The pre-fix shape — exiting the per-caller parameter — is gone.
+        expect(INDEX_SRC).not.toContain("process.exit(exitCode)");
+    });
+});
 
 const describeForBuild = built ? describe : describe.skip;
 

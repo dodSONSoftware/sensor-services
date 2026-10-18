@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { formatFatalError, runGracefulShutdown, type ShutdownResources } from "../../../src/common/shutdown";
+import { escalateExitCode, formatFatalError, runGracefulShutdown, type ShutdownResources } from "../../../src/common/shutdown";
 
 /**
  * Fakes the Logger surface runGracefulShutdown() uses, recording call order.
@@ -99,6 +99,37 @@ describe("runGracefulShutdown (logger close lifecycle)", () => {
         expect(logger.write_error).toHaveBeenCalledTimes(1);
         expect(logger.close).toHaveBeenCalledTimes(1);
         expect(calls).toEqual(["error:Error during graceful shutdown: log transport failure", "close"]);
+    });
+});
+
+/**
+ * Exit-code escalation policy (INVARIANTS #15): the process exits with the
+ * WORST code requested across all shutdown() calls. A fatal fault (1) that
+ * lands while a clean stop (0) is already in flight must still exit 1 — the
+ * clean stop's in-flight sequence owns the process.exit, so its caller's
+ * parameter alone would mask the fault. Monotonic escalation is therefore
+ * required for the clean-first / fatal-second ordering; every other ordering
+ * (fatal-first, duplicate clean stops) is behavior-preserving.
+ */
+describe("escalateExitCode (fatal faults never masked by an in-flight clean stop)", () => {
+    it("clean stop stays clean: escalate(0, 0) === 0", () => {
+        expect(escalateExitCode(0, 0)).toBe(0);
+    });
+
+    it("fatal second (the regression): escalate(0, 1) === 1", () => {
+        // SIGTERM starts a clean stop; an uncaughtException lands inside the
+        // shutdown window. The fault must win even though the clean stop's
+        // sequence owns the exit.
+        expect(escalateExitCode(0, 1)).toBe(1);
+    });
+
+    it("fatal first, clean second: escalate(1, 0) === 1", () => {
+        // A clean stop racing after a fault must not downgrade the exit.
+        expect(escalateExitCode(1, 0)).toBe(1);
+    });
+
+    it("fatal, fatal: escalate(1, 1) === 1", () => {
+        expect(escalateExitCode(1, 1)).toBe(1);
     });
 });
 

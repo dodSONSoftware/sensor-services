@@ -20,7 +20,7 @@ import { assertRoutesMatchDeclared } from "./routes/routeDrift";
 import { aboutDude, createLogger, logger, setConfig } from "./common/global";
 import type { Logger } from "./dodsonlabs/Logger";
 import { createApiMetricsMiddleware } from "./common/metrics";
-import { formatFatalError, HARD_SHUTDOWN_TIMEOUT_MS, runGracefulShutdown } from "./common/shutdown";
+import { escalateExitCode, formatFatalError, HARD_SHUTDOWN_TIMEOUT_MS, runGracefulShutdown } from "./common/shutdown";
 
 // Guard: logger must be initialized before any module-level code uses it.
 // createLogger() is called below; this check catches misconfiguration.
@@ -177,8 +177,10 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
         // operator `docker stop` takes (MQTT disconnect, HTTP drain, logger
         // flush, exit-code ownership). A SIGTERM that lands while a shutdown
         // is already in flight is absorbed by the shutting_down guard below,
-        // so a restart request racing an operator stop cannot double-exit or
-        // mask a fatal exit code.
+        // so a restart request racing an operator stop cannot double-exit.
+        // A LATER fatal request can still raise the exit code: the code the
+        // process exits with is the worst requested so far (see
+        // final_exit_code below), never the first caller's parameter alone.
         const requestRestart = (): void => {
             process.kill(process.pid, "SIGTERM");
         };
@@ -240,10 +242,22 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
     // re-run the sequence (which would duplicate the logger close).
     let shutting_down = false;
 
+    // The exit code the process finally uses: the WORST requested across all
+    // shutdown() calls. A fatal fault (1) that lands while a clean stop (0)
+    // is already in flight must still exit non-zero — the in-flight clean
+    // stop owns the process.exit, so its caller's parameter alone would mask
+    // the fault and hand the supervisor a clean-stop 0 (INVARIANTS #15).
+    // Duplicate clean stops escalate 0 -> 0 and are unchanged.
+    let final_exit_code = 0;
+
     // exitCode: 0 for a clean, operator-requested stop (SIGINT/SIGTERM); 1 for a
     // fatal fault (uncaughtException / unhandledRejection) so a supervisor or
     // Docker can tell a crash from a deliberate stop.
     async function shutdown(signal: string, exitCode: number = 0): Promise<void> {
+        // Escalate BEFORE the guard: a fatal request arriving after a clean
+        // stop has begun is absorbed (must not re-run the sequence) but still
+        // raises the tracked code, which the finally block exits with.
+        final_exit_code = escalateExitCode(final_exit_code, exitCode);
         if (shutting_down) {
             return;
         }
@@ -299,7 +313,11 @@ function validate_config(raw: unknown): z.infer<typeof configSchema> {
             );
         } finally {
             clearTimeout(hardTimeout);
-            process.exit(exitCode);
+            // Exit with the worst code requested since startup, not this
+            // caller's parameter: an uncaughtException that arrived after a
+            // clean stop began is absorbed by the guard above but must not
+            // be masked — this exits 1 (see final_exit_code).
+            process.exit(final_exit_code);
         }
     }
 

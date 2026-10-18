@@ -29,6 +29,21 @@ export interface ShutdownResources {
 export const HARD_SHUTDOWN_TIMEOUT_MS = 15_000;
 
 /**
+ * Escalate a tracked final exit code with a newly requested one.
+ *
+ * The exit code the process ultimately uses is the WORST requested across all
+ * shutdown() calls, not the first caller's parameter: a fatal fault
+ * (code 1) landing while a clean stop (code 0) is already in flight must
+ * still terminate the process non-zero, even though the in-flight clean stop
+ * owns the exit. Monotonic escalation is behavior-preserving for every
+ * ordering except clean-first / fatal-second, which changes from a masked 0 to
+ * the correct 1 (INVARIANTS #15).
+ */
+export function escalateExitCode(current: number, requested: number): number {
+    return Math.max(current, requested);
+}
+
+/**
  * Normalize an arbitrary fatal-error value into a diagnostic log message
  * (Optional-1). The values reaching the `uncaughtException` /
  * `unhandledRejection` handlers are not guaranteed to be Error instances, so
