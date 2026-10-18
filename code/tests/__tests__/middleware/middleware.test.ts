@@ -10,6 +10,7 @@ import type { z } from "zod";
 
 import { CreateMiddleware } from "../../../src/middleware/middleware";
 import { CreateGeneralRoutes } from "../../../src/routes/generalRoutes";
+import { CreateRestartRoutes } from "../../../src/routes/restartRoutes";
 import { validateConfig, type configSchema } from "../../../src/schemas/config";
 import type { AppRequest } from "../../../src/common/app-request";
 import { apiMetricsRegistry, createApiMetricsMiddleware } from "../../../src/common/metrics";
@@ -298,6 +299,72 @@ describe("CreateMiddleware — rate-limit exemption for /health and /metrics (P2
         const metrics = await request(app).get("/metrics/"); // exempt -> 200
         expect(metrics.status).toBe(200);
         expect(metrics.text).toContain("http_requests_total");
+    });
+});
+
+describe("CreateMiddleware — JSON parser exclusion for /restart-service", () => {
+    // The restart endpoint's contract is that the request stream is NEVER
+    // consumed, so a malformed or truncated body must not 400 in the parser
+    // before the token gate. Regression: the parser was told to skip this
+    // path via a `skip` option — which body-parser (the pinned 1.20, and no
+    // 1.x or 2.x release) silently ignores — so malformed bodies 400'd in
+    // every token state. This suite installs the real CreateMiddleware plus
+    // the real restart routes, so it exercises the full production pipeline
+    // (the route-level suite builds its app without the middleware).
+    //
+    // Both routings are covered: Express's default (non-strict) routing also
+    // serves /restart-service/, and the parser sees req.path verbatim
+    // (trailing slash intact) — the same nuance the rate-limit exemption
+    // pins above.
+
+    const TOKEN = "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"; // redeclared, not shared
+    const DISABLED_503_BODY = '{"success":false,"message":"Restart endpoint is disabled."}';
+    const MALFORMED_BODY = '{"broken": '; // truncated JSON
+
+    function buildRestartApp(rawToken?: string, hook?: () => void): express.Application {
+        const app = express();
+        const middleware = new CreateMiddleware(app, config);
+        middleware.register();
+        const restart = new CreateRestartRoutes(app, rawToken, hook ?? jest.fn(), 50);
+        restart.register();
+        return app;
+    }
+
+    function malformedPost(app: express.Application, path: string, auth?: string) {
+        const req = request(app).post(path).set("Content-Type", "application/json").send(MALFORMED_BODY);
+        if (auth !== undefined) {
+            req.set("Authorization", auth);
+        }
+        return req;
+    }
+
+    it("disabled: a malformed body answers the byte-identical 503, not a parser 400 (both routings)", async () => {
+        for (const path of ["/restart-service", "/restart-service/"]) {
+            const res = await malformedPost(buildRestartApp(), path);
+            expect(res.status).toBe(503);
+            expect(res.text).toBe(DISABLED_503_BODY);
+        }
+    });
+
+    it("enabled, no Authorization: a malformed body answers 401, not a parser 400 (both routings)", async () => {
+        for (const path of ["/restart-service", "/restart-service/"]) {
+            const res = await malformedPost(buildRestartApp(TOKEN), path);
+            expect(res.status).toBe(401);
+            expect(res.headers["www-authenticate"]).toBe("Bearer");
+        }
+    });
+
+    it("enabled, valid token: a malformed body is ignored — 202, hook fires once (both routings)", async () => {
+        for (const path of ["/restart-service", "/restart-service/"]) {
+            const hook = jest.fn();
+            const res = await malformedPost(buildRestartApp(TOKEN, hook), path, `Bearer ${TOKEN}`);
+            expect(res.status).toBe(202);
+            expect(res.text).toBe('{"success":true,"status":"restart_scheduled","message":"Service restart requested"}');
+            // Fresh app per routing (the single-flight guard is per-app);
+            // yield for the finish -> setImmediate hop, as the route suite does.
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            expect(hook).toHaveBeenCalledTimes(1);
+        }
     });
 });
 

@@ -106,19 +106,37 @@ export class CreateMiddleware extends RoutesCreatorBase {
 
         // 5. add JSON (configurable body limit, default 1mb) — after rate
         //    limiting, so a 429'd request's body is never parsed.
-        //    /restart-service is skipped: its contract is that the request
-        //    stream is NEVER consumed (the body is irrelevant), so a malformed
-        //    or truncated body must not 400 in the parser before the token
-        //    gate, and a mid-body client disconnect must not emit on an
-        //    unread stream. The middleware ordering above is unchanged.
+        //
+        //    /restart-service is never parsed: its contract is that the
+        //    request stream is NEVER consumed (the body is irrelevant), so a
+        //    malformed or truncated body must not 400 in the parser before
+        //    the token gate, and a mid-body client disconnect must not emit
+        //    on an unread stream. The parser is invoked CONDITIONALLY below
+        //    rather than via a `skip` option — the pinned body-parser (1.20;
+        //    no 1.x or 2.x release) has no skip option, and it ignores
+        //    unknown options silently, so a `skip:` callback would never
+        //    fire and a malformed body would 400 in every token state.
+        //
+        //    The exclusion must cover every routing of the path, not just
+        //    the bare form: Express's default (non-strict) routing also
+        //    serves /restart-service/, and this wrapper sees req.path
+        //    verbatim (trailing slash intact). The `/?` anchor matches the
+        //    path with an optional single trailing slash and nothing else
+        //    (not /restart-servicex or /restart-service/…), so the
+        //    exclusion cannot leak to other routes — the same anchoring as
+        //    the rate-limit exemption above.
+        //
+        //    The middleware ordering above is unchanged, and every other
+        //    request runs the exact same parser as before.
         const bodyLimit = this.config["express-body-limit"] ?? "1mb";
-        // The runtime body-parser (1.20) supports skip(), but the pinned
-        // transitive @types/body-parser (1.19) does not declare it — hence the
-        // cast. The declared options (limit) are unchanged.
-        this.app.use(express.json({
-            limit: bodyLimit,
-            skip: (req: express.Request) => req.path === "/restart-service",
-        } as unknown as Parameters<typeof express.json>[0]));
+        const jsonParser = express.json({ limit: bodyLimit });
+        this.app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+            if (/^\/restart-service\/?$/.test(req.path)) {
+                next();
+                return;
+            }
+            jsonParser(req, res, next);
+        });
 
         // 6. add request logger (request ID is already in AsyncLocalStorage)
         this.app.use(this._loggerMiddleware.bind(this));
