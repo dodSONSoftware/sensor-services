@@ -5,6 +5,7 @@
 
 import type * as express from "express";
 import { BadRequest, InternalServerError, Json, NotImplemented, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
+import { HTTP_COMMAND_HARD_CAP_MS } from "../common/constants";
 import { logger } from "../common/global";
 import type { MqttNetworking } from "../dodsonlabs/MqttNetworking";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
@@ -138,8 +139,10 @@ async function mqtt_command_start(dude: IMqttCommandControl, mqtt_request: Recor
 
 // Maximum time to wait for a single MQTT command to complete (10 seconds).
 // This is a hard safety cap — if restart_clock() keeps pushing the timeout,
-// the wait must eventually exit to avoid hanging the caller forever.
-const __max_wait_ms = 10_000;
+// the wait must eventually exit to avoid hanging the caller forever. The
+// value comes from the shared constant also used by the config schema's
+// command-silence-timeout-ms max, so the two can never drift.
+const __max_wait_ms = HTTP_COMMAND_HARD_CAP_MS;
 
 /**
  * Enriches command results with metadata about the command execution.

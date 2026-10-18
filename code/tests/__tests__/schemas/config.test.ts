@@ -4,6 +4,7 @@
  */
 
 import { redactConfig, resolveIppingerFetchTimeoutMs, validateConfig } from "../../../src/schemas/config";
+import { HTTP_COMMAND_HARD_CAP_MS } from "../../../src/common/constants";
 import { SECRET_MASK } from "../../../src/dodsonlabs/SystemFunctions";
 
 describe("configSchema", () => {
@@ -179,19 +180,19 @@ describe("configSchema", () => {
   // 10000ms can never be honored. Validation must reject it at startup instead
   // of silently accepting an ineffective value.
   it("should accept command-silence-timeout-ms just below the cap (9999)", () => {
-    const config = { ...baseConfig, "command-silence-timeout-ms": 9_999 };
+    const config = { ...baseConfig, "command-silence-timeout-ms": HTTP_COMMAND_HARD_CAP_MS - 1 };
     const result = validateConfig(config);
-    expect(result["command-silence-timeout-ms"]).toBe(9_999);
+    expect(result["command-silence-timeout-ms"]).toBe(HTTP_COMMAND_HARD_CAP_MS - 1);
   });
 
   it("should accept command-silence-timeout-ms at the cap boundary (10000)", () => {
-    const config = { ...baseConfig, "command-silence-timeout-ms": 10_000 };
+    const config = { ...baseConfig, "command-silence-timeout-ms": HTTP_COMMAND_HARD_CAP_MS };
     const result = validateConfig(config);
-    expect(result["command-silence-timeout-ms"]).toBe(10_000);
+    expect(result["command-silence-timeout-ms"]).toBe(HTTP_COMMAND_HARD_CAP_MS);
   });
 
   it("should reject command-silence-timeout-ms just above the cap (10001)", () => {
-    const config = { ...baseConfig, "command-silence-timeout-ms": 10_001 };
+    const config = { ...baseConfig, "command-silence-timeout-ms": HTTP_COMMAND_HARD_CAP_MS + 1 };
     expect(() => validateConfig(config)).toThrow("command-silence-timeout-ms must not exceed 10000");
   });
 

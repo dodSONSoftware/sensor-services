@@ -2,6 +2,10 @@
 
 All notable changes to the sensor-services project are documented here. Versions are listed newest first.
 
+## [4.17.4] — Onyx Falcon (2026-10-18)
+
+- Extracted the 10-second HTTP command hard cap into a single shared constant (`HTTP_COMMAND_HARD_CAP_MS` in `code/src/common/constants.ts`), now referenced by both the `command-silence-timeout-ms` config bound (Zod `.max`) and the sensor command wait (`__max_wait_ms` in `sensorController.ts`). The two inlined `10_000` literals that had to be kept in sync by comment can no longer drift. Pure refactor: behavior and the startup validation message are byte-identical, and the schema boundary tests now pin to the constant instead of a third copy of the number.
+
 ## [4.17.3] — Onyx Falcon (2026-10-17)
 
 - Fixed `POST /restart-service` so a malformed or truncated request body no longer 400s in the JSON parser before the token gate. The endpoint's contract is that the request stream is never consumed (the body is irrelevant), but the parser was told to skip the path via body-parser's `skip` option — which the pinned body-parser (1.20, and no 1.x or 2.x release) silently ignores — so a bad body 400'd in every token state, leaking which half a deployment had and breaking the byte-identical fail-closed responses. The parser now runs behind a thin wrapper that invokes it conditionally, and the exclusion covers every routing of the path, not just the bare form: Express's default (non-strict) routing also serves `/restart-service/`, and the wrapper sees `req.path` verbatim with the trailing slash intact — anchored with the same `/?` pattern as the rate-limit exemption above, so it cannot leak to `/restart-servicex` or deeper paths. Every other request runs the exact same parser as before. Regression tests install the real middleware plus the real restart routes (the full production pipeline, which the route-level suite skips) and pin, for both routings: disabled → the byte-identical 503, no Authorization → 401 + `WWW-Authenticate: Bearer`, valid token → 202 with the hook firing exactly once, all from a malformed body.
