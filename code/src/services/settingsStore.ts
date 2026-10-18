@@ -524,11 +524,69 @@ async function doPatchSettings(updates: Record<string, unknown>): Promise<AppSet
 }
 
 /**
+ * Bound (ms) for awaiting `pool.end()` during shutdown.
+ *
+ * pg-pool's `end()` only resolves once every checked-out client has been
+ * released, so an in-flight settings query (up to the pool's
+ * `statement_timeout`, 30s above) can hold it far past this step's budget.
+ * The 15s hard net (HARD_SHUTDOWN_TIMEOUT_MS in common/shutdown.ts) is shared
+ * by the whole sequence: the HTTP drain grace (~4s) plus the MQTT close (5s)
+ * leave at most ~6s for this step, so this bound keeps the worst-case total
+ * (4 + 5 + 4 = 13s) under the net even when every step takes its full bound —
+ * otherwise a slow or unreachable database at shutdown turns a clean SIGTERM
+ * into exit 1 (INVARIANTS #15).
+ */
+const SHUTDOWN_POOL_END_TIMEOUT_MS = 4_000;
+
+/**
  * Close the PostgreSQL connection pool.
+ *
+ * The `Pool.end()` await is bounded (see SHUTDOWN_POOL_END_TIMEOUT_MS): if a
+ * client is still checked out on an in-flight query at shutdown, `end()` will
+ * not resolve until that query finishes (up to `statement_timeout`, 30s). In
+ * that case we log a warning and abandon the pending close — pg-pool has no
+ * forced-terminate API, and the process exits immediately after this step
+ * (index.ts finally block), so the OS reclaims the abandoned socket.
  */
 export async function shutdown(): Promise<void> {
-    if (pool) {
-        await pool.end();
-        pool = null;
+    if (!pool) {
+        return;
     }
+    const activePool = pool;
+
+    // Track settlement on the end() promise itself: when the timer below wins
+    // the race, end() may settle (or reject) LATER, once the stuck client is
+    // released — possibly after this function has returned and the logger is
+    // closed. The handlers keep that late outcome from ever surfacing as an
+    // unhandled promise rejection; there is nothing actionable to do with it
+    // either way (the process is exiting).
+    let endSettled = false;
+    let endError: unknown = null;
+    const end = activePool.end().then(
+        () => { endSettled = true; },
+        (err: unknown) => { endSettled = true; endError = err; }
+    );
+    const bound = new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, SHUTDOWN_POOL_END_TIMEOUT_MS);
+        timer.unref();
+    });
+    await Promise.race([end, bound]);
+
+    if (endError !== null) {
+        // end() rejected outright (defensive — pg-pool's end() does not reject
+        // for a live database): log via the logger, never console, consistent
+        // with the rest of the request path.
+        logger()?.write_warn(
+            "settingsStore.ts/shutdown",
+            `Failed to close PostgreSQL pool: ${(ensureError(endError)).message}`
+        );
+    } else if (!endSettled) {
+        logger()?.write_warn(
+            "settingsStore.ts/shutdown",
+            "PostgreSQL pool end() did not settle within " + SHUTDOWN_POOL_END_TIMEOUT_MS + "ms " +
+            "(a client is still checked out, likely an in-flight query on a slow or unreachable database). " +
+            "Abandoning the close; the process exits immediately."
+        );
+    }
+    pool = null;
 }

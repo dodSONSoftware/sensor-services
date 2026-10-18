@@ -32,6 +32,14 @@ let mockConnectError: unknown = null;
 let mockQueryErrorFor: string | null = null;
 let mockQueryError: unknown = null;
 
+/**
+ * When set to a database name, end() on that pool NEVER resolves — it
+ * simulates a client still checked out on an in-flight query (pg-pool's
+ * end() waits for every checked-out client to be released; a hung query
+ * holds it for up to statement_timeout).
+ */
+let mockEndHangFor: string | null = null;
+
 /** Database name of every pool whose end() was called, in call order. */
 const mockPoolEndCalls: string[] = [];
 
@@ -91,6 +99,9 @@ jest.mock("pg", () => {
 
         async end(): Promise<void> {
             mockPoolEndCalls.push(this.poolConfig.database ?? "?");
+            if (mockEndHangFor !== null && this.poolConfig.database === mockEndHangFor) {
+                return new Promise<void>(() => { /* never settles */ });
+            }
         }
     }
     return { Pool: FakePool };
@@ -330,5 +341,83 @@ describe("patchSettings() serialization", () => {
         const final = store.getSettings();
         expect(final.time_range_hours).toBe(72);
         expect(final.theme).toBe(DEFAULT_SETTINGS.theme);
+    });
+});
+
+/**
+ * Regression (unbounded pool.end() in shutdown): pg-pool's end() only
+ * resolves once every checked-out client is released, so a settings PATCH
+ * in flight on a slow/hung database at SIGTERM time held end() (and thus
+ * the whole shutdown sequence) past the 15s hard net — a clean,
+ * operator-requested stop exited 1 instead of 0 (INVARIANTS #15).
+ * shutdown() must now resolve on its own bound no matter how long end()
+ * takes.
+ */
+describe("shutdown() pool close bound", () => {
+    beforeEach(() => {
+        mockRow = null;
+        mockCreateDatabaseError = null;
+        mockEndHangFor = null;
+        mockPoolEndCalls.length = 0;
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+        mockEndHangFor = null;
+        mockPoolEndCalls.length = 0;
+    });
+
+    it("closes a healthy pool promptly and stays silent", async () => {
+        const store = freshStore();
+        await store.init(config);
+        const writeWarn = jest.fn();
+        require("../../../src/common/global").setLogger({ write_warn: writeWarn } as any);
+
+        await expect(store.shutdown()).resolves.toBeUndefined();
+
+        // The main pool's end() was called and settled on its own; no warning.
+        expect(mockPoolEndCalls).toContain("settings-test");
+        expect(writeWarn).not.toHaveBeenCalled();
+    });
+
+    it("resolves on its bound when end() hangs on a checked-out client (regression)", async () => {
+        const store = freshStore();
+        await store.init(config);
+        const writeWarn = jest.fn();
+        require("../../../src/common/global").setLogger({ write_warn: writeWarn } as any);
+
+        // SIGTERM arrives while a PATCH's client is still checked out on an
+        // in-flight query: end() cannot settle until that query finishes
+        // (up to the 30s statement_timeout — far past the shutdown budget).
+        mockEndHangFor = "settings-test";
+
+        const shuttingDown = store.shutdown();
+        // Under the fix, shutdown() resolves exactly when its bound timer
+        // fires; before the fix this await never returned (test timeout).
+        await jest.advanceTimersByTimeAsync(4_000);
+        await expect(shuttingDown).resolves.toBeUndefined();
+
+        // The close was abandoned with a logger warning (never console)
+        expect(writeWarn).toHaveBeenCalledWith(
+            "settingsStore.ts/shutdown",
+            expect.stringContaining("did not settle within")
+        );
+
+        // The pool state transitioned to null: a repeat shutdown is a
+        // no-op and does not warn again.
+        await expect(store.shutdown()).resolves.toBeUndefined();
+        expect(writeWarn).toHaveBeenCalledTimes(1);
+    });
+
+    it("is a no-op when the store was never initialized (no pool)", async () => {
+        const store = freshStore();
+        const writeWarn = jest.fn();
+        require("../../../src/common/global").setLogger({ write_warn: writeWarn } as any);
+
+        await expect(store.shutdown()).resolves.toBeUndefined();
+
+        expect(mockPoolEndCalls).toHaveLength(0);
+        expect(writeWarn).not.toHaveBeenCalled();
     });
 });
