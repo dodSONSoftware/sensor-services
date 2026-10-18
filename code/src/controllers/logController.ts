@@ -353,9 +353,16 @@ export async function getLogs(req: express.Request, res: express.Response): Prom
         const endStr = String(endParam);
         // Parse ISO 8601 timestamp to milliseconds
         const parsedEnd = Date.parse(endStr);
-        if (!isNaN(parsedEnd)) {
-            endTime = Math.floor(parsedEnd / 1000);  // Convert to seconds for Loki
+        if (isNaN(parsedEnd)) {
+            // A present-but-unparseable end is a caller error, not "absent":
+            // silently falling back to the fresh newest window would make a
+            // paginating client re-read the newest page forever. Mirror the
+            // level validation above with a 400 (repeated ?end= params also
+            // land here: String(["a","b"]) is "a,b" -> NaN).
+            res.status(400).contentType(Json).json({ error: "invalid end timestamp; expected ISO 8601" });
+            return;
         }
+        endTime = Math.floor(parsedEnd / 1000);  // Convert to seconds for Loki
     }
 
     try {

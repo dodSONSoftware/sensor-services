@@ -279,16 +279,33 @@ describe("logController (GET /sensors/logs/:source)", () => {
         expect(Number(params.start)).toBe(end - 2 * 3600);
     });
 
-    it("should fall back to the current time (1-hour window) when end is unparseable", async () => {
+    // A present-but-unparseable end is a caller error (400), not "absent":
+    // silently falling back to the fresh newest window would let a
+    // paginating client re-read the newest page forever and never reach the
+    // requested older entries.
+    it("should return 400 when end is present but unparseable", async () => {
         const request = require("supertest");
-        const before = Math.floor(Date.now() / 1000);
-        await request(app).get("/sensors/logs/Air-1?end=not-a-timestamp");
+        const res = await request(app).get("/sensors/logs/Air-1?end=not-a-timestamp");
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/invalid end timestamp/);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 for repeated end params (they stringify to \"a,b\")", async () => {
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1?end=a&end=b");
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/invalid end timestamp/);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should still reach the Loki fetch when end is a valid ISO 8601 timestamp", async () => {
+        const request = require("supertest");
+        const res = await request(app).get(`/sensors/logs/Air-1?end=${encodeURIComponent("2026-10-01T00:00:00Z")}`);
+        expect(res.status).toBe(200);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         const params = urlParams(fetchMock.mock.calls[0][0] as string);
-        const end = Number(params.end);
-        expect(end).toBeGreaterThanOrEqual(before);
-        expect(end).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
-        // Fresh (non-paginated) fetches use the 1-hour window
-        expect(Number(params.start)).toBe(end - 1 * 3600);
+        expect(Number(params.end)).toBe(Date.parse("2026-10-01T00:00:00Z") / 1000);
     });
 
     // ---- Loki unavailable / unconfigured
