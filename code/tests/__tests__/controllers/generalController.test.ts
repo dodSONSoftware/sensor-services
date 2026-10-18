@@ -7,6 +7,7 @@ import type { Request, Response } from "express";
 import { getAbout, getDateCurrent, getDateUTC, getEndpoints, getHealth } from "../../../src/controllers/generalController";
 import { createMockRes, createMockReq } from "../../mocks/express";
 import { setConfig } from "../../../src/common/global";
+import { HEALTH_PROBE_TTL_MS, resetHealthProbeCache } from "../../../src/common/healthProbeCache";
 import { APP_NAME } from "../../../src/version";
 
 // Mock settingsStore so tests don't require a real DB connection. Only
@@ -51,6 +52,9 @@ afterEach(() => {
   jest.restoreAllMocks();
   // Clear config after each test
   setConfig(undefined);
+  // The dependency probe cache is module-level: clear it so one test's
+  // probe results cannot be served to the next test
+  resetHealthProbeCache();
 });
 
 describe("getAbout", () => {
@@ -359,6 +363,110 @@ describe("getHealth", () => {
     expect(body.mqtt).toBe("connected");
     expect(body.ipPinger).toBe("healthy");
     expect(body.sensorTelemetry).toBe("healthy");
+  });
+});
+
+describe("dependency probe cache (short TTL)", () => {
+  // The /health endpoint is rate-limit-exempt, so an unthrottled client must
+  // not be able to fire a full bounded probe per request — results (including
+  // failures) are served from a short shared TTL cache.
+  beforeEach(() => {
+    mockPersistenceAvailable = true;
+    setConfig({
+      "log-level": "debug",
+      "express-port": 32000,
+      "mqtt-broker-ip-address": "10.10.10.64",
+      "mqtt-topic-command": "iot/v2/command",
+      "mqtt-topic-command-response": "iot/v2/command-response",
+      "ip-pinger-web-api": "http://10.10.10.64:32001",
+      "sensor-telemetry-api": "http://10.10.10.64:32002",
+      "case-sensitive": true,
+      "db-host": "localhost",
+      "db-port": 5432,
+      "db-name": "sensor_db",
+      "db-user": "sensor_user",
+      "db-password": "sensor_pass",
+    });
+  });
+
+  it("serves a second /health call within the TTL from the cache (one probe per dependency)", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+    const req = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const { res: res1 } = createMockRes();
+    const { res: res2 } = createMockRes();
+
+    await getHealth(req, res1 as Response);
+    await getHealth(req, res2 as Response);
+
+    // Two fetches total (one per dependency), not four
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-probes after the TTL expires", async () => {
+    jest.useFakeTimers();
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+    const req = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const { res: res1 } = createMockRes();
+    const { res: res2 } = createMockRes();
+
+    await getHealth(req, res1 as Response);
+    jest.advanceTimersByTime(HEALTH_PROBE_TTL_MS + 1);
+    await getHealth(req, res2 as Response);
+
+    // Fresh probe for each dependency after expiry: two more fetches
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("caches a failed probe result (a dead dependency does not re-probe within the TTL)", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue({ ok: false, status: 503 } as Response);
+    const req = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const { res: res1, sendCalls: calls1 } = createMockRes();
+    const { res: res2, sendCalls: calls2 } = createMockRes();
+
+    await getHealth(req, res1 as Response);
+    await getHealth(req, res2 as Response);
+
+    // Both responses reflect the cached failure...
+    expect((calls1[0] as Record<string, unknown>).status).toBe("degraded");
+    expect((calls2[0] as Record<string, unknown>).status).toBe("degraded");
+    // ...and the second call issued no additional fetches
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares the cache between /health and /about", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(createMockFetchResponse());
+    const reqHealth = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const { res: res1 } = createMockRes();
+    await getHealth(reqHealth, res1 as Response);
+
+    const reqAbout = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const { res: res2, sendCalls: aboutCalls } = createMockRes();
+    await getAbout(reqAbout, res2 as Response);
+
+    // /about reuses the /health probe results — no additional fetches
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const about = aboutCalls[0] as { system: { ipPinger: string; sensorTelemetry: string } };
+    expect(about.system.ipPinger).toBe("healthy");
+    expect(about.system.sensorTelemetry).toBe("healthy");
+  });
+
+  it("does not double-fire concurrent probes while one is in flight", async () => {
+    let resolvers: ((r: Response) => void)[] = [];
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation(
+      () => new Promise<Response>((resolve) => resolvers.push(resolve))
+    );
+    const req = createMockReq({ mqtt_connected: true }) as Request & { mqtt_connected: boolean };
+    const { res: res1 } = createMockRes();
+    const { res: res2 } = createMockRes();
+
+    const [h1, h2] = [getHealth(req, res1 as Response), getHealth(req, res2 as Response)];
+    // The second call arrived while the first's probes were still in flight:
+    // exactly one fetch per dependency, not two
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    resolvers.forEach((resolve) => resolve(createMockFetchResponse()));
+    await Promise.all([h1, h2]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

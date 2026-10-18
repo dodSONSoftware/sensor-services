@@ -5,6 +5,7 @@
 
 import type * as express from "express";
 import { Json, OK, ServiceUnavailable, Text } from "../dodsonlabs/HttpConstants";
+import { probeDependencyHealth } from "../common/healthProbeCache";
 import { aboutDude, getConfig, logger } from "../common/global";
 import { __routesHelp as generalRoutesHelp } from "../routes/generalRoutes";
 import { __routesHelp as sensorRoutesHelp } from "../routes/sensorRoutes";
@@ -40,10 +41,10 @@ interface HealthResponse {
 }
 
 /**
- * Check if the IP Pinger service is healthy by fetching its /health endpoint.
+ * Direct (uncached) IP Pinger health probe: fetches its /health endpoint.
  * Returns true if the response contains status: "healthy".
  */
-async function checkIpPingerHealth(ipPingerUrl: string): Promise<boolean> {
+async function checkIpPingerHealthDirect(ipPingerUrl: string): Promise<boolean> {
     try {
         const url = `${ipPingerUrl}/health`;
         const signal = AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS);
@@ -60,10 +61,21 @@ async function checkIpPingerHealth(ipPingerUrl: string): Promise<boolean> {
 }
 
 /**
- * Check if the Sensor Telemetry service is healthy by fetching its /health endpoint.
+ * Check if the IP Pinger service is healthy by fetching its /health endpoint.
+ * The probe is short-TTL cached (see common/healthProbeCache) and shared with
+ * getAbout, so the rate-limit-exempt /health endpoint cannot amplify a full
+ * bounded probe per request — including when the dependency is down (the
+ * negative result is cached too).
+ */
+async function checkIpPingerHealth(ipPingerUrl: string): Promise<boolean> {
+    return probeDependencyHealth(`${ipPingerUrl}/health`, () => checkIpPingerHealthDirect(ipPingerUrl));
+}
+
+/**
+ * Direct (uncached) Sensor Telemetry health probe: fetches its /health endpoint.
  * Returns true if the response contains status: "healthy".
  */
-async function checkSensorTelemetryHealth(telemetryUrl: string): Promise<boolean> {
+async function checkSensorTelemetryHealthDirect(telemetryUrl: string): Promise<boolean> {
     try {
         const url = `${telemetryUrl}/health`;
         const signal = AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS);
@@ -77,6 +89,14 @@ async function checkSensorTelemetryHealth(telemetryUrl: string): Promise<boolean
         logger()?.write_warn("checkSensorTelemetryHealth", `Failed to reach Sensor Telemetry: ${(error as Error).message}`);
         return false;
     }
+}
+
+/**
+ * Check if the Sensor Telemetry service is healthy by fetching its /health endpoint.
+ * Short-TTL cached and shared with getAbout — see checkIpPingerHealth.
+ */
+async function checkSensorTelemetryHealth(telemetryUrl: string): Promise<boolean> {
+    return probeDependencyHealth(`${telemetryUrl}/health`, () => checkSensorTelemetryHealthDirect(telemetryUrl));
 }
 
 export async function getAbout(req: express.Request, res: express.Response) {
