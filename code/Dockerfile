@@ -7,11 +7,12 @@ FROM node:22 AS builder
 # Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json (if available)
+# Copy package.json and package-lock.json (the lockfile is required — npm ci
+# fails on any lock/package mismatch, keeping the build on the committed lock)
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies exactly as locked
+RUN npm ci
 
 # Copy the rest of the application code
 COPY . .
@@ -36,8 +37,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/routes ./src/routes
 COPY --from=builder /app/package*.json ./
 
-# Install only production dependencies
-RUN npm install --only=production && npm cache clean --force
+# Install only production dependencies exactly as locked
+RUN npm ci --omit=dev && npm cache clean --force
 
 # WORKDIR is /app (not /app/dist) so the canonical CWD-relative config fallback
 # (./dist/config.yml) resolves exactly as it does on bare metal. A mounted

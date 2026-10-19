@@ -86,6 +86,15 @@ export class CreateLogRoutes extends RoutesCreatorBase {
          *               properties:
          *                 error:
          *                   type: string
+         *       503:
+         *         description: Loki logging not configured (steady-state deployment condition, not a server fault)
+         *         content:
+         *           application/json:
+         *             schema:
+         *               type: object
+         *               properties:
+         *                 error:
+         *                   type: string
          */
         this.app.route("/sensors/logs/:source").get((req: express.Request, res: express.Response) => log_controller.getLogs(req, res));
     }

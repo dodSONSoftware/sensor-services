@@ -310,11 +310,13 @@ describe("logController (GET /sensors/logs/:source)", () => {
 
     // ---- Loki unavailable / unconfigured
 
-    it("should return 500 when Loki is not configured", async () => {
+    it("should return 503 when Loki is not configured", async () => {
+        // Unconfigured Loki is a steady-state deployment condition (optional
+        // config keys), not a server fault — 503, not 500
         setConfig({} as any);
         const request = require("supertest");
         const res = await request(app).get("/sensors/logs/Air-1");
-        expect(res.status).toBe(500);
+        expect(res.status).toBe(503);
         expect(res.body).toHaveProperty("error", "Loki logging not configured");
         expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -430,7 +432,7 @@ describe("logController (loki-url is never logged verbatim)", () => {
 
         const request = require("supertest");
         const res = await request(app).get("/sensors/logs/Air-1");
-        expect(res.status).toBe(500); // not configured
+        expect(res.status).toBe(503); // not configured
         expect(res.body).toHaveProperty("error", "Loki logging not configured");
 
         expect(messages.some((m) => m.includes("loki-url is not set"))).toBe(true);
@@ -586,6 +588,34 @@ describe("logController (malformed Loki timestamp handling)", () => {
         expect(warnings).toHaveLength(1);
         expect(warnings[0]).toContain("got string");
         expect(captured.join("\n")).not.toContain("malformed-DO-NOT-LEAK");
+    });
+
+    it("skips a decimal timestamp that overflows the Date range, keeping the valid sibling stream", async () => {
+        // 40+ digits passes the /^\d+$/ format check, but ns -> ms lands far
+        // outside the Date range: toISOString() used to throw RangeError and
+        // 500 the whole request. The bad entry must be dropped per-entry and
+        // the sibling stream returned (200).
+        const overflowNs = "9".repeat(40);
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                data: {
+                    resultType: "streams",
+                    result: [
+                        { stream: { source: "A" }, values: [[overflowNs, JSON.stringify({ level: "error", message: "overflow-DO-NOT-LEAK" })]] },
+                        { stream: { source: "B" }, values: [["1791292456123456789", JSON.stringify({ level: "info", message: "valid-sibling" })]] },
+                    ],
+                },
+            }),
+        });
+        const request = require("supertest");
+        const res = await request(app).get("/sensors/logs/Air-1");
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].message).toBe("valid-sibling");
+        // Dropped with a warning that does not leak the entry's content
+        expect(captured.some((m) => m.includes("out-of-range timestamp"))).toBe(true);
+        expect(captured.join("\n")).not.toContain("overflow-DO-NOT-LEAK");
     });
 
     it("returns 200 with an empty result set (not 500) when every entry is malformed", async () => {

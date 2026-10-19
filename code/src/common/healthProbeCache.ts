@@ -36,9 +36,12 @@ const probeCache = new Map<string, ProbeEntry>();
  * and the probe endpoint is rate-limit-exempt, so a dead dependency becomes
  * an unbounded amplifier of downstream load.
  *
- * Contract: `probe` must never reject — a rejecting probe would poison the
- * cached promise for the whole TTL. Both current probes (the /health
- * dependency checks) catch internally and resolve `false` on failure.
+ * A rejecting probe degrades to `false` ("unreachable") instead of rejecting:
+ * the stored entry is wrapped in `.catch(() => false)`, so a probe that
+ * rejects cannot poison the cache, produce an unhandled rejection, or reach
+ * the process-level unhandledRejection handler (which would shut the service
+ * down from the health endpoint). Both current probes (the /health
+ * dependency checks) still catch internally and resolve `false` on failure.
  */
 export function probeDependencyHealth(url: string, probe: () => Promise<boolean>): Promise<boolean> {
     const existing = probeCache.get(url);
@@ -46,7 +49,9 @@ export function probeDependencyHealth(url: string, probe: () => Promise<boolean>
         return existing.promise;
     }
 
-    const promise = probe();
+    // A rejecting probe resolves `false` and is cached like any negative
+    // result (see the contract note above).
+    const promise = probe().catch(() => false);
     // Stored SYNCHRONOUSLY, with a non-expiring TTL, so a second caller that
     // arrives while the probe is still in flight gets the same promise. The
     // probe is bounded by AbortSignal.timeout in the caller, so the

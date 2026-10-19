@@ -274,17 +274,14 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
                 [dbName]
             );
             if (exists.rows.length === 0) {
-                // eslint-disable-next-line no-console
-                console.warn(`[settingsStore] Database "${dbName}" does not exist — attempting to create it via template1...`);
+                logger()?.write_warn("settingsStore.ts/init", `Database "${dbName}" does not exist — attempting to create it via template1...`);
                 // CREATE DATABASE cannot run inside a transaction block in PostgreSQL.
                 // A fresh connection from Pool.connect() has no active transaction, so we don't need ROLLBACK.
                 // Safe identifier escaping for database name
                 await check.query(`CREATE DATABASE ${escapeIdentifier(dbName)}`);
-                // eslint-disable-next-line no-console
-                console.info(`[settingsStore] Created database "${dbName}".`);
+                logger()?.write_info("settingsStore.ts/init", `Created database "${dbName}".`);
             } else {
-                // eslint-disable-next-line no-console
-                console.info(`[settingsStore] Database "${dbName}" already exists.`);
+                logger()?.write_info("settingsStore.ts/init", `Database "${dbName}" already exists.`);
             }
         } finally {
             check.release();
@@ -293,8 +290,7 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
         // Bootstrap failed — likely no CREATEDB privilege or connection issue.
         // Log a warning so the user knows; we'll still try to connect directly below
         // in case the database already exists but template1 access is restricted.
-        // eslint-disable-next-line no-console
-        console.warn(`[settingsStore] Could not bootstrap via template1: ${(ensureError(err)).message}. Will attempt direct connection.`);
+        logger()?.write_warn("settingsStore.ts/init", `Could not bootstrap via template1: ${(ensureError(err)).message}. Will attempt direct connection.`);
     } finally {
         // Close the bootstrap pool on every path — including when connect,
         // the existence query, or CREATE DATABASE threw — so a failed
@@ -337,8 +333,7 @@ export async function init(config: z.infer<typeof configSchema>): Promise<void> 
         try {
             await newPool.end();
         } catch (endErr: unknown) {
-            // eslint-disable-next-line no-console
-            console.warn(`[settingsStore] Failed to close pool after initialization failure: ${(ensureError(endErr)).message}`);
+            logger()?.write_warn("settingsStore.ts/init", `Failed to close pool after initialization failure: ${(ensureError(endErr)).message}`);
         }
         throw err;
     }
@@ -371,8 +366,7 @@ async function runInitQueries(client: PoolClient): Promise<void> {
             // Use UPSERT: the row already exists (that's how we got here), so a
             // plain INSERT would fail on the primary key and leave the corrupt
             // row in place.
-            // eslint-disable-next-line no-console
-            console.warn(`[settingsStore] Invalid settings data in database: ${(ensureError(validateErr)).message}. Seeding with defaults.`);
+            logger()?.write_warn("settingsStore.ts/runInitQueries", `Invalid settings data in database: ${(ensureError(validateErr)).message}. Seeding with defaults.`);
             await client.query(
                 `INSERT INTO app_settings (id, data, updated_at) VALUES (1, $1, NOW())
                  ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,

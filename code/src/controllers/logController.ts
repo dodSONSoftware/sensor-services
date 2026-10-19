@@ -4,7 +4,7 @@
  */
 
 import type * as express from "express";
-import { InternalServerError, Json, OK } from "../dodsonlabs/HttpConstants";
+import { InternalServerError, Json, OK, ServiceUnavailable } from "../dodsonlabs/HttpConstants";
 import { logger } from "../common/global";
 import type { ILogger } from "../dodsonlabs/Interfaces";
 import { ensureError } from "../dodsonlabs/SystemFunctions";
@@ -38,6 +38,14 @@ const ALLOWED_LEVELS: ReadonlySet<string> = new Set(["debug", "info", "warn", "e
 // request handler forever (matches the AbortSignal.timeout pattern used for
 // the external health checks in generalController.ts).
 const LOKI_FETCH_TIMEOUT_MS = 10_000;
+
+// Marker for the steady-state "Loki not configured" condition. That is a
+// deployment-normal state (loki-url/loki-enabled are optional in the config
+// schema), so the handler classifies it as 503 Service Unavailable instead
+// of 500 — matching the service's convention for dependency unavailability
+// (MQTT broker 503s in sensorController.ts / pingerController.ts). Genuine
+// failures (configured Loki unreachable, bad upstream response) stay 500.
+class LokiNotConfiguredError extends Error {}
 
 // Loki's query_range `values` are [nanosecond-timestamp, log-line] pairs where
 // the timestamp is a decimal-integer string (e.g. "1791292456123456789"). Loki
@@ -122,7 +130,7 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
     const lokiConfig = getLokiConfig();
     if (!lokiConfig) {
         _log().write_error("logController.ts/fetchLokiLogs", "Loki configuration not found");
-        throw new Error("Loki logging not configured");
+        throw new LokiNotConfiguredError("Loki logging not configured");
     }
 
     // Build LogQL query
@@ -253,7 +261,22 @@ async function fetchLokiLogs(source: string, levels: string[], limit: number, en
                     // the API response derives from it (ns -> ms: /1,000,000)
                     const timestampNs = BigInt(timestamp);
                     const msTimestamp = Number(timestampNs / BigInt(1_000_000));
-                    const isoTimestamp = new Date(msTimestamp).toISOString();
+                    const date = new Date(msTimestamp);
+
+                    // A decimal string can pass the format check above and still
+                    // be out of range after the ns -> ms conversion (e.g. 40+
+                    // digits): the Date would be Invalid and toISOString() would
+                    // throw RangeError, discarding the rest of the response.
+                    // Skip just this entry, mirroring the malformed-timestamp
+                    // handling above (no entry content logged).
+                    if (Number.isNaN(date.getTime())) {
+                        _log().write_warn(
+                            "logController.ts/fetchLokiLogs",
+                            "Discarded Loki log entry with an out-of-range timestamp (decimal nanosecond string that does not map to a representable Date)"
+                        );
+                        continue;
+                    }
+                    const isoTimestamp = date.toISOString();
 
                     parsedLogs.push({ timestampNs, timestamp: isoTimestamp, level, message });
                 }
@@ -374,6 +397,13 @@ export async function getLogs(req: express.Request, res: express.Response): Prom
 
     } catch (err) {
         const error = ensureError(err);
+        // Unconfigured Loki is a steady-state deployment condition, not a
+        // server fault — 503 keeps alerting from classifying it as an
+        // InternalServerError. See the LokiNotConfiguredError note above.
+        if (error instanceof LokiNotConfiguredError) {
+            res.status(ServiceUnavailable).json({ error: error.message });
+            return;
+        }
         res.status(InternalServerError).json({ error: error.message });
     }
 }

@@ -2,7 +2,7 @@
 
 Series 4 - SensorNET Services
 
-**Release:** Onyx Falcon — firmware 4.17.10
+**Release:** Onyx Falcon — firmware 4.17.12
 
 [![Dodson Labs](https://img.shields.io/badge/dodson%20labs-2026-purple?labelColor=gray)](https://github.com/dodSONSoftware)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.1+-blue.svg)](https://www.typescriptlang.org/)
@@ -139,7 +139,7 @@ The Docker Compose configuration mounts `config.yml` from the host into the cont
 | GET | `/sensors/read-config/:source` | Read config from a specific sensor |
 | POST | `/sensors/write-config/:source` | Write the complete config to a specific sensor |
 | POST | `/sensors/update-config/:source` | Deprecated — returns 501; firmware v4 has no partial update, use write-config |
-| GET | `/sensors/logs/:source` | Fetch sensor logs from Loki (source is allowlist-validated; `level` filter: debug/info/warn/error, `limit` max 100, optional ISO 8601 `end` pagination cursor — 400 if present but unparseable) |
+| GET | `/sensors/logs/:source` | Fetch sensor logs from Loki (source is allowlist-validated; `level` filter: debug/info/warn/error, `limit` max 100, optional ISO 8601 `end` pagination cursor — 400 if present but unparseable; 503 when Loki is not configured) |
 
 > Every 200 command response (`get-details`, `reboot`, `read-config`, `write-config`) carries an `X-Command-Truncated` header: `true` when the 10-second hard cap cut the command wait short before completion (the result array may be partial), `false` when the command completed in time.
 
